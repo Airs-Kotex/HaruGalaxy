@@ -85,6 +85,19 @@ static void proportional_scaling(void) {
     equal_rect(handle,(MWRect){386,850,44,48});
     handle=MWEdgeHandleRect((MWRect){44,0,844,396},false,NAN);
     assert(handle.x==44 && isfinite(handle.y) && handle.width==44);
+    const double logical[][2]={{430,932},{932,430}};
+    const double container[][2]={{311.42703862660943,675},{240,360},{400,100},{0,0}};
+    for(unsigned i=0;i<2;i++) for(unsigned j=0;j<4;j++) {
+        MWContentTransform t=MWFitContent(logical[i][0],logical[i][1],container[j][0],container[j][1]);
+        assert(isfinite(t.scale) && t.scale>=0 && t.x>=0 && t.y>=0);
+        assert(t.x+logical[i][0]*t.scale<=container[j][0]+0.00001);
+        assert(t.y+logical[i][1]*t.scale<=container[j][1]+0.00001);
+        if(t.scale>0) {
+            double pointX=123,pointY=234;
+            assert(fabs(((pointX*t.scale+t.x)-t.x)/t.scale-pointX)<0.00001);
+            assert(fabs(((pointY*t.scale+t.y)-t.y)/t.scale-pointY)<0.00001);
+        }
+    }
 }
 
 int main(void) {

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 #import "MWWindowView.h"
 #import "MWPreferences.h"
+#import "MWGuestContentView.h"
 #import "../Diagnostics/MWDiagnostics.h"
 
 static MWRect MWFromCGRect(CGRect r) { return (MWRect){r.origin.x,r.origin.y,r.size.width,r.size.height}; }
@@ -22,6 +23,7 @@ static CGRect MWToCGRect(MWRect r) { return CGRectMake(r.x,r.y,r.width,r.height)
     BOOL _hostHidden;
     NSString *_failureMessage;
     CGSize _logicalSize;
+    MWGuestContentView *_guestHost;
 }
 @synthesize model=_model;
 
@@ -38,6 +40,7 @@ static CGRect MWToCGRect(MWRect r) { return CGRectMake(r.x,r.y,r.width,r.height)
         _surface.clipsToBounds=YES; _surface.layer.borderWidth=1;
         [self addSubview:_surface];
         _content=[UIView new]; _content.clipsToBounds=YES; [_surface addSubview:_content];
+        _guestHost=[MWGuestContentView new]; [_content addSubview:_guestHost];
         _bar=[[UIVisualEffectView alloc] initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemChromeMaterial]];
         [_surface addSubview:_bar];
         _title=[UILabel new]; _title.text=application.name;
@@ -83,12 +86,9 @@ static CGRect MWToCGRect(MWRect r) { return CGRectMake(r.x,r.y,r.width,r.height)
     _bar.frame=CGRectMake(0,0,self.bounds.size.width,48);
     _title.frame=CGRectMake(140,0,MAX(0,self.bounds.size.width-152),48);
     _content.frame=CGRectMake(0,48,self.bounds.size.width,MAX(1,self.bounds.size.height-48));
-    if(_guestView) {
-        CGFloat scale=_content.bounds.size.width/MAX(1,_logicalSize.width);
-        _guestView.bounds=(CGRect){CGPointZero,_logicalSize};
-        _guestView.center=CGPointMake(CGRectGetMidX(_content.bounds),CGRectGetMidY(_content.bounds));
-        _guestView.transform=CGAffineTransformMakeScale(scale,scale);
-    }
+    _guestHost.frame=_content.bounds;
+    _guestHost.logicalSize=_logicalSize;
+    [_guestHost layoutIfNeeded];
     _spinner.center=CGPointMake(CGRectGetMidX(_content.bounds),CGRectGetMidY(_content.bounds)-32);
     _message.frame=CGRectMake(16,MAX(12,CGRectGetMidY(_content.bounds)-16),MAX(1,_content.bounds.size.width-32),72);
     _retry.frame=CGRectMake(20,MIN(_content.bounds.size.height-48,CGRectGetMaxY(_message.frame)),MAX(1,_content.bounds.size.width-40),44);
@@ -114,23 +114,23 @@ static CGRect MWToCGRect(MWRect r) { return CGRectMake(r.x,r.y,r.width,r.height)
         if(!MWWindowApply(&view->_model,MWEventReady)) return;
         UIView *content=view.session.contentView;
         [view->_guestView removeFromSuperview]; view->_guestView=content;
-        content.autoresizingMask=UIViewAutoresizingNone;
-        [view->_content insertSubview:content atIndex:0];
+        view->_guestHost.guestView=content;
         [view setNeedsLayout]; [view layoutIfNeeded];
+        [view logContentGeometry:@"attached"];
         [view updateStatus:nil];
         if(view.stateHandler) view.stateHandler();
     }];
 }
 - (void)failed:(NSError *)error {
     if(!MWWindowApply(&_model,MWEventFailed)) return;
-    [_guestView removeFromSuperview]; _guestView=nil;
+    _guestHost.guestView=nil; [_guestView removeFromSuperview]; _guestView=nil;
     self.hidden=NO;
     [self updateStatus:error.localizedDescription];
     if(self.stateHandler) self.stateHandler();
 }
 - (void)retry {
     if(!MWWindowApply(&_model,MWEventRetry)) return;
-    [_guestView removeFromSuperview]; _guestView=nil; [_session close]; _session=nil;
+    _guestHost.guestView=nil; [_guestView removeFromSuperview]; _guestView=nil; [_session close]; _session=nil;
     [self updateStatus:nil]; [self start];
 }
 - (void)updateStatus:(NSString *)error {
@@ -182,13 +182,22 @@ static CGRect MWToCGRect(MWRect r) { return CGRectMake(r.x,r.y,r.width,r.height)
     [self updateStatus:nil]; [self geometryChanged];
 }
 - (void)geometryChanged {
+    [self layoutIfNeeded];
     MWLog(@"window.geometry_committed",@{@"bundle":_application.bundleIdentifier,@"width":@(_model.frame.width),@"height":@(_model.frame.height),@"contentAspect":@(_model.aspectRatio),@"maximized":@(_model.maximized)});
+    [self logContentGeometry:@"gesture_finished"];
     if(self.geometryHandler) self.geometryHandler(MWToCGRect(_model.maximized ? _model.restoreFrame : _model.frame));
 }
 - (void)applyViewport:(CGRect)viewport {
-    CGSize screen=self.window.windowScene.screen.bounds.size;
+    UIScreen *display=self.window.windowScene.screen ?: UIScreen.mainScreen;
+    CGSize screen=display.fixedCoordinateSpace.bounds.size;
+    UIInterfaceOrientation orientation=self.window.windowScene.interfaceOrientation;
+    if(UIInterfaceOrientationIsLandscape(orientation) && screen.height>screen.width) screen=CGSizeMake(screen.height,screen.width);
+    if(UIInterfaceOrientationIsPortrait(orientation) && screen.width>screen.height) screen=CGSizeMake(screen.height,screen.width);
     if(screen.width>0 && screen.height>0) { _logicalSize=screen; _model.aspectRatio=screen.width/screen.height; }
     _viewport=viewport; MWWindowReflow(&_model,MWFromCGRect(viewport)); self.frame=MWToCGRect(_model.frame);
+}
+- (void)logContentGeometry:(NSString *)reason {
+    MWLog(@"window.content_geometry",@{@"bundle":_application.bundleIdentifier,@"reason":reason,@"geometry":[_guestHost geometrySnapshot]});
 }
 - (void)requestClose { if(self.closeHandler) self.closeHandler(); }
 - (void)requestMinimize { if(self.minimizeHandler) self.minimizeHandler(); }
@@ -204,7 +213,7 @@ static CGRect MWToCGRect(MWRect r) { return CGRectMake(r.x,r.y,r.width,r.height)
 }
 - (void)close {
     if(!MWWindowApply(&_model,MWEventClose)) return;
-    [_guestView removeFromSuperview]; _guestView=nil; [_session close]; [self removeFromSuperview];
+    _guestHost.guestView=nil; [_guestView removeFromSuperview]; _guestView=nil; [_session close]; [self removeFromSuperview];
 }
 - (void)setHostVisible:(BOOL)visible {
     _hostHidden=!visible;

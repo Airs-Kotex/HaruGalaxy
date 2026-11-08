@@ -5,6 +5,7 @@
 #import <notify.h>
 #import "MWBackgroundLease.h"
 #import "MWSceneUpdateGuard.h"
+#import "MWRootWindowAdapter.h"
 #import "../Diagnostics/MWDiagnostics.h"
 
 @interface FBSSceneSettingsDiff (MWConstruction)
@@ -24,6 +25,10 @@ NSString *const MWFloatingHostVisibilityNotification=@"MWFloatingHostVisibility"
     NSString *_guardIdentifier;
     UIMutableApplicationSceneSettings *_guardSettings;
     BOOL _guardActive, _locked;
+    MWRootWindowAdapter *_rootAdapter;
+    BOOL _stopping;
+    BOOL _cleanupFailed;
+    id _retainedFailedBinder, _retainedFailedScene;
 }
 + (instancetype)shared {
     static MWFloatingHost *host; static dispatch_once_t once;
@@ -36,9 +41,13 @@ NSString *const MWFloatingHostVisibilityNotification=@"MWFloatingHostVisibility"
 - (BOOL)setEnabled:(BOOL)enabled fromScene:(UIWindowScene *)source error:(NSError **)error {
     MWLog(@"overlay.request",@{@"enabled":@(enabled),@"sourceSession":source.session.persistentIdentifier ?: @"none"});
     if(enabled==_enabled) return YES;
+    if(_stopping) { if(error) *error=MWError(33,@"浮动工作区正在关闭，请稍后再试。"); return NO; }
+    if(enabled && _cleanupFailed) { if(error) *error=MWError(34,@"上次浮窗清理失败，请导出日志并重新启动本应用。"); return NO; }
     if(!enabled) { [self stop]; return YES; }
     Class binderClass=NSClassFromString(@"UIRootWindowScenePresentationBinder");
-    if(!source || ![binderClass instancesRespondToSelector:@selector(initWithPriority:displayConfiguration:)]) {
+    if(!source || ![binderClass instancesRespondToSelector:@selector(initWithPriority:displayConfiguration:)]
+       || ![binderClass instancesRespondToSelector:@selector(removeScene:)] || ![binderClass instancesRespondToSelector:@selector(invalidate)]
+       || ![binderClass instancesRespondToSelector:@selector(_rootView)]) {
         if(error) *error=MWError(30,@"当前系统无法建立浮动工作区。"); return NO;
     }
     @try {
@@ -51,6 +60,11 @@ NSString *const MWFloatingHostVisibilityNotification=@"MWFloatingHostVisibility"
         }
         _sceneIdentifier=[@"io.github.uiharuxpro4milkyway.overlay." stringByAppendingString:NSUUID.UUID.UUIDString];
         _binder=[[binderClass alloc] initWithPriority:0 displayConfiguration:source._effectiveSettings.displayConfiguration];
+        _rootAdapter=[MWRootWindowAdapter new];
+        NSError *rootError=nil;
+        if(![_rootAdapter attachToRootView:[_binder _rootView] error:&rootError]) {
+            [self stop]; if(error) *error=rootError; return NO;
+        }
         FBSMutableSceneDefinition *definition=[PrivClass(FBSMutableSceneDefinition) definition];
         definition.identity=[PrivClass(FBSSceneIdentity) identityForIdentifier:_sceneIdentifier];
         definition.clientIdentity=[PrivClass(FBSSceneClientIdentity) localIdentity];
@@ -91,9 +105,15 @@ NSString *const MWFloatingHostVisibilityNotification=@"MWFloatingHostVisibility"
             [weakSelf applyLocked:(locked!=0)];
     });
     _hasLockToken=(result==NOTIFY_STATUS_OK);
+    MWLog(@"overlay.lock_observer",@{@"registered":@(_hasLockToken),@"result":@(result)});
+    if(_hasLockToken) {
+        uint64_t locked=0;
+        if(notify_get_state(_lockToken,&locked)==NOTIFY_STATUS_OK) [self applyLocked:(locked!=0)];
+    }
 }
 - (void)setFloatingWindow:(UIWindow *)floatingWindow {
     _floatingWindow=floatingWindow;
+    _rootAdapter.overlayWindow=floatingWindow;
     MWLog(@"overlay.window_attached",@{@"session":floatingWindow.windowScene.session.persistentIdentifier ?: @"none",@"backgroundValid":@(self.backgroundExecutionValid)});
     if(_hasLockToken) {
         uint64_t locked=0;
@@ -121,18 +141,44 @@ NSString *const MWFloatingHostVisibilityNotification=@"MWFloatingHostVisibility"
     if([self ownsSceneIdentifier:identifier]) [self stop];
 }
 - (void)stop {
-    MWLog(@"overlay.stopping",@{@"scene":_sceneIdentifier ?: @"none"});
+    if(_stopping) return;
+    _stopping=YES;
+    FBScene *scene=_scene;
+    UIRootWindowScenePresentationBinder *binder=_binder;
+    NSString *identifier=[_sceneIdentifier copy];
+    MWRootWindowAdapter *rootAdapter=_rootAdapter;
+    UIWindow *overlay=_floatingWindow;
+    MWLog(@"overlay.stopping",@{@"scene":identifier ?: @"none"});
     _enabled=NO;
     @synchronized(self) { _guardActive=NO; _guardIdentifier=nil; _guardSettings=nil; }
-    [_backgroundLease invalidate]; _backgroundLease=nil;
+    overlay.hidden=YES;
     [[NSNotificationCenter defaultCenter] postNotificationName:MWFloatingHostWillStopNotification object:self];
     if(_hasLockToken) { notify_cancel(_lockToken); _hasLockToken=NO; }
-    self.floatingWindow.hidden=YES; _floatingWindow=nil;
-    if(_scene && _sceneIdentifier) {
-        @try { [[PrivClass(FBSceneManager) sharedInstance] destroyScene:_sceneIdentifier withTransitionContext:nil]; }
-        @catch(NSException *exception) { NSLog(@"Floating scene cleanup: %@",exception.reason); }
+    _floatingWindow=nil;
+    // Invalidate automatic presenters while their scene and binder still live.
+    // Destroying the FBScene or dropping the binder first triggers the observed
+    // UIAutomaticScenePresenter deallocation assertion on iOS 16.2.
+    if(binder && scene) {
+        @try { [binder removeScene:scene]; MWLog(@"overlay.binder_scene_removed",@{@"scene":identifier ?: @"none"}); }
+        @catch(NSException *exception) { MWLog(@"overlay.binder_remove_failed",@{@"reason":exception.reason ?: @"unknown"}); }
     }
-    _scene=nil; _binder=nil; _sceneIdentifier=nil;
+    BOOL binderInvalidated=(binder==nil);
+    if(binder) {
+        @try { [binder invalidate]; binderInvalidated=YES; MWLog(@"overlay.binder_invalidated",@{}); }
+        @catch(NSException *exception) {
+            _cleanupFailed=YES; _retainedFailedBinder=binder; _retainedFailedScene=scene;
+            MWLog(@"overlay.binder_invalidate_failed",@{@"reason":exception.reason ?: @"unknown",@"resourcesRetained":@YES});
+        }
+    }
+    if(binderInvalidated && scene && identifier) {
+        @try { [[PrivClass(FBSceneManager) sharedInstance] destroyScene:identifier withTransitionContext:nil]; MWLog(@"overlay.scene_destroyed",@{@"scene":identifier}); }
+        @catch(NSException *exception) { MWLog(@"overlay.scene_destroy_failed",@{@"reason":exception.reason ?: @"unknown"}); }
+    }
+    [rootAdapter detach]; _rootAdapter=nil;
+    _scene=nil; _binder=nil; _sceneIdentifier=nil; _locked=NO;
+    [_backgroundLease invalidate]; _backgroundLease=nil;
+    _stopping=NO;
+    if(!binderInvalidated) [[NSNotificationCenter defaultCenter] postNotificationName:MWFloatingHostFailedNotification object:MWError(34,@"浮窗已隐藏，但系统呈现对象清理失败。请导出日志后重新启动本应用。")];
     [MWDiagnostics.shared flush];
 }
 - (BOOL)backgroundExecutionValid { return _backgroundLease.valid; }

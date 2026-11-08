@@ -8,6 +8,7 @@ UiharuXPro4MilkyWay is an independent native alpha project. It is not an officia
 - TrollSpeed by Lessica: global-window architecture reference only. No TrollSpeed source or resources are included in this alpha.
 - LLVM compiler-rt 14.0.0: `ThirdParty/CompilerRT/os_version_check.c` provides the real Apple availability runtime needed by the Linux cross-linker for `@available`. Source is unmodified, licensed Apache-2.0 WITH LLVM-exception; license retained and included in the application. Source: https://github.com/llvm/llvm-project/blob/llvmorg-14.0.0/compiler-rt/lib/builtins/os_version_check.c
 - Theos headers and nst/iOS-Runtime-Headers: reference declarations for BKSProcessAssertion flags/reasons and FBSSceneSettingsDiff construction. The project defines only the required declarations and probes them at runtime.
+- LeoNatan/Apple-Runtime-Headers: runtime declaration reference for binder removeScene/invalidate/_rootView, UIRootSceneWindow and the oneway scene-update method. 0.2.1 implements scoped adapters with runtime capability/ABI checks; no upstream implementation is copied.
 - LiveContainer: consulted as a scene-management reference. No LiveContainer implementation files are copied into this project. Some declarations in FrontBoardAppLauncher's retained upstream header identify LiveContainer as their original context; those notices remain intact.
 
 New project implementation is licensed under Apache License 2.0. See `LICENSE`.

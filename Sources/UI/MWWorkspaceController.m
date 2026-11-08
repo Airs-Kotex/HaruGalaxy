@@ -119,6 +119,7 @@
 - (void)updateChrome {
     if(!self.isViewLoaded) return;
     self.view.backgroundColor=_floating ? UIColor.clearColor : UIColor.systemGroupedBackgroundColor;
+    self.view.opaque=!_floating; self.view.layer.opaque=!_floating;
     _canvas.passThrough=_floating;
     _heading.hidden=_subtitle.hidden=_settings.hidden=_floating;
     _emptyTitle.hidden=_emptyHint.hidden=_add.hidden=_floating || _windows.count>0;

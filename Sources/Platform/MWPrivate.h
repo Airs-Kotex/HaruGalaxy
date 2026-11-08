@@ -9,3 +9,10 @@ FOUNDATION_EXPORT void MWLoadPrivateFrameworks(void);
 FOUNDATION_EXPORT NSString *MWSceneCapabilityIssue(void);
 FOUNDATION_EXPORT NSError *MWError(NSInteger code, NSString *message);
 
+// Runtime declarations: LeoNatan/Apple-Runtime-Headers, UIKitCore.
+@interface UIScenePresentationBinder (MWLifecycle)
+- (void)removeScene:(id)scene;
+- (void)invalidate;
+- (UIView *)_rootView;
+@end
+

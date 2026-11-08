@@ -37,6 +37,7 @@
     }
     self.window=_floating ? [[MWOverlayWindow alloc] initWithWindowScene:windowScene] : [[UIWindow alloc] initWithWindowScene:windowScene];
     self.window.backgroundColor=UIColor.clearColor;
+    self.window.opaque=NO; self.window.layer.opaque=NO;
     self.window.overrideUserInterfaceStyle=MWPreferences.shared.appearance;
     self.window.frame=windowScene.coordinateSpace.bounds;
     if(_floating) [MWWorkspaceCoordinator.shared attachFloatingWindow:self.window];

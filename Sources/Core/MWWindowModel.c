@@ -97,3 +97,9 @@ MWRect MWEdgeHandleRect(MWRect viewport, bool right, double position) {
     double normalized=clamp(finite_or(position,0.35),0,1);
     return (MWRect){right ? v.x+v.width-width : v.x,v.y+normalized*(v.height-height),width,height};
 }
+MWContentTransform MWFitContent(double logicalWidth,double logicalHeight,double availableWidth,double availableHeight) {
+    double lw=fmax(1,finite_or(logicalWidth,1)),lh=fmax(1,finite_or(logicalHeight,1));
+    double aw=fmax(0,finite_or(availableWidth,0)),ah=fmax(0,finite_or(availableHeight,0));
+    double scale=fmin(aw/lw,ah/lh);
+    return (MWContentTransform){scale,(aw-lw*scale)/2,(ah-lh*scale)/2};
+}

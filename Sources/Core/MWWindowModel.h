@@ -23,4 +23,6 @@ MWRect MWFitAspectRect(MWRect rect, MWRect viewport, double ratio);
 MWRect MWResizeAspectRect(MWRect start, double dx, double dy, MWRect viewport, double ratio);
 MWRect MWMaximizedAspectRect(MWRect viewport, double ratio);
 MWRect MWEdgeHandleRect(MWRect viewport, bool right, double position);
+typedef struct { double scale, x, y; } MWContentTransform;
+MWContentTransform MWFitContent(double logicalWidth, double logicalHeight, double availableWidth, double availableHeight);
 #endif
