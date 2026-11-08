@@ -19,6 +19,7 @@ static CGRect MWToCGRect(MWRect r) { return CGRectMake(r.x,r.y,r.width,r.height)
     UIInterfaceOrientation _lastOrientation;
     UIView *_guestView;
     BOOL _hostHidden;
+    NSString *_failureMessage;
 }
 @synthesize model=_model;
 
@@ -124,7 +125,9 @@ static CGRect MWToCGRect(MWRect r) { return CGRectMake(r.x,r.y,r.width,r.height)
 }
 - (void)updateStatus:(NSString *)error {
     BOOL loading=_model.state==MWWindowLoading;
-    _message.text=error ?: @"正在打开应用…";
+    if(error.length) _failureMessage=[error copy];
+    if(_model.state!=MWWindowFailed) _failureMessage=nil;
+    _message.text=_model.state==MWWindowFailed ? (_failureMessage ?: @"小窗暂时不可用，请重试。") : @"正在打开应用…";
     _message.hidden=!loading && _model.state!=MWWindowFailed;
     _retry.hidden=_model.state!=MWWindowFailed;
     if(loading) [_spinner startAnimating]; else [_spinner stopAnimating];

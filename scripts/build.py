@@ -32,6 +32,25 @@ def run(args):
     subprocess.run([str(a) for a in args], cwd=ROOT, check=True)
 
 
+def source_provenance():
+    if (ROOT / ".git").exists() and shutil.which("git"):
+        try:
+            commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True, stderr=subprocess.DEVNULL).strip()
+            dirty = bool(subprocess.check_output(["git", "status", "--porcelain"], cwd=ROOT, text=True, stderr=subprocess.DEVNULL).strip())
+            return {"source_commit": commit, "source_dirty": dirty, "source_identity": "git"}
+        except subprocess.CalledProcessError:
+            pass
+    metadata = ROOT / "SOURCE_REVISION.json"
+    if metadata.is_file():
+        try:
+            saved = json.loads(metadata.read_text())
+            return {"source_commit": saved.get("source_commit"), "source_dirty": None,
+                    "source_identity": "archive metadata; local edits are not tracked"}
+        except (OSError, ValueError):
+            pass
+    return {"source_commit": None, "source_dirty": None, "source_identity": "unversioned source"}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--sdk", default=os.environ.get("IOS_SDK"))
@@ -100,8 +119,7 @@ def main():
               "compiler": subprocess.check_output([compiler, "--version"], text=True).splitlines()[0],
               "linker": linker, "sdk": str(sdk), "sdk_version": sdk_version,
               "deployment_target": deployment, "architecture": "arm64", "device_tested": False,
-              "source_commit": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
-              "source_dirty": bool(subprocess.check_output(["git", "status", "--porcelain"], cwd=ROOT, text=True).strip())}
+              **source_provenance()}
     (dist / "build-report.json").write_text(json.dumps(report, indent=2) + "\n")
     print(f"Package: {package}\nSHA-256: {digest}\nDevice testing: NOT RUN")
 
