@@ -3,6 +3,7 @@
 from pathlib import Path
 import hashlib
 import json
+import plistlib
 import subprocess
 import zipfile
 
@@ -11,7 +12,8 @@ NAME = "UiharuXPro4MilkyWay"
 files = subprocess.check_output(["git", "ls-files", "-z"], cwd=ROOT).decode().split("\0")
 dist = ROOT / "dist"
 dist.mkdir(exist_ok=True)
-output = dist / f"{NAME}-source-0.1.0.zip"
+version = plistlib.loads((ROOT / "Resources/Info.plist").read_bytes())["CFBundleShortVersionString"]
+output = dist / f"{NAME}-source-{version}.zip"
 with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as archive:
     for name in files:
         if name:

@@ -4,12 +4,14 @@
 #include <stdbool.h>
 
 typedef struct { double x, y, width, height; } MWRect;
+#define MWTitleHeight 48.0
 typedef enum { MWWindowLoading, MWWindowVisible, MWWindowMinimized, MWWindowFailed, MWWindowClosed } MWWindowState;
 typedef enum { MWEventReady, MWEventFailed, MWEventRetry, MWEventMinimize, MWEventRestore, MWEventClose } MWWindowEvent;
 typedef struct {
     MWWindowState state;
     MWRect frame, restoreFrame;
     bool maximized;
+    double aspectRatio;
 } MWWindowModel;
 
 MWWindowModel MWWindowCreate(MWRect frame);
@@ -17,4 +19,8 @@ MWRect MWConstrainRect(MWRect rect, MWRect viewport);
 bool MWWindowApply(MWWindowModel *model, MWWindowEvent event);
 bool MWWindowToggleMaximize(MWWindowModel *model, MWRect viewport);
 void MWWindowReflow(MWWindowModel *model, MWRect viewport);
+MWRect MWFitAspectRect(MWRect rect, MWRect viewport, double ratio);
+MWRect MWResizeAspectRect(MWRect start, double dx, double dy, MWRect viewport, double ratio);
+MWRect MWMaximizedAspectRect(MWRect viewport, double ratio);
+MWRect MWEdgeHandleRect(MWRect viewport, bool right, double position);
 #endif

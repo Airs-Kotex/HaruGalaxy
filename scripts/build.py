@@ -80,6 +80,7 @@ def main():
             shutil.rmtree(directory)
         directory.mkdir(parents=True)
     sources = sorted((ROOT / "Sources").rglob("*.m")) + sorted((ROOT / "Sources/Core").glob("*.c"))
+    sources.append(ROOT / "ThirdParty/CompilerRT/os_version_check.c")
     objects = []
     common = ["-target", f"arm64-apple-ios{deployment}", "-isysroot", str(sdk), "-O2", "-fvisibility=hidden",
               "-Wall", "-Wextra", "-Werror", "-Wno-deprecated-declarations", "-fstack-protector-strong"]
@@ -102,6 +103,7 @@ def main():
             shutil.copy2(resource, app / resource.name)
     for name in ["LICENSE", "NOTICE.md"]:
         shutil.copy2(ROOT / name, app / name)
+    shutil.copy2(ROOT / "ThirdParty/CompilerRT/LICENSE.TXT", app / "CompilerRT-LICENSE.txt")
     run([signer, "-S" + str(ROOT / "Resources/entitlements.plist"), executable])
     dist = ROOT / "dist"
     dist.mkdir(exist_ok=True)

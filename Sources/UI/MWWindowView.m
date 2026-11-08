@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 #import "MWWindowView.h"
 #import "MWPreferences.h"
+#import "../Diagnostics/MWDiagnostics.h"
 
 static MWRect MWFromCGRect(CGRect r) { return (MWRect){r.origin.x,r.origin.y,r.size.width,r.size.height}; }
 static CGRect MWToCGRect(MWRect r) { return CGRectMake(r.x,r.y,r.width,r.height); }
@@ -20,12 +21,15 @@ static CGRect MWToCGRect(MWRect r) { return CGRectMake(r.x,r.y,r.width,r.height)
     UIView *_guestView;
     BOOL _hostHidden;
     NSString *_failureMessage;
+    CGSize _logicalSize;
 }
 @synthesize model=_model;
 
 - (instancetype)initWithApplication:(MWApplication *)application frame:(CGRect)frame {
     if((self=[super initWithFrame:frame])) {
         _application=application; _model=MWWindowCreate(MWFromCGRect(frame));
+        _logicalSize=UIScreen.mainScreen.bounds.size;
+        _model.aspectRatio=_logicalSize.width/MAX(1,_logicalSize.height);
         self.backgroundColor=UIColor.clearColor;
         self.layer.shadowColor=UIColor.blackColor.CGColor; self.layer.shadowOpacity=0.2;
         self.layer.shadowRadius=18; self.layer.shadowOffset=CGSizeMake(0,8);
@@ -79,15 +83,20 @@ static CGRect MWToCGRect(MWRect r) { return CGRectMake(r.x,r.y,r.width,r.height)
     _bar.frame=CGRectMake(0,0,self.bounds.size.width,48);
     _title.frame=CGRectMake(140,0,MAX(0,self.bounds.size.width-152),48);
     _content.frame=CGRectMake(0,48,self.bounds.size.width,MAX(1,self.bounds.size.height-48));
-    _session.contentView.frame=_content.bounds;
+    if(_guestView) {
+        CGFloat scale=_content.bounds.size.width/MAX(1,_logicalSize.width);
+        _guestView.bounds=(CGRect){CGPointZero,_logicalSize};
+        _guestView.center=CGPointMake(CGRectGetMidX(_content.bounds),CGRectGetMidY(_content.bounds));
+        _guestView.transform=CGAffineTransformMakeScale(scale,scale);
+    }
     _spinner.center=CGPointMake(CGRectGetMidX(_content.bounds),CGRectGetMidY(_content.bounds)-32);
     _message.frame=CGRectMake(16,MAX(12,CGRectGetMidY(_content.bounds)-16),MAX(1,_content.bounds.size.width-32),72);
     _retry.frame=CGRectMake(20,MIN(_content.bounds.size.height-48,CGRectGetMaxY(_message.frame)),MAX(1,_content.bounds.size.width-40),44);
     _resize.frame=CGRectMake(self.bounds.size.width-44,self.bounds.size.height-44,44,44);
     self.layer.shadowPath=[UIBezierPath bezierPathWithRoundedRect:self.bounds cornerRadius:18].CGPath;
     UIInterfaceOrientation orientation=self.window.windowScene.interfaceOrientation;
-    if(!CGSizeEqualToSize(_lastSize,_content.bounds.size) || _lastOrientation!=orientation) {
-        _lastSize=_content.bounds.size; _lastOrientation=orientation;
+    if(!CGSizeEqualToSize(_lastSize,_logicalSize) || _lastOrientation!=orientation) {
+        _lastSize=_logicalSize; _lastOrientation=orientation;
         [_session updateSize:_lastSize orientation:orientation];
     }
 }
@@ -97,16 +106,17 @@ static CGRect MWToCGRect(MWRect r) { return CGRectMake(r.x,r.y,r.width,r.height)
     [_session setVisible:!_hostHidden];
     __weak typeof(self) weakSelf=self;
     _session.failureHandler=^(NSError *error) { [weakSelf failed:error]; };
-    [_session updateSize:_content.bounds.size orientation:self.window.windowScene.interfaceOrientation];
-    [_session startWithSize:_content.bounds.size completion:^(NSError *error) {
+    [_session updateSize:_logicalSize orientation:self.window.windowScene.interfaceOrientation];
+    [_session startWithSize:_logicalSize completion:^(NSError *error) {
         MWWindowView *view=weakSelf;
         if(!view || view->_model.state==MWWindowClosed) return;
         if(error) { [view failed:error]; return; }
         if(!MWWindowApply(&view->_model,MWEventReady)) return;
         UIView *content=view.session.contentView;
         [view->_guestView removeFromSuperview]; view->_guestView=content;
-        content.frame=view->_content.bounds; content.autoresizingMask=UIViewAutoresizingFlexibleWidth|UIViewAutoresizingFlexibleHeight;
+        content.autoresizingMask=UIViewAutoresizingNone;
         [view->_content insertSubview:content atIndex:0];
+        [view setNeedsLayout]; [view layoutIfNeeded];
         [view updateStatus:nil];
         if(view.stateHandler) view.stateHandler();
     }];
@@ -154,15 +164,15 @@ static CGRect MWToCGRect(MWRect r) { return CGRectMake(r.x,r.y,r.width,r.height)
     if(gesture.state==UIGestureRecognizerStateBegan) { _gestureFrame=self.frame; if(self.activateHandler) self.activateHandler(); }
     CGPoint delta=[gesture translationInView:self.superview];
     CGRect frame=_gestureFrame; frame.origin.x+=delta.x; frame.origin.y+=delta.y;
-    _model.frame=MWConstrainRect(MWFromCGRect(frame),MWFromCGRect(_viewport)); self.frame=MWToCGRect(_model.frame);
+    _model.frame=MWFitAspectRect(MWFromCGRect(frame),MWFromCGRect(_viewport),_model.aspectRatio); self.frame=MWToCGRect(_model.frame);
     if(gesture.state==UIGestureRecognizerStateEnded || gesture.state==UIGestureRecognizerStateCancelled) [self geometryChanged];
 }
 - (void)resize:(UIPanGestureRecognizer *)gesture {
     if(_model.maximized) return;
     if(gesture.state==UIGestureRecognizerStateBegan) { _gestureFrame=self.frame; if(self.activateHandler) self.activateHandler(); }
     CGPoint delta=[gesture translationInView:self.superview];
-    CGRect frame=_gestureFrame; frame.size.width+=delta.x; frame.size.height+=delta.y;
-    _model.frame=MWConstrainRect(MWFromCGRect(frame),MWFromCGRect(_viewport)); self.frame=MWToCGRect(_model.frame);
+    _model.frame=MWResizeAspectRect(MWFromCGRect(_gestureFrame),delta.x,delta.y,MWFromCGRect(_viewport),_model.aspectRatio);
+    self.frame=MWToCGRect(_model.frame);
     if(gesture.state==UIGestureRecognizerStateEnded || gesture.state==UIGestureRecognizerStateCancelled) [self geometryChanged];
 }
 - (void)toggleMaximize {
@@ -172,19 +182,24 @@ static CGRect MWToCGRect(MWRect r) { return CGRectMake(r.x,r.y,r.width,r.height)
     [self updateStatus:nil]; [self geometryChanged];
 }
 - (void)geometryChanged {
+    MWLog(@"window.geometry_committed",@{@"bundle":_application.bundleIdentifier,@"width":@(_model.frame.width),@"height":@(_model.frame.height),@"contentAspect":@(_model.aspectRatio),@"maximized":@(_model.maximized)});
     if(self.geometryHandler) self.geometryHandler(MWToCGRect(_model.maximized ? _model.restoreFrame : _model.frame));
 }
 - (void)applyViewport:(CGRect)viewport {
+    CGSize screen=self.window.windowScene.screen.bounds.size;
+    if(screen.width>0 && screen.height>0) { _logicalSize=screen; _model.aspectRatio=screen.width/screen.height; }
     _viewport=viewport; MWWindowReflow(&_model,MWFromCGRect(viewport)); self.frame=MWToCGRect(_model.frame);
 }
 - (void)requestClose { if(self.closeHandler) self.closeHandler(); }
 - (void)requestMinimize { if(self.minimizeHandler) self.minimizeHandler(); }
 - (void)minimize {
     if(!MWWindowApply(&_model,MWEventMinimize)) return;
+    MWLog(@"window.minimize",@{@"bundle":_application.bundleIdentifier});
     self.hidden=YES; [_session setVisible:NO];
 }
 - (void)restore {
     if(!MWWindowApply(&_model,MWEventRestore)) return;
+    MWLog(@"window.restore",@{@"bundle":_application.bundleIdentifier});
     self.hidden=NO; [_session setVisible:!_hostHidden]; [self updateStatus:nil];
 }
 - (void)close {

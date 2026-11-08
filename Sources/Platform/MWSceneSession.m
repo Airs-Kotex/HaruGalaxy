@@ -5,6 +5,7 @@
 #import "MWPrivate.h"
 #include <signal.h>
 #include <errno.h>
+#import "../Diagnostics/MWDiagnostics.h"
 
 @implementation MWSceneSession {
     FBApplicationProcessLaunchTransaction *_transaction;
@@ -34,6 +35,7 @@
     NSAssert(NSThread.isMainThread,@"Scene sessions are main-thread owned");
     if(_started || _closed) { completion(MWError(10,@"该窗口会话已结束，请重新打开。")); return; }
     _started=YES; _size=size; _completion=[completion copy];
+    MWLog(@"guest.launch_requested",@{@"bundle":self.bundleIdentifier,@"scene":self.sceneIdentifier,@"width":@(size.width),@"height":@(size.height)});
     NSString *issue=MWSceneCapabilityIssue();
     if(issue) { [self fail:MWError(11,issue)]; return; }
     NSUInteger generation=++_generation;
@@ -70,6 +72,7 @@
         NSError *error=nil;
         RBSProcessPredicate *predicate=[PrivClass(RBSProcessPredicate) predicateMatchingIdentity:identity];
         _process=[PrivClass(RBSProcessHandle) handleForPredicate:predicate error:&error];
+        MWLog(@"guest.process",@{@"bundle":self.bundleIdentifier,@"pid":@(_process.pid),@"error":MWErrorFields(error)});
         if(!_process || _process.pid<=0) { [self fail:error ?: MWError(15,@"未能取得应用进程。")]; return; }
         [[PrivClass(FBProcessManager) sharedInstance] registerProcessForAuditToken:_process.auditToken];
         FBSMutableSceneDefinition *definition=[PrivClass(FBSMutableSceneDefinition) definition];
@@ -100,6 +103,7 @@
         [_presenter activate];
         if(!_presenter.presentationView) { [self fail:MWError(16,@"应用未提供可显示的小窗视图。")]; return; }
         if(!_visible) [_presenter deactivate];
+        MWLog(@"guest.presenter_ready",@{@"bundle":self.bundleIdentifier,@"scene":self.sceneIdentifier,@"pid":@(_process.pid),@"note":@"presenter object only; first frame not observed"});
         _transaction=nil;
         void (^completion)(NSError *)=_completion; _completion=nil;
         if(completion) completion(nil);
@@ -128,6 +132,7 @@
     _size=size;
     if(orientation!=UIInterfaceOrientationUnknown) _orientation=orientation;
     if(!_scene) return;
+    MWTrace(@"guest.logical_geometry",@{@"bundle":self.bundleIdentifier,@"width":@(size.width),@"height":@(size.height),@"orientation":@(orientation)});
     @try {
         UIInterfaceOrientation resolved=_orientation;
         [_scene updateSettingsWithBlock:^(UIMutableApplicationSceneSettings *settings) {
@@ -141,6 +146,7 @@
 - (void)setVisible:(BOOL)visible {
     if(_closed) return;
     _visible=visible;
+    MWTrace(@"guest.visibility",@{@"bundle":self.bundleIdentifier,@"visible":@(visible)});
     @try {
         [_scene updateSettingsWithBlock:^(UIMutableApplicationSceneSettings *settings) { settings.foreground=visible; }];
         if(visible) [_presenter activate]; else [_presenter deactivate];
@@ -151,6 +157,7 @@
 
 - (void)fail:(NSError *)error {
     if(_closed) return;
+    MWLog(@"guest.failed",@{@"bundle":self.bundleIdentifier,@"scene":self.sceneIdentifier,@"error":MWErrorFields(error)});
     void (^completion)(NSError *)=_completion;
     void (^failure)(NSError *)=self.failureHandler;
     [self close];
@@ -159,6 +166,7 @@
 
 - (void)close {
     if(_closed) return;
+    MWLog(@"guest.close",@{@"bundle":self.bundleIdentifier,@"scene":self.sceneIdentifier});
     _closed=YES; ++_generation; _completion=nil; self.failureHandler=nil;
     [self tearDown];
 }
@@ -172,7 +180,7 @@
     _presenter=nil;
     if(_scene) {
         @try { [[PrivClass(FBSceneManager) sharedInstance] destroyScene:self.sceneIdentifier withTransitionContext:nil]; }
-        @catch(NSException *exception) { NSLog(@"Scene cleanup failed: %@",exception.reason); }
+        @catch(NSException *exception) { MWLog(@"guest.cleanup_failed",@{@"scene":self.sceneIdentifier,@"reason":exception.reason ?: @"unknown"}); }
     }
     _scene=nil; _process=nil;
 }

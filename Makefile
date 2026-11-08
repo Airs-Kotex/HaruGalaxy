@@ -8,4 +8,4 @@ package:
 	$(PYTHON) scripts/build.py
 
 verify:
-	$(PYTHON) scripts/verify_package.py dist/UiharuXPro4MilkyWay-0.1.0.tipa
+	$(PYTHON) scripts/verify_package.py

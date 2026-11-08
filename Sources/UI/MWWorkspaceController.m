@@ -4,6 +4,8 @@
 #import "MWAppPickerController.h"
 #import "MWSettingsController.h"
 #import "MWPreferences.h"
+#import "MWEdgeHandle.h"
+#import "../Diagnostics/MWDiagnostics.h"
 #import "../Platform/MWFloatingHost.h"
 
 @interface MWCanvas : UIView
@@ -28,12 +30,12 @@
     NSMutableDictionary<NSString *,MWWindowView *> *_windows;
     NSMutableArray<NSString *> *_order;
     UILabel *_heading, *_subtitle, *_emptyTitle, *_emptyHint;
-    UIButton *_add, *_settings, *_bubble;
+    UIButton *_add, *_settings;
+    MWEdgeHandle *_bubble;
     UIVisualEffectView *_shelf;
     UIScrollView *_shelfScroll;
     UIStackView *_shelfItems;
     CGRect _viewport;
-    BOOL _bubblePositioned;
     BOOL _hostHidden;
 }
 - (void)loadView {
@@ -49,16 +51,18 @@
     _emptyHint=[self label:@"打开一个应用小窗\n拖动标题栏移动，双击标题栏放大。" size:15 weight:UIFontWeightRegular color:UIColor.secondaryLabelColor];
     _emptyTitle.textAlignment=_emptyHint.textAlignment=NSTextAlignmentCenter; _emptyHint.numberOfLines=0;
     _add=[self button:@"plus" title:@"打开应用" action:@selector(openPicker)];
-    UIButtonConfiguration *addConfiguration=[UIButtonConfiguration filledButtonConfiguration];
-    addConfiguration.title=@"打开应用"; addConfiguration.image=[UIImage systemImageNamed:@"plus"]; addConfiguration.imagePadding=8;
-    _add.configuration=addConfiguration;
+    if(@available(iOS 15.0,*)) {
+        UIButtonConfiguration *addConfiguration=[UIButtonConfiguration filledButtonConfiguration];
+        addConfiguration.title=@"打开应用"; addConfiguration.image=[UIImage systemImageNamed:@"plus"]; addConfiguration.imagePadding=8;
+        _add.configuration=addConfiguration;
+    } else {
+        _add.backgroundColor=self.view.tintColor; _add.tintColor=UIColor.whiteColor; _add.layer.cornerRadius=12;
+    }
     _settings=[self button:@"slider.horizontal.3" title:nil action:@selector(openSettings)]; _settings.accessibilityLabel=@"设置";
-    _bubble=[self button:@"square.stack.3d.up.fill" title:nil action:@selector(openPicker)];
-    _bubble.accessibilityLabel=@"打开应用小窗，长按显示设置";
-    _bubble.layer.cornerRadius=26; _bubble.backgroundColor=self.view.tintColor; _bubble.tintColor=UIColor.whiteColor;
-    _bubble.layer.shadowColor=UIColor.blackColor.CGColor; _bubble.layer.shadowOpacity=0.18; _bubble.layer.shadowRadius=12;
-    [_bubble addGestureRecognizer:[[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(moveBubble:)]];
-    [_bubble addGestureRecognizer:[[UILongPressGestureRecognizer alloc] initWithTarget:self action:@selector(bubbleMenu:)]];
+    _bubble=[MWEdgeHandle new]; [self.view addSubview:_bubble];
+    __weak typeof(self) weakSelf=self;
+    _bubble.activationHandler=^{[weakSelf openPicker];};
+    _bubble.settingsHandler=^{[weakSelf openSettings];};
     _shelf=[[UIVisualEffectView alloc] initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemChromeMaterial]];
     _shelf.layer.cornerRadius=22; _shelf.clipsToBounds=YES; [self.view addSubview:_shelf];
     _shelfScroll=[UIScrollView new]; _shelfScroll.showsHorizontalScrollIndicator=NO; [_shelf.contentView addSubview:_shelfScroll];
@@ -103,11 +107,7 @@
     CGSize fitting=[_shelfItems systemLayoutSizeFittingSize:UILayoutFittingCompressedSize];
     _shelfItems.frame=CGRectMake(10,7,MAX(1,fitting.width),44);
     _shelfScroll.contentSize=CGSizeMake(fitting.width+20,58);
-    if(!_bubblePositioned) { _bubble.frame=CGRectMake(bounds.size.width-safe.right-66,safe.top+112,52,52); _bubblePositioned=YES; }
-    CGRect bubble=_bubble.frame;
-    bubble.origin.x=MAX(safe.left+8,MIN(bubble.origin.x,bounds.size.width-safe.right-60));
-    bubble.origin.y=MAX(safe.top+8,MIN(bubble.origin.y,bounds.size.height-safe.bottom-132));
-    _bubble.frame=bubble;
+    [_bubble applyViewport:CGRectMake(0,safe.top+12,bounds.size.width,MAX(48,bounds.size.height-safe.top-safe.bottom-24))];
     CGFloat top=_floating ? safe.top+8 : safe.top+100;
     CGFloat bottom=safe.bottom+(_shelf.hidden ? 16 : 84);
     CGRect viewport=CGRectMake(safe.left+8,top,MAX(1,bounds.size.width-safe.left-safe.right-16),MAX(1,bounds.size.height-top-bottom));
@@ -133,10 +133,15 @@
         MWWindowView *window=_windows[bundle];
         if(window.model.state!=MWWindowMinimized) continue;
         UIButton *item=[UIButton buttonWithType:UIButtonTypeSystem];
-        UIButtonConfiguration *config=[UIButtonConfiguration tintedButtonConfiguration];
-        config.title=window.application.name; config.cornerStyle=UIButtonConfigurationCornerStyleCapsule;
-        config.image=[UIImage systemImageNamed:@"arrow.up.forward.app"];
-        config.imagePadding=6; item.configuration=config;
+        if(@available(iOS 15.0,*)) {
+            UIButtonConfiguration *config=[UIButtonConfiguration tintedButtonConfiguration];
+            config.title=window.application.name; config.cornerStyle=UIButtonConfigurationCornerStyleCapsule;
+            config.image=[UIImage systemImageNamed:@"arrow.up.forward.app"];
+            config.imagePadding=6; item.configuration=config;
+        } else {
+            [item setTitle:window.application.name forState:UIControlStateNormal];
+            item.contentEdgeInsets=UIEdgeInsetsMake(0,16,0,16); item.backgroundColor=UIColor.tertiarySystemBackgroundColor; item.layer.cornerRadius=20;
+        }
         item.accessibilityLabel=[NSString stringWithFormat:@"恢复 %@",window.application.name];
         __weak typeof(self) weakSelf=self;
         [item addAction:[UIAction actionWithHandler:^(__kindof UIAction *action) { (void)action; [weakSelf restoreBundle:bundle]; }] forControlEvents:UIControlEventTouchUpInside];
@@ -154,6 +159,7 @@
     [self presentViewController:nav animated:!MWPreferences.shared.reduceMotion completion:nil];
 }
 - (void)openApplication:(MWApplication *)application {
+    MWLog(@"workspace.open",@{@"bundle":application.bundleIdentifier,@"floating":@(_floating)});
     MWWindowView *existing=_windows[application.bundleIdentifier];
     if(existing) { [self restoreBundle:application.bundleIdentifier]; return; }
     if(_windows.count>=4) { [self showMessage:@"Alpha 版本最多同时保留 4 个窗口，请先关闭一个。"] ; return; }
@@ -205,6 +211,7 @@
 }
 - (void)closeAllWindows { for(NSString *bundle in [_order copy]) [self closeBundle:bundle]; }
 - (void)setHostVisible:(BOOL)visible {
+    MWLog(@"workspace.visibility",@{@"visible":@(visible),@"floating":@(_floating),@"windows":@(_windows.count)});
     _hostHidden=!visible;
     for(MWWindowView *window in _windows.allValues) [window setHostVisible:visible];
 }
@@ -218,17 +225,6 @@
     };
     [self presentViewController:[[UINavigationController alloc] initWithRootViewController:settings] animated:YES completion:nil];
 }
-- (void)moveBubble:(UIPanGestureRecognizer *)gesture {
-    CGPoint delta=[gesture translationInView:self.view]; [gesture setTranslation:CGPointZero inView:self.view];
-    _bubble.center=CGPointMake(_bubble.center.x+delta.x,_bubble.center.y+delta.y);
-    [self.view setNeedsLayout]; [self.view layoutIfNeeded];
-    if(gesture.state==UIGestureRecognizerStateEnded) {
-        BOOL left=_bubble.center.x<CGRectGetMidX(self.view.bounds);
-        CGFloat x=left ? self.view.safeAreaInsets.left+34 : self.view.bounds.size.width-self.view.safeAreaInsets.right-34;
-        [UIView animateWithDuration:MWPreferences.shared.reduceMotion ? 0 : 0.2 animations:^{self->_bubble.center=CGPointMake(x,self->_bubble.center.y);}];
-    }
-}
-- (void)bubbleMenu:(UILongPressGestureRecognizer *)gesture { if(gesture.state==UIGestureRecognizerStateBegan) [self openSettings]; }
 - (void)floatingFailed:(NSNotification *)notification { [self showMessage:[notification.object localizedDescription]]; }
 - (void)showMessage:(NSString *)message {
     if(!message.length || self.presentedViewController) return;

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 #import "MWApplicationCatalog.h"
 #import "MWPrivate.h"
+#import "../Diagnostics/MWDiagnostics.h"
 
 @implementation MWApplication
 - (UIImage *)icon {
@@ -35,6 +36,7 @@
         if(error) *error=MWError(2,[NSString stringWithFormat:@"读取应用列表失败：%@",exception.reason]);
         return @[];
     }
+    MWLog(@"catalog.loaded",@{@"count":@(result.count)});
     return [result sortedArrayUsingComparator:^NSComparisonResult(MWApplication *a,MWApplication *b) {
         return [a.name localizedStandardCompare:b.name];
     }];

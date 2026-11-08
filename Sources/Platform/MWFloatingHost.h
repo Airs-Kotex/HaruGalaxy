@@ -12,5 +12,8 @@ FOUNDATION_EXPORT NSString *const MWFloatingHostVisibilityNotification;
 - (BOOL)setEnabled:(BOOL)enabled fromScene:(UIWindowScene *)scene error:(NSError **)error;
 - (BOOL)ownsSceneIdentifier:(NSString *)identifier;
 - (void)sceneDisconnected:(NSString *)identifier;
+- (id)protectedDiff:(id)diff forIdentifier:(NSString *)identifier;
+- (void)refreshAfterBackgroundTransition;
+@property(nonatomic,readonly) BOOL backgroundExecutionValid;
 @end
 

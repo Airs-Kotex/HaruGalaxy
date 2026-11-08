@@ -4,7 +4,7 @@
 void MWLoadPrivateFrameworks(void) {
     static dispatch_once_t once;
     dispatch_once(&once, ^{
-        for (NSString *name in @[@"CoreServices", @"FrontBoard", @"RunningBoardServices", @"SpringBoardServices"]) {
+        for (NSString *name in @[@"CoreServices", @"FrontBoard", @"FrontBoardServices", @"RunningBoardServices", @"AssertionServices", @"SpringBoardServices"]) {
             NSString *path=[NSString stringWithFormat:@"/System/Library/PrivateFrameworks/%@.framework/%@",name,name];
             if(!dlopen(path.UTF8String,RTLD_NOW|RTLD_GLOBAL)) {
                 NSString *publicPath=[NSString stringWithFormat:@"/System/Library/Frameworks/%@.framework/%@",name,name];

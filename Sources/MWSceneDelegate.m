@@ -5,6 +5,7 @@
 #import "UI/MWPreferences.h"
 #import "UI/MWWorkspaceCoordinator.h"
 #import "Platform/MWPrivate.h"
+#import "Diagnostics/MWDiagnostics.h"
 
 @interface MWOverlayWindow : UIWindow
 @end
@@ -26,6 +27,7 @@
     (void)options;
     UIWindowScene *windowScene=(UIWindowScene *)scene;
     _sceneIdentifier=[session.persistentIdentifier copy];
+    MWLog(@"host_scene.connect",@{@"session":_sceneIdentifier ?: @"none"});
     _floating=[_sceneIdentifier hasPrefix:@"io.github.uiharuxpro4milkyway.overlay."];
     if(_floating && ![MWFloatingHost.shared ownsSceneIdentifier:_sceneIdentifier]) {
         // Cancelled or superseded connection: never create an opaque normal window.
@@ -47,16 +49,24 @@
 }
 - (void)sceneDidDisconnect:(UIScene *)scene {
     (void)scene;
+    MWLog(@"host_scene.disconnect",@{@"session":_sceneIdentifier ?: @"none",@"floating":@(_floating)});
     if(_floating) [MWFloatingHost.shared sceneDisconnected:_sceneIdentifier];
     [MWWorkspaceCoordinator.shared detachWindow:self.window]; self.window=nil;
 }
 - (void)sceneDidEnterBackground:(UIScene *)scene {
     (void)scene;
+    MWLog(@"host_scene.background",@{@"session":_sceneIdentifier ?: @"none",@"floating":@(_floating)});
     if(!_floating) { [MWWorkspaceCoordinator.shared setWindow:self.window visible:NO]; self.window.hidden=YES; }
+    [MWFloatingHost.shared refreshAfterBackgroundTransition];
 }
 - (void)sceneWillEnterForeground:(UIScene *)scene {
     (void)scene;
+    MWLog(@"host_scene.foreground",@{@"session":_sceneIdentifier ?: @"none",@"floating":@(_floating)});
     if(!_floating) { self.window.hidden=NO; [MWWorkspaceCoordinator.shared setWindow:self.window visible:YES]; }
+}
+- (void)windowScene:(UIWindowScene *)windowScene didUpdateCoordinateSpace:(id<UICoordinateSpace>)previous interfaceOrientation:(UIInterfaceOrientation)orientation traitCollection:(UITraitCollection *)traits {
+    (void)previous; (void)orientation; (void)traits;
+    MWLog(@"host_scene.geometry",@{@"session":_sceneIdentifier ?: @"none",@"orientation":@(windowScene.interfaceOrientation),@"width":@(windowScene.coordinateSpace.bounds.size.width),@"height":@(windowScene.coordinateSpace.bounds.size.height)});
 }
 - (void)dealloc { [[NSNotificationCenter defaultCenter] removeObserver:self]; }
 @end

@@ -20,7 +20,7 @@ MWRect MWConstrainRect(MWRect r, MWRect viewport) {
 }
 
 MWWindowModel MWWindowCreate(MWRect frame) {
-    MWWindowModel m={MWWindowLoading,frame,frame,false};
+    MWWindowModel m={MWWindowLoading,frame,frame,false,frame.width/fmax(1,frame.height-MWTitleHeight)};
     return m;
 }
 
@@ -50,13 +50,50 @@ bool MWWindowApply(MWWindowModel *m, MWWindowEvent e) {
 
 bool MWWindowToggleMaximize(MWWindowModel *m, MWRect viewport) {
     if(!m || m->state!=MWWindowVisible) return false;
-    if(m->maximized) m->frame=MWConstrainRect(m->restoreFrame,viewport);
-    else { m->restoreFrame=m->frame; m->frame=safe_viewport(viewport); }
+    if(m->maximized) m->frame=MWFitAspectRect(m->restoreFrame,viewport,m->aspectRatio);
+    else { m->restoreFrame=m->frame; m->frame=MWMaximizedAspectRect(viewport,m->aspectRatio); }
     m->maximized=!m->maximized;
     return true;
 }
 
 void MWWindowReflow(MWWindowModel *m, MWRect viewport) {
     if(!m) return;
-    m->frame=m->maximized ? safe_viewport(viewport) : MWConstrainRect(m->frame,viewport);
+    m->frame=m->maximized ? MWMaximizedAspectRect(viewport,m->aspectRatio) : MWFitAspectRect(m->frame,viewport,m->aspectRatio);
+}
+
+static double safe_ratio(double r) { return isfinite(r) && r>0.01 && r<100 ? r : 0.5; }
+MWRect MWFitAspectRect(MWRect r, MWRect viewport, double ratio) {
+    MWRect v=safe_viewport(viewport); ratio=safe_ratio(ratio);
+    if(v.height<=MWTitleHeight+1) return v; // No positive content height can fit.
+    double maximum=fmin(v.width,(v.height-MWTitleHeight)*ratio);
+    double minimum=fmin(maximum,fmax(220,(200-MWTitleHeight)*ratio));
+    r.width=clamp(finite_or(r.width,minimum),minimum,maximum);
+    r.height=r.width/ratio+MWTitleHeight;
+    r.x=clamp(finite_or(r.x,v.x),v.x,v.x+v.width-r.width);
+    r.y=clamp(finite_or(r.y,v.y),v.y,v.y+v.height-r.height);
+    return r;
+}
+MWRect MWResizeAspectRect(MWRect start, double dx, double dy, MWRect viewport, double ratio) {
+    MWRect v=safe_viewport(viewport); ratio=safe_ratio(ratio);
+    if(v.height<=MWTitleHeight+1) return v;
+    start=MWFitAspectRect(start,v,ratio);
+    double content=fmax(1,start.height-MWTitleHeight);
+    double scale=1+(finite_or(dx,0)*start.width+finite_or(dy,0)*content)/(start.width*start.width+content*content);
+    double maximum=fmin(v.x+v.width-start.x,(v.y+v.height-start.y-MWTitleHeight)*ratio);
+    double minimum=fmin(maximum,fmax(220,(200-MWTitleHeight)*ratio));
+    start.width=clamp(start.width*scale,minimum,maximum);
+    start.height=start.width/ratio+MWTitleHeight;
+    return start;
+}
+MWRect MWMaximizedAspectRect(MWRect viewport, double ratio) {
+    MWRect v=safe_viewport(viewport);
+    MWRect r=MWFitAspectRect((MWRect){v.x,v.y,v.width,v.height},v,ratio);
+    r.x=v.x+(v.width-r.width)/2; r.y=v.y+(v.height-r.height)/2;
+    return r;
+}
+MWRect MWEdgeHandleRect(MWRect viewport, bool right, double position) {
+    MWRect v=safe_viewport(viewport);
+    double height=fmin(48,v.height),width=fmin(44,v.width);
+    double normalized=clamp(finite_or(position,0.35),0,1);
+    return (MWRect){right ? v.x+v.width-width : v.x,v.y+normalized*(v.height-height),width,height};
 }

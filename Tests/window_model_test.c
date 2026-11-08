@@ -43,7 +43,7 @@ static void maximize_restore(void) {
     assert(!MWWindowToggleMaximize(&m,viewport));
     assert(MWWindowApply(&m,MWEventReady));
     assert(MWWindowToggleMaximize(&m,viewport));
-    equal_rect(m.frame,viewport);
+    assert(fabs(m.frame.width/(m.frame.height-MWTitleHeight)-m.aspectRatio)<0.001);
     assert(MWWindowApply(&m,MWEventMinimize));
     assert(m.maximized);
     assert(MWWindowApply(&m,MWEventRestore));
@@ -52,13 +52,43 @@ static void maximize_restore(void) {
     assert(MWWindowToggleMaximize(&m,viewport));
     MWRect rotated={30,10,730,370};
     MWWindowReflow(&m,rotated);
-    equal_rect(m.frame,rotated);
+    assert(m.frame.width<=rotated.width && m.frame.height<=rotated.height);
     assert(MWWindowToggleMaximize(&m,rotated));
-    equal_rect(m.frame,MWConstrainRect(original,rotated));
+    equal_rect(m.frame,MWFitAspectRect(original,rotated,m.aspectRatio));
+}
+
+static void proportional_scaling(void) {
+    MWRect viewport={8,60,414,780}, initial={30,90,240,48+240.0*932/430};
+    double ratio=430.0/932;
+    for(int dx=-800;dx<800;dx+=19) for(int dy=-800;dy<800;dy+=23) {
+        MWRect r=MWResizeAspectRect(initial,dx,dy,viewport,ratio);
+        assert(fabs(r.width/(r.height-MWTitleHeight)-ratio)<0.00001);
+        assert(r.x>=viewport.x && r.y>=viewport.y);
+        assert(r.x+r.width<=viewport.x+viewport.width+0.001);
+        assert(r.y+r.height<=viewport.y+viewport.height+0.001);
+    }
+    MWRect wide=MWMaximizedAspectRect((MWRect){60,8,800,340},932.0/430);
+    assert(fabs(wide.width/(wide.height-MWTitleHeight)-932.0/430)<0.00001);
+    MWRect tiny=MWFitAspectRect(initial,(MWRect){0,0,100,120},ratio);
+    assert(fabs(tiny.width/(tiny.height-MWTitleHeight)-ratio)<0.00001);
+    assert(tiny.width<=100 && tiny.height<=120);
+    assert(isfinite(MWFitAspectRect(initial,viewport,NAN).width));
+    equal_rect(MWResizeAspectRect(initial,100,100,(MWRect){0,0,20,30},ratio),(MWRect){0,0,20,30});
+    for(int height=47;height<56;height++) {
+        const double ratios[]={0.02,0.1,0.25,0.5,2,8};
+        for(unsigned i=0;i<sizeof(ratios)/sizeof(ratios[0]);i++) {
+            MWRect r=MWResizeAspectRect(initial,300,300,(MWRect){0,0,100,height},ratios[i]);
+            assert(r.width<=100 && r.height<=height+0.00001);
+        }
+    }
+    MWRect handle=MWEdgeHandleRect((MWRect){0,59,430,839},true,2.0);
+    equal_rect(handle,(MWRect){386,850,44,48});
+    handle=MWEdgeHandleRect((MWRect){44,0,844,396},false,NAN);
+    assert(handle.x==44 && isfinite(handle.y) && handle.width==44);
 }
 
 int main(void) {
-    lifecycle(); bounds(); maximize_restore();
-    puts("PASS: lifecycle, invalid geometry, 2000 boundary cases, maximize/restore and rotation");
+    lifecycle(); bounds(); maximize_restore(); proportional_scaling();
+    puts("PASS: lifecycle, boundaries, proportional scaling, maximize/restore, rotation and edge handle");
     return 0;
 }

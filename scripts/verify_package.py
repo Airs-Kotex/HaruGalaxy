@@ -11,6 +11,7 @@ NAME = "UiharuXPro4MilkyWay"
 
 
 def verify(path):
+    expected_info = plistlib.loads((ROOT / "Resources/Info.plist").read_bytes())
     with zipfile.ZipFile(path) as archive:
         prefix = f"Payload/{NAME}.app/"
         assert all(name.startswith(prefix) for name in archive.namelist()), "Unexpected package path"
@@ -18,8 +19,8 @@ def verify(path):
         info = plistlib.loads(archive.read(prefix + "Info.plist"))
         assert info["CFBundleIdentifier"] == "io.github.uiharuxpro4milkyway", "Wrong bundle ID"
         assert info["CFBundleExecutable"] == NAME
-        assert info["MinimumOSVersion"] == "15.0"
-        assert info["CFBundleShortVersionString"] == "0.1.0"
+        assert info["MinimumOSVersion"] == expected_info["MinimumOSVersion"]
+        assert info["CFBundleShortVersionString"] == expected_info["CFBundleShortVersionString"]
         assert info["UIDeviceFamily"] == [1, 2]
         assert "UIInterfaceOrientationPortrait" in info["UISupportedInterfaceOrientations"]
         assert archive.getinfo(prefix + NAME).external_attr >> 16 & 0o111, "Executable mode missing"
@@ -39,7 +40,10 @@ def verify(path):
         assert size >= 8 and cursor + size <= 32 + sizeofcmds
         if command == 0x32:
             platform_id, minimum, sdk = struct.unpack_from("<III", binary, cursor + 8)
-            platform_ok = platform_id == 2 and minimum == 15 << 16
+            components = [int(value) for value in expected_info["MinimumOSVersion"].split(".")]
+            components += [0] * (3 - len(components))
+            expected_minimum = components[0] << 16 | components[1] << 8 | components[2]
+            platform_ok = platform_id == 2 and minimum == expected_minimum
         elif command == 0x1D:
             offset, length = struct.unpack_from("<II", binary, cursor + 8)
             signature = binary[offset:offset + length]
@@ -48,7 +52,7 @@ def verify(path):
             offset = struct.unpack_from("<I", binary, cursor + 8)[0]
             dependencies.append(binary[cursor + offset:cursor + size].split(b"\0")[0].decode())
         cursor += size
-    assert platform_ok, "Missing iOS 15.0 deployment command"
+    assert platform_ok, "Missing expected iOS deployment command"
     assert signature and len(signature) >= 12, "Missing signature blob"
     magic, size, count = struct.unpack_from(">III", signature)
     assert magic == 0xFADE0CC0 and size <= len(signature)
@@ -66,11 +70,12 @@ def verify(path):
     assert code_directory and entitlements == expected, "Signed entitlements do not match project"
     assert "com.apple.runningboard.terminateprocess" not in entitlements
     assert any("UIKit.framework" in dependency for dependency in dependencies)
-    print(f"PASS: {path.name}: package layout, plist, arm64/iOS15, signature structure, entitlements and resources")
+    print(f"PASS: {path.name}: package layout, plist, arm64/iOS {info['MinimumOSVersion']}, signature structure, entitlements and resources")
     print("Offline checks do not prove installation, entitlements being granted, or runtime compatibility.")
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        raise SystemExit("Usage: python3 scripts/verify_package.py path/to/app.tipa")
-    verify(Path(sys.argv[1]))
+    if len(sys.argv) > 2:
+        raise SystemExit("Usage: python3 scripts/verify_package.py [path/to/app.tipa]")
+    version = plistlib.loads((ROOT / "Resources/Info.plist").read_bytes())["CFBundleShortVersionString"]
+    verify(Path(sys.argv[1]) if len(sys.argv)==2 else ROOT / "dist" / f"{NAME}-{version}.tipa")
