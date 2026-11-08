@@ -50,7 +50,7 @@
         [_transaction setCompletionBlock:^{
             dispatch_async(dispatch_get_main_queue(), ^{
                 MWSceneSession *strongSelf=weakSelf;
-                if(!strongSelf || strongSelf->_closed || strongSelf->_generation!=generation) return;
+                if(!strongSelf || strongSelf->_closed || strongSelf->_generation!=generation || !strongSelf->_completion) return;
                 [strongSelf attachProcess:identity];
             });
         }];
@@ -94,10 +94,12 @@
         parameters.clientSettings=client;
         _scene=[[PrivClass(FBSceneManager) sharedInstance] createSceneWithDefinition:definition initialParameters:parameters];
         _presenter=[_scene.uiPresentationManager createPresenterWithIdentifier:self.sceneIdentifier];
-        if(!_scene || !_presenter || !_presenter.presentationView) {
+        if(!_scene || !_presenter) {
             [self fail:MWError(16,@"此应用未提供可显示的场景，可能不支持小窗。")]; return;
         }
         [_presenter activate];
+        if(!_presenter.presentationView) { [self fail:MWError(16,@"应用未提供可显示的小窗视图。")]; return; }
+        if(!_visible) [_presenter deactivate];
         _transaction=nil;
         void (^completion)(NSError *)=_completion; _completion=nil;
         if(completion) completion(nil);

@@ -6,6 +6,7 @@
 
 NSString *const MWFloatingHostWillStopNotification=@"MWFloatingHostWillStop";
 NSString *const MWFloatingHostFailedNotification=@"MWFloatingHostFailed";
+NSString *const MWFloatingHostVisibilityNotification=@"MWFloatingHostVisibility";
 
 @implementation MWFloatingHost {
     UIRootWindowScenePresentationBinder *_binder;
@@ -37,6 +38,7 @@ NSString *const MWFloatingHostFailedNotification=@"MWFloatingHostFailed";
         definition.specification=[PrivClass(UIApplicationSceneSpecification) specification];
         FBSMutableSceneParameters *parameters=[PrivClass(FBSMutableSceneParameters) parametersForSpecification:definition.specification];
         UIMutableApplicationSceneSettings *settings=[source._effectiveSettings mutableCopy];
+        settings.persistenceIdentifier=_sceneIdentifier;
         settings.deactivationReasons=0; settings.foreground=YES; settings.interruptionPolicy=0;
         parameters.settings=settings; parameters.clientSettings=source._effectiveUIClientSettings;
         _enabled=YES;
@@ -63,7 +65,7 @@ NSString *const MWFloatingHostFailedNotification=@"MWFloatingHostFailed";
     uint32_t result=notify_register_dispatch("com.apple.springboard.lockstate",&_lockToken,dispatch_get_main_queue(),^(int token){
         uint64_t locked=0;
         if(notify_get_state(token,&locked)==NOTIFY_STATUS_OK)
-            weakSelf.floatingWindow.hidden=(locked!=0);
+            [weakSelf applyLocked:(locked!=0)];
     });
     _hasLockToken=(result==NOTIFY_STATUS_OK);
 }
@@ -71,8 +73,15 @@ NSString *const MWFloatingHostFailedNotification=@"MWFloatingHostFailed";
     _floatingWindow=floatingWindow;
     if(_hasLockToken) {
         uint64_t locked=0;
-        if(notify_get_state(_lockToken,&locked)==NOTIFY_STATUS_OK) floatingWindow.hidden=(locked!=0);
+        if(notify_get_state(_lockToken,&locked)==NOTIFY_STATUS_OK) [self applyLocked:(locked!=0)];
     }
+}
+- (void)applyLocked:(BOOL)locked {
+    self.floatingWindow.hidden=locked;
+    if(self.floatingWindow) [[NSNotificationCenter defaultCenter] postNotificationName:MWFloatingHostVisibilityNotification object:self.floatingWindow userInfo:@{@"visible":@(!locked)}];
+}
+- (void)sceneDisconnected:(NSString *)identifier {
+    if([self ownsSceneIdentifier:identifier]) [self stop];
 }
 - (void)stop {
     _enabled=NO;

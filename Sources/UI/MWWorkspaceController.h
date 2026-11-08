@@ -3,6 +3,7 @@
 @interface MWWorkspaceController : UIViewController
 @property(nonatomic,getter=isFloating) BOOL floating;
 - (void)closeAllWindows;
+- (void)setHostVisible:(BOOL)visible;
 - (void)showMessage:(NSString *)message;
 @end
 

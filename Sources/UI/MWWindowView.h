@@ -19,5 +19,6 @@
 - (void)minimize;
 - (void)restore;
 - (void)close;
+- (void)setHostVisible:(BOOL)visible;
 @end
 

@@ -34,6 +34,7 @@
     UIStackView *_shelfItems;
     CGRect _viewport;
     BOOL _bubblePositioned;
+    BOOL _hostHidden;
 }
 - (void)loadView {
     _canvas=[MWCanvas new]; self.view=_canvas;
@@ -175,6 +176,7 @@
     [self.view addSubview:window]; [window applyViewport:_viewport];
     [self activateBundle:bundle]; [MWPreferences.shared recordUse:bundle];
     [self updateChrome]; [window start];
+    [window setHostVisible:!_hostHidden];
 }
 - (void)activateBundle:(NSString *)bundle {
     MWWindowView *selected=_windows[bundle];
@@ -202,6 +204,10 @@
     [self updateChrome];
 }
 - (void)closeAllWindows { for(NSString *bundle in [_order copy]) [self closeBundle:bundle]; }
+- (void)setHostVisible:(BOOL)visible {
+    _hostHidden=!visible;
+    for(MWWindowView *window in _windows.allValues) [window setHostVisible:visible];
+}
 - (void)openSettings {
     if(self.presentedViewController) return;
     MWSettingsController *settings=[MWSettingsController new];

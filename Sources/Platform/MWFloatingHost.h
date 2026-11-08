@@ -2,6 +2,7 @@
 #import <UIKit/UIKit.h>
 FOUNDATION_EXPORT NSString *const MWFloatingHostWillStopNotification;
 FOUNDATION_EXPORT NSString *const MWFloatingHostFailedNotification;
+FOUNDATION_EXPORT NSString *const MWFloatingHostVisibilityNotification;
 
 @interface MWFloatingHost : NSObject
 @property(nonatomic,readonly,getter=isEnabled) BOOL enabled;
@@ -10,5 +11,6 @@ FOUNDATION_EXPORT NSString *const MWFloatingHostFailedNotification;
 + (instancetype)shared;
 - (BOOL)setEnabled:(BOOL)enabled fromScene:(UIWindowScene *)scene error:(NSError **)error;
 - (BOOL)ownsSceneIdentifier:(NSString *)identifier;
+- (void)sceneDisconnected:(NSString *)identifier;
 @end
 

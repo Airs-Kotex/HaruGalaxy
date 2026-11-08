@@ -17,6 +17,8 @@ static CGRect MWToCGRect(MWRect r) { return CGRectMake(r.x,r.y,r.width,r.height)
     CGRect _viewport, _gestureFrame;
     CGSize _lastSize;
     UIInterfaceOrientation _lastOrientation;
+    UIView *_guestView;
+    BOOL _hostHidden;
 }
 @synthesize model=_model;
 
@@ -91,6 +93,7 @@ static CGRect MWToCGRect(MWRect r) { return CGRectMake(r.x,r.y,r.width,r.height)
 - (void)start {
     [self layoutIfNeeded];
     _session=[[MWSceneSession alloc] initWithBundleIdentifier:_application.bundleIdentifier];
+    [_session setVisible:!_hostHidden];
     __weak typeof(self) weakSelf=self;
     _session.failureHandler=^(NSError *error) { [weakSelf failed:error]; };
     [_session updateSize:_content.bounds.size orientation:self.window.windowScene.interfaceOrientation];
@@ -100,6 +103,7 @@ static CGRect MWToCGRect(MWRect r) { return CGRectMake(r.x,r.y,r.width,r.height)
         if(error) { [view failed:error]; return; }
         if(!MWWindowApply(&view->_model,MWEventReady)) return;
         UIView *content=view.session.contentView;
+        [view->_guestView removeFromSuperview]; view->_guestView=content;
         content.frame=view->_content.bounds; content.autoresizingMask=UIViewAutoresizingFlexibleWidth|UIViewAutoresizingFlexibleHeight;
         [view->_content insertSubview:content atIndex:0];
         [view updateStatus:nil];
@@ -108,13 +112,14 @@ static CGRect MWToCGRect(MWRect r) { return CGRectMake(r.x,r.y,r.width,r.height)
 }
 - (void)failed:(NSError *)error {
     if(!MWWindowApply(&_model,MWEventFailed)) return;
+    [_guestView removeFromSuperview]; _guestView=nil;
     self.hidden=NO;
     [self updateStatus:error.localizedDescription];
     if(self.stateHandler) self.stateHandler();
 }
 - (void)retry {
     if(!MWWindowApply(&_model,MWEventRetry)) return;
-    [_session.contentView removeFromSuperview]; [_session close]; _session=nil;
+    [_guestView removeFromSuperview]; _guestView=nil; [_session close]; _session=nil;
     [self updateStatus:nil]; [self start];
 }
 - (void)updateStatus:(NSString *)error {
@@ -177,11 +182,15 @@ static CGRect MWToCGRect(MWRect r) { return CGRectMake(r.x,r.y,r.width,r.height)
 }
 - (void)restore {
     if(!MWWindowApply(&_model,MWEventRestore)) return;
-    self.hidden=NO; [_session setVisible:YES]; [self updateStatus:nil];
+    self.hidden=NO; [_session setVisible:!_hostHidden]; [self updateStatus:nil];
 }
 - (void)close {
     if(!MWWindowApply(&_model,MWEventClose)) return;
-    [_session close]; [self removeFromSuperview];
+    [_guestView removeFromSuperview]; _guestView=nil; [_session close]; [self removeFromSuperview];
+}
+- (void)setHostVisible:(BOOL)visible {
+    _hostHidden=!visible;
+    [_session setVisible:visible && _model.state!=MWWindowMinimized];
 }
 - (void)dealloc { [_session close]; }
 @end
