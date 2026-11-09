@@ -38,7 +38,7 @@ HaruGalaxy 将已安装应用放进可移动、缩放和收纳的小窗。项目
 3. 从“文件”或分享菜单交给 TrollStore 安装；本版使用新 Bundle ID，可与旧版并存；旧版设置与日志不会自动迁移。
 4. 打开 **初春星河**，先在应用内打开一个常用 App 验证，再启用设置中的“浮动工作区”。
 
-项目早期名为 UiharuXPro4MilkyWay。按维护者要求，当前 **Bundle ID 改为 `io.github.airskotex.harugalaxy`**；iOS 将其视为独立应用。升级前可在旧版导出需要保留的日志，旧设置不会自动迁移。
+
 
 ## 使用教程
 
