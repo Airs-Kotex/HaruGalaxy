@@ -67,6 +67,15 @@ def summarize(bundle):
             "guest_input_state.systemInputActive is the guest-reported request. focus_observed samples "
             "the state after the request without asserting success. Compare visibility notifications and selected owner; unavailable selectors and "
             "exceptions identify runtime gaps. No input text or continuous touch coordinates are recorded.")}
+    board_trace = [row for row in records if row["event"].startswith("input_board.")]
+    board_stages = {
+        "counts": dict(sorted(Counter(row["event"] for row in board_trace).items())),
+        "recent_events": board_trace[-80:],
+        "interpretation": (
+            "focus.accepted is first-responder acceptance, not keyboard visibility. keyboard.overlap records "
+            "the keyboard frame intersection in the normal app. finished.copied means an explicit clipboard "
+            "write, not insertion into the guest. original_open.accepted is request acceptance, not proof "
+            "of foreground visibility or transfer of the guest's form. Draft text is not recorded.")}
     return {"environment": environment, "events": len(records), "sessions": sorted({str(row.get("session", "unknown")) for row in records}),
             "counts": dict(sorted(counts.items())), "malformed_lines": malformed,
             "dropped": bundle.get("dropped"), "storage": bundle.get("storage"), "important_events": important[-80:],
@@ -75,6 +84,7 @@ def summarize(bundle):
             "input_pipeline": stages,
             "search_pipeline": search_stages,
             "keyboard_pipeline": keyboard_stages,
+            "input_board_pipeline": board_stages,
             "interpretation": "A heartbeat gap is an observation, not proof of a crash. Assertion valid is not proof of rendering or input."}
 
 

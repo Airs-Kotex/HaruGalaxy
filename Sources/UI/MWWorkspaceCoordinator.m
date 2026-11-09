@@ -2,9 +2,11 @@
 #import "MWWorkspaceCoordinator.h"
 #import "MWWorkspaceController.h"
 #import "MWAppPickerController.h"
+#import "MWInputBoardController.h"
 #import "../Diagnostics/MWDiagnostics.h"
 #import "../Platform/MWFloatingHost.h"
 #import "../Platform/MWApplicationActivation.h"
+#import "../Platform/MWKeyboardFocus.h"
 #import "../Core/MWSearchHandoff.h"
 
 @interface MWFloatingPlaceholder : UIViewController
@@ -36,6 +38,10 @@
     UINavigationController *_inputNavigation;
     NSString *_inputQuery;
     void (^_inputSelection)(MWApplication *);
+    BOOL _inputBoardMode, _inputSuspendedOverlay;
+    NSString *_inputBoardName;
+    void (^_inputBoardCompletion)(BOOL);
+    dispatch_block_t _inputOriginalApplication;
     MWSearchHandoff _inputState;
     BOOL _inputPending;
 }
@@ -59,7 +65,7 @@
     if(_applicationWindow && _applicationWindow!=window) _applicationWindow.rootViewController=nil;
     _applicationWindow=window;
     if(_floatingWindow) window.rootViewController=[MWFloatingPlaceholder new];
-    else { _workspace.floating=NO; window.rootViewController=_workspace; [_workspace setHostVisible:YES]; }
+    else { _workspace.floating=NO; window.rootViewController=_workspace; [_workspace setHostVisible:!_inputPending]; }
     if(_inputPending) [self tryPresentApplicationSearch];
 }
 - (void)attachFloatingWindow:(UIWindow *)window {
@@ -91,7 +97,7 @@
     if(!_applicationWindow && !_floatingWindow) [_workspace closeAllWindows];
 }
 - (void)setWindow:(UIWindow *)window visible:(BOOL)visible {
-    if(window.rootViewController==_workspace) [_workspace setHostVisible:visible];
+    if(window.rootViewController==_workspace) [_workspace setHostVisible:visible && !_inputPending];
 }
 - (void)floatingVisibility:(NSNotification *)notification {
     if(_inputPending && notification.object==_floatingWindow) {
@@ -111,11 +117,26 @@
 }
 - (void)presentApplicationSearchWithQuery:(NSString *)query selection:(void (^)(MWApplication *))selection {
     if(_inputPending || !_floatingWindow || !MWFloatingHost.shared.ready || MWFloatingHost.shared.isLocked) return;
+    _inputBoardMode=NO;
+    _inputQuery=[query copy]; _inputSelection=[selection copy];
+    [self beginNormalInput];
+}
+- (void)presentInputBoardForApplication:(MWApplication *)application completion:(void (^)(BOOL))completion openOriginal:(void (^)(void))openOriginal {
+    if(_inputPending || MWFloatingHost.shared.isLocked) return;
+    if(_floatingWindow && !MWFloatingHost.shared.ready) return;
+    if(!_floatingWindow && !_applicationWindow) return;
+    _inputBoardMode=YES; _inputBoardName=[application.name copy];
+    _inputBoardCompletion=[completion copy]; _inputOriginalApplication=[openOriginal copy];
+    [self beginNormalInput];
+}
+- (void)beginNormalInput {
     UIWindow *window=_applicationWindow;
-    _inputPending=YES; _inputQuery=[query copy]; _inputSelection=[selection copy];
+    _inputPending=YES;
     uint64_t generation=MWSearchHandoffBegin(&_inputState,NSProcessInfo.processInfo.systemUptime);
-    [MWFloatingHost.shared setSearchInputSuspended:YES]; [_workspace setHostVisible:NO];
-    MWLog(@"search.handoff_begin",@{@"mainWindow":@(window!=nil),@"mainSceneState":@(window ? window.windowScene.activationState : UISceneActivationStateUnattached)});
+    _inputSuspendedOverlay=_floatingWindow && MWFloatingHost.shared.ready;
+    if(_inputSuspendedOverlay) [MWFloatingHost.shared setSearchInputSuspended:YES];
+    [_workspace setHostVisible:NO];
+    MWLog(@"search.handoff_begin",@{@"inputBoard":@(_inputBoardMode),@"mainWindow":@(window!=nil),@"mainSceneState":@(window ? window.windowScene.activationState : UISceneActivationStateUnattached)});
     if(!MWSearchHandoffCurrent(&_inputState,generation)) return;
     if(window && window.windowScene.activationState==UISceneActivationStateForegroundActive) {
         [self tryPresentApplicationSearch];
@@ -181,13 +202,35 @@
         MWLog(@"search.handoff_timeout",@{@"mainWindow":@(window!=nil),@"mainSceneState":@(window ? window.windowScene.activationState : UISceneActivationStateUnattached),
             @"presenterBusy":@(presenter.presentedViewController!=nil)});
         [self finishApplicationSearch:nil];
-        [_workspace showMessage:@"主应用暂时未能打开，已恢复浮窗。可重新点击搜索，或从主屏幕打开初春星河。"];
+        [_workspace showMessage:@"主应用暂时未能打开，已恢复工作台。可从主屏幕打开初春星河后重试。"];
         return;
     }
     if(action!=MWSearchPresent) return;
     [_applicationWindow makeKeyAndVisible];
-    MWAppPickerController *picker=[MWAppPickerController new]; picker.initialQuery=_inputQuery; picker.automaticallyFocusSearch=YES;
     __weak typeof(self) weakSelf=self;
+    if(_inputBoardMode) {
+        MWInputBoardController *board=[MWInputBoardController new]; board.applicationName=_inputBoardName;
+        __weak MWInputBoardController *weakBoard=board;
+        board.completionHandler=^(BOOL copied) {
+            MWWorkspaceCoordinator *coordinator=weakSelf;
+            if(!coordinator || !coordinator->_inputPending || !MWSearchHandoffCurrent(&coordinator->_inputState,generation) ||
+               coordinator->_inputNavigation.viewControllers.firstObject!=weakBoard) return;
+            void (^completion)(BOOL)=coordinator->_inputBoardCompletion;
+            [coordinator finishApplicationSearch:nil];
+            if(completion) completion(copied);
+        };
+        if(_inputOriginalApplication) board.originalApplicationHandler=^{
+            MWWorkspaceCoordinator *coordinator=weakSelf;
+            if(!coordinator || !coordinator->_inputPending || !MWSearchHandoffCurrent(&coordinator->_inputState,generation) ||
+               coordinator->_inputNavigation.viewControllers.firstObject!=weakBoard) return;
+            dispatch_block_t original=coordinator->_inputOriginalApplication;
+            [coordinator finishApplicationSearch:nil];
+            if(original) original();
+        };
+        [self presentNormalInputController:board presenter:presenter generation:generation];
+        return;
+    }
+    MWAppPickerController *picker=[MWAppPickerController new]; picker.initialQuery=_inputQuery; picker.automaticallyFocusSearch=YES;
     __weak MWAppPickerController *weakPicker=picker;
     picker.selectionHandler=^(MWApplication *application){
         MWWorkspaceCoordinator *coordinator=weakSelf;
@@ -199,15 +242,29 @@
         if(coordinator && coordinator->_inputPending && MWSearchHandoffCurrent(&coordinator->_inputState,generation) && coordinator->_inputNavigation.viewControllers.firstObject==weakPicker)
             [coordinator finishApplicationSearch:nil];
     };
-    _inputNavigation=[[UINavigationController alloc] initWithRootViewController:picker];
+    [self presentNormalInputController:picker presenter:presenter generation:generation];
+}
+- (void)invalidateNormalInput:(UIViewController *)controller {
+    if([controller isKindOfClass:MWAppPickerController.class]) {
+        MWAppPickerController *picker=(MWAppPickerController *)controller;
+        [picker invalidateSearch]; picker.selectionHandler=nil; picker.cancellationHandler=nil; picker.searchFallbackHandler=nil;
+    } else if([controller isKindOfClass:MWInputBoardController.class]) {
+        MWInputBoardController *board=(MWInputBoardController *)controller;
+        [board invalidateInput]; board.completionHandler=nil; board.originalApplicationHandler=nil;
+    }
+}
+- (void)presentNormalInputController:(UIViewController *)controller presenter:(UIViewController *)presenter generation:(uint64_t)generation {
+    _inputNavigation=[[UINavigationController alloc] initWithRootViewController:controller];
     _inputNavigation.modalPresentationStyle=UIModalPresentationFullScreen;
+    __weak typeof(self) weakSelf=self;
+    __weak UIViewController *weakController=controller;
     __weak UINavigationController *weakNavigation=_inputNavigation;
     [presenter presentViewController:_inputNavigation animated:YES completion:^{
         MWWorkspaceCoordinator *coordinator=weakSelf;
         UINavigationController *navigation=weakNavigation;
         if(!coordinator || !coordinator->_inputPending || !MWSearchHandoffCurrent(&coordinator->_inputState,generation) ||
            coordinator->_inputNavigation!=navigation) {
-            [weakPicker invalidateSearch];
+            [coordinator invalidateNormalInput:weakController];
             // This presentation may complete after lock/timeout/cancellation.
             // Dismiss only its owned controller, never a subsequent search.
             if(navigation && navigation.presentingViewController.presentedViewController==navigation && !navigation.isBeingDismissed)
@@ -223,10 +280,10 @@
     if(!_inputPending) return;
     _inputPending=NO; MWSearchHandoffFinish(&_inputState);
     void (^selection)(MWApplication *)=_inputSelection; _inputSelection=nil; _inputQuery=nil;
+    _inputBoardCompletion=nil; _inputOriginalApplication=nil; _inputBoardName=nil; _inputBoardMode=NO;
     UINavigationController *navigation=_inputNavigation; _inputNavigation=nil;
-    MWAppPickerController *picker=(MWAppPickerController *)navigation.viewControllers.firstObject;
-    [picker invalidateSearch];
-    picker.selectionHandler=nil; picker.cancellationHandler=nil; picker.searchFallbackHandler=nil;
+    [self invalidateNormalInput:navigation.viewControllers.firstObject];
+    if(navigation) [MWKeyboardFocus.shared releaseForWindow:_applicationWindow];
     if(navigation.isBeingPresented) {
         // The presentation completion also checks ownership for the case where
         // UIKit no longer accepts additional transition completion blocks.
@@ -239,7 +296,9 @@
     } else if(navigation && navigation.presentingViewController.presentedViewController==navigation && !navigation.isBeingDismissed) {
         [navigation dismissViewControllerAnimated:NO completion:nil];
     }
-    [MWFloatingHost.shared setSearchInputSuspended:NO];
+    if(_inputSuspendedOverlay) { _inputSuspendedOverlay=NO; [MWFloatingHost.shared setSearchInputSuspended:NO]; }
+    else if(!_floatingWindow)
+        [_workspace setHostVisible:_applicationWindow.windowScene.activationState==UISceneActivationStateForegroundActive];
     MWLog(@"search.main_scene_finished",@{@"selected":@(application!=nil)});
     if(application && selection) selection(application);
 }

@@ -86,5 +86,21 @@ class DiagnosticsReaderTests(unittest.TestCase):
         self.assertFalse(data["recent_events"][-1]["fields"]["state"]["visible"])
         self.assertIn("guest-reported request",data["interpretation"])
 
+    def test_input_board_retains_stages_across_rotated_logs_without_inventing_success(self):
+        def row(i, event, fields):
+            return json.dumps({"time":i,"sequence":i,"event":event,"fields":fields})+"\n"
+        result=reader.summarize({"schema":1,"logs":{
+            "new":row(3,"input_board.finished",{"copied":True})+
+                  row(4,"input_board.original_open",{"accepted":False}),
+            "old":row(1,"input_board.focus",{"accepted":True})+
+                  row(2,"input_board.keyboard",{"overlap":0})}})
+        board=result["input_board_pipeline"]
+        self.assertEqual([r["sequence"] for r in board["recent_events"]],[1,2,3,4])
+        self.assertEqual(board["recent_events"][1]["fields"]["overlap"],0)
+        self.assertFalse(board["recent_events"][-1]["fields"]["accepted"])
+        self.assertEqual(result["keyboard_pipeline"]["counts"],{})
+        self.assertIn("not insertion into the guest",board["interpretation"])
+        self.assertEqual(reader.summarize({"schema":1,"logs":{}})["input_board_pipeline"]["counts"],{})
+
 
 if __name__=="__main__": unittest.main()

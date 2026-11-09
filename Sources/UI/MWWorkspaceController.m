@@ -10,6 +10,7 @@
 #import "../Diagnostics/MWDiagnostics.h"
 #import "../Platform/MWFloatingHost.h"
 #import "../Platform/MWKeyboardFocus.h"
+#import "../Platform/MWApplicationActivation.h"
 
 @interface MWCanvas : UIView
 @property(nonatomic) BOOL passThrough;
@@ -77,6 +78,8 @@
     _panel=[MWWindowPanel new]; _panel.hidden=YES; [self.view addSubview:_panel];
     _panel.openApplicationHandler=^{[weakSelf closePanel]; [weakSelf openPicker];};
     _panel.settingsHandler=^{[weakSelf closePanel]; [weakSelf openSettings];};
+    _panel.inputBoardHandler=^{[weakSelf openInputBoardForBundle:nil];};
+    _panel.inputHandler=^(NSString *bundle){[weakSelf openInputBoardForBundle:bundle];};
     _panel.activateHandler=^(NSString *bundle){[weakSelf closePanel]; [weakSelf restoreBundle:bundle];};
     _panel.minimizeHandler=^(NSString *bundle){[weakSelf panelToggleMinimize:bundle];};
     _panel.fullscreenHandler=^(NSString *bundle){[weakSelf closePanel]; [weakSelf toggleFullscreenBundle:bundle];};
@@ -185,7 +188,8 @@
     else [self minimizeBundle:bundle];
 }
 - (void)toggleFullscreenBundle:(NSString *)bundle {
-    MWWindowView *window=_windows[bundle]; [window restore]; [window toggleMaximize]; [self updateChrome];
+    [self restoreBundle:bundle];
+    MWWindowView *window=_windows[bundle]; [window toggleMaximize]; [self updateChrome];
 }
 - (BOOL)hasVisibleFullscreen {
     for(MWWindowView *window in _windows.allValues) if(window.model.maximized && !window.hidden && window.model.state==MWWindowVisible) return YES;
@@ -207,6 +211,61 @@
     UINavigationController *nav=[[UINavigationController alloc] initWithRootViewController:picker];
     nav.modalPresentationStyle=UIModalPresentationPageSheet;
     [self presentViewController:nav animated:!MWPreferences.shared.reduceMotion completion:nil];
+}
+- (void)openInputBoardForBundle:(NSString *)bundle {
+    [self closePanel];
+    if(self.presentedViewController) return;
+    MWWindowView *target=bundle.length ? _windows[bundle] : nil;
+    if(bundle.length && !target) return;
+    __weak typeof(self) weakSelf=self;
+    __weak MWWindowView *weakTarget=target;
+    dispatch_block_t original=nil;
+    if(target) original=^{
+        MWWorkspaceController *controller=weakSelf;
+        if(controller && weakTarget && controller->_windows[bundle]==weakTarget)
+            [controller openOriginalBundle:bundle];
+    };
+    [MWWorkspaceCoordinator.shared presentInputBoardForApplication:target.application completion:^(BOOL copied){
+        MWWorkspaceController *controller=weakSelf;
+        if(!controller || !copied) return;
+        if(weakTarget && controller->_windows[bundle]==weakTarget) [controller restoreBundle:bundle];
+        [controller showMessage:@"已复制。请在目标应用的文本框长按，选择“粘贴”。"];
+    } openOriginal:original];
+}
+- (void)openOriginalBundle:(NSString *)bundle {
+    MWWindowView *target=_windows[bundle];
+    if(!target || self.presentedViewController) return;
+    [self closePanel]; [self.view endEditing:YES];
+    NSArray<NSString *> *order=[_order copy];
+    NSMutableArray<MWWindowView *> *attached=[NSMutableArray array], *visible=[NSMutableArray array];
+    MWWindowView *active=nil;
+    for(NSString *identifier in order) {
+        MWWindowView *window=_windows[identifier];
+        if(!window) continue;
+        if(window.active) active=window;
+        if(window.superview==self.view) [attached addObject:window];
+        if(window.model.state==MWWindowVisible) { [visible addObject:window]; [window minimize]; }
+        // Also collect loading/failed surfaces: their asynchronous completion
+        // must not place a window over the ordinary application's keyboard.
+        [window setHostVisible:NO]; [window removeFromSuperview];
+    }
+    [MWKeyboardFocus.shared releaseForWindow:self.view.window];
+    [self.view.window resignKeyWindow];
+    NSError *error=nil;
+    BOOL accepted=MWRequestApplicationForeground(target.application.bundleIdentifier,&error);
+    MWLog(@"input_board.original_open",@{@"bundle":target.application.bundleIdentifier,@"accepted":@(accepted),@"error":MWErrorFields(error)});
+    if(!accepted) {
+        // Restore only the exact surfaces/states that this request collected.
+        for(MWWindowView *window in attached) {
+            if(_windows[window.application.bundleIdentifier]!=window) continue;
+            [self.view addSubview:window]; [window setHostVisible:!_hostHidden];
+            if([visible containsObject:window]) [window restore];
+        }
+        if(active && _windows[active.application.bundleIdentifier]==active) [self activateBundle:active.application.bundleIdentifier];
+        [self.view.window makeKeyWindow];
+        [self showMessage:error.localizedDescription ?: @"应用暂时无法打开。"];
+    }
+    [self updateChrome];
 }
 - (void)openApplication:(MWApplication *)application {
     MWLog(@"workspace.open",@{@"bundle":application.bundleIdentifier,@"floating":@(_floating)});
@@ -231,6 +290,8 @@
     window.activateHandler=^{[weakSelf activateBundle:bundle];};
     window.closeHandler=^{[weakSelf closeBundle:bundle];};
     window.minimizeHandler=^{[weakSelf minimizeBundle:bundle];};
+    window.inputHandler=^{[weakSelf openInputBoardForBundle:bundle];};
+    window.openOriginalHandler=^{[weakSelf openOriginalBundle:bundle];};
     window.geometryHandler=^(CGRect geometry) {
         MWWorkspaceController *controller=weakSelf;
         if(controller) {
@@ -252,7 +313,7 @@
 }
 - (void)activateBundle:(NSString *)bundle {
     MWWindowView *selected=_windows[bundle];
-    if(!selected || selected.model.state==MWWindowClosed) return;
+    if(!selected || selected.model.state==MWWindowClosed || selected.superview!=self.view) return;
     for(MWWindowView *window in _windows.allValues) window.active=(window==selected);
     [self.view bringSubviewToFront:selected];
     [_order removeObject:bundle]; [_order addObject:bundle];
@@ -262,7 +323,13 @@
         [selected.session requestKeyboardFocusInWindow:self.view.window];
     [self setNeedsStatusBarAppearanceUpdate]; [self setNeedsUpdateOfHomeIndicatorAutoHidden];
 }
-- (void)restoreBundle:(NSString *)bundle { [_windows[bundle] restore]; [self activateBundle:bundle]; [self updateChrome]; }
+- (void)restoreBundle:(NSString *)bundle {
+    MWWindowView *window=_windows[bundle];
+    if(!window) return;
+    if(window.superview!=self.view) [self.view addSubview:window];
+    [window setHostVisible:!_hostHidden]; [window restore];
+    [self activateBundle:bundle]; [self updateChrome];
+}
 - (void)minimizeBundle:(NSString *)bundle {
     [_windows[bundle] minimize];
     for(NSString *candidate in [[_order copy] reverseObjectEnumerator])
@@ -285,7 +352,7 @@
     MWLog(@"workspace.visibility",@{@"visible":@(visible),@"floating":@(_floating),@"windows":@(_windows.count)});
     _hostHidden=!visible;
     if(!visible) { [_bubble cancelInteraction]; [self closePanel]; }
-    for(MWWindowView *window in _windows.allValues) [window setHostVisible:visible];
+    for(MWWindowView *window in _windows.allValues) [window setHostVisible:visible && window.superview==self.view];
 }
 - (void)openSettings {
     [self closePanel];

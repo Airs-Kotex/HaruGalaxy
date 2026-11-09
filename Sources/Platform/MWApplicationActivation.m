@@ -4,10 +4,9 @@
 #import "../Core/MWRuntimeTypes.h"
 #import <objc/runtime.h>
 
-BOOL MWRequestOwnApplicationForeground(NSError **error) {
+BOOL MWRequestApplicationForeground(NSString *bundle, NSError **error) {
     NSCAssert(NSThread.isMainThread,@"Application activation is main-thread owned");
     MWLoadPrivateFrameworks();
-    NSString *bundle=NSBundle.mainBundle.bundleIdentifier;
     Class cls=NSClassFromString(@"LSApplicationWorkspace");
     SEL selector=@selector(openApplicationWithBundleID:);
     Method method=class_getInstanceMethod(cls,selector);
@@ -17,15 +16,18 @@ BOOL MWRequestOwnApplicationForeground(NSError **error) {
         (MWObjCTypeMatches(type,'B') || MWObjCTypeMatches(type,'c'));
     if(valid) { method_getArgumentType(method,2,type,sizeof(type)); valid=MWObjCTypeMatches(type,'@'); }
     if(!bundle.length || !valid || ![cls respondsToSelector:@selector(defaultWorkspace)]) {
-        if(error) *error=MWError(60,@"当前系统没有可用的主应用打开接口。"); return NO;
+        if(error) *error=MWError(60,@"当前系统没有可用的应用打开接口。"); return NO;
     }
     @try {
         LSApplicationWorkspace *workspace=[cls defaultWorkspace];
         BOOL accepted=[workspace respondsToSelector:selector] && [workspace openApplicationWithBundleID:bundle];
-        if(!accepted && error) *error=MWError(61,@"系统未接受打开初春星河的请求。");
+        if(!accepted && error) *error=MWError(61,@"系统未接受打开应用的请求。");
         return accepted;
     } @catch(NSException *exception) {
-        if(error) *error=MWError(62,[NSString stringWithFormat:@"打开初春星河失败：%@",exception.reason ?: @"未知异常"]);
+        if(error) *error=MWError(62,[NSString stringWithFormat:@"打开应用失败：%@",exception.reason ?: @"未知异常"]);
         return NO;
     }
+}
+BOOL MWRequestOwnApplicationForeground(NSError **error) {
+    return MWRequestApplicationForeground(NSBundle.mainBundle.bundleIdentifier,error);
 }

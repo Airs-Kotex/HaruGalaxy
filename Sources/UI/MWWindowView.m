@@ -21,9 +21,9 @@ static CGRect MWToCGRect(MWRect r) { return CGRectMake(r.x,r.y,r.width,r.height)
 @end
 @implementation MWWindowView {
     UIView *_surface, *_content;
-    MWGlassSurface *_bar;
-    UILabel *_title, *_message;
-    UIButton *_minimize, *_maximize, *_retry;
+    MWGlassSurface *_bar, *_inputRail;
+    UILabel *_title, *_message, *_resizeHint;
+    UIButton *_minimize, *_maximize, *_retry, *_inputButton, *_originalButton;
     MWCornerHandle *_resize, *_freeResize;
     UIActivityIndicatorView *_spinner;
     MWWindowModel _model;
@@ -65,6 +65,21 @@ static CGRect MWToCGRect(MWRect r) { return CGRectMake(r.x,r.y,r.width,r.height)
         _guestHost=[MWGuestContentView new]; [_content addSubview:_guestHost];
         _bar=[[MWGlassSurface alloc] initWithCornerRadius:0];
         [_surface addSubview:_bar];
+        _inputRail=[[MWGlassSurface alloc] initWithCornerRadius:0]; [_surface addSubview:_inputRail];
+        _inputButton=[UIButton buttonWithType:UIButtonTypeSystem];
+        [_inputButton setImage:[UIImage systemImageNamed:@"keyboard"] forState:UIControlStateNormal];
+        _inputButton.accessibilityLabel=@"输入板：输入并复制到小窗";
+        [_inputButton addTarget:self action:@selector(requestInput) forControlEvents:UIControlEventTouchUpInside];
+        [_inputRail.contentView addSubview:_inputButton];
+        _originalButton=[UIButton buttonWithType:UIButtonTypeSystem];
+        [_originalButton setImage:[UIImage systemImageNamed:@"arrow.up.forward.app"] forState:UIControlStateNormal];
+        _originalButton.accessibilityLabel=@"在原应用中输入";
+        [_originalButton addTarget:self action:@selector(requestOriginal) forControlEvents:UIControlEventTouchUpInside];
+        [_inputRail.contentView addSubview:_originalButton];
+        _resizeHint=[UILabel new]; _resizeHint.text=@"拖动等比 ↘";
+        _resizeHint.font=[UIFont systemFontOfSize:11 weight:UIFontWeightMedium];
+        _resizeHint.textColor=UIColor.secondaryLabelColor; _resizeHint.textAlignment=NSTextAlignmentCenter;
+        [_inputRail.contentView addSubview:_resizeHint];
         _title=[UILabel new]; _title.text=application.name;
         _title.font=[UIFont systemFontOfSize:14 weight:UIFontWeightSemibold];
         _title.lineBreakMode=NSLineBreakByTruncatingTail;
@@ -110,7 +125,6 @@ static CGRect MWToCGRect(MWRect r) { return CGRectMake(r.x,r.y,r.width,r.height)
     CGFloat titleInset=0;
     if(_model.snapTarget==MWSnapTop && !_model.maximized)
         titleInset=MAX(0,self.window.safeAreaInsets.top-self.frame.origin.y);
-    CGFloat header=_model.maximized ? 0 : MWTitleHeight+titleInset;
     _surface.layer.cornerRadius=_model.maximized ? 0 : 18;
     _surface.layer.borderWidth=_model.maximized ? 0 : 1;
     _bar.hidden=_model.maximized;
@@ -118,7 +132,12 @@ static CGRect MWToCGRect(MWRect r) { return CGRectMake(r.x,r.y,r.width,r.height)
     CGFloat trailing=MAX(0,CGRectGetMaxX(self.frame)-(CGRectGetMaxX(_viewport)-self.window.safeAreaInsets.right));
     _bar.frame=CGRectMake(leading,titleInset,MAX(1,self.bounds.size.width-leading-trailing),MWTitleHeight);
     _title.frame=CGRectMake(140,0,MAX(0,_bar.bounds.size.width-152),MWTitleHeight);
-    _content.frame=CGRectMake(0,header,self.bounds.size.width,MAX(1,self.bounds.size.height-header));
+    _content.frame=MWToCGRect(MWWindowContentRect(MWFromCGRect(self.bounds),titleInset,_model.maximized));
+    _inputRail.frame=MWToCGRect(MWWindowRailRect(MWFromCGRect(self.bounds),_model.maximized));
+    _inputRail.hidden=_model.maximized || _model.state!=MWWindowVisible;
+    _inputButton.frame=CGRectMake(0,0,44,MWResizeRailHeight);
+    _originalButton.frame=CGRectMake(44,0,44,MWResizeRailHeight);
+    _resizeHint.frame=CGRectMake(88,0,MAX(0,self.bounds.size.width-88-MWCornerTouchSize),MWResizeRailHeight);
     if(_model.maximized || _model.resizeMode==MWResizeFree) _logicalSize=_content.bounds.size;
     else _logicalSize=_proportionalSize;
     _guestHost.frame=_content.bounds;
@@ -130,6 +149,8 @@ static CGRect MWToCGRect(MWRect r) { return CGRectMake(r.x,r.y,r.width,r.height)
     _resize.frame=CGRectMake(self.bounds.size.width-MWCornerTouchSize,self.bounds.size.height-MWCornerTouchSize,MWCornerTouchSize,MWCornerTouchSize);
     _freeResize.frame=CGRectMake(self.bounds.size.width-MWCornerTouchSize,0,MWCornerTouchSize,MWCornerTouchSize);
     _resize.hidden=_freeResize.hidden=_model.maximized || _model.state!=MWWindowVisible;
+    [_surface bringSubviewToFront:_inputRail];
+    [_surface bringSubviewToFront:_resize]; [_surface bringSubviewToFront:_freeResize];
     if(!CGSizeEqualToSize(_shadowSize,self.bounds.size) || _shadowMaximized!=_model.maximized) {
         _shadowSize=self.bounds.size; _shadowMaximized=_model.maximized;
         self.layer.shadowPath=[UIBezierPath bezierPathWithRoundedRect:self.bounds cornerRadius:_model.maximized ? 0 : 18].CGPath;
@@ -138,6 +159,20 @@ static CGRect MWToCGRect(MWRect r) { return CGRectMake(r.x,r.y,r.width,r.height)
     if(!CGSizeEqualToSize(_lastSize,_logicalSize) || _lastOrientation!=orientation) {
         if(_resizing) [self scheduleSceneGeometry]; else [self submitSceneGeometry];
     }
+}
+- (UIView *)hitTest:(CGPoint)point withEvent:(UIEvent *)event {
+    if(self.hidden || self.alpha<=0.01 || !self.userInteractionEnabled || ![self pointInside:point withEvent:event]) return nil;
+    // Resolve only the local handles before descending into the remote scene.
+    // Their rectangles sit entirely in host chrome; no cross-window substitution.
+    MWCornerHandle *handles[]={_resize,_freeResize};
+    for(NSUInteger i=0;i<2;i++) {
+        MWCornerHandle *handle=handles[i];
+        if(handle && !handle.hidden && handle.userInteractionEnabled) {
+            UIView *hit=[handle hitTest:[handle convertPoint:point fromView:self] withEvent:event];
+            if(hit) return hit;
+        }
+    }
+    return [super hitTest:point withEvent:event];
 }
 - (void)scheduleSceneGeometry {
     if(_geometryUpdatePending) return;
@@ -221,6 +256,7 @@ static CGRect MWToCGRect(MWRect r) { return CGRectMake(r.x,r.y,r.width,r.height)
     if(loading) [_spinner startAnimating]; else [_spinner stopAnimating];
     _minimize.enabled=_maximize.enabled=(_model.state==MWWindowVisible);
     _resize.hidden=_freeResize.hidden=_model.maximized || _model.state!=MWWindowVisible;
+    _inputRail.hidden=_model.maximized || _model.state!=MWWindowVisible;
 }
 - (void)setActive:(BOOL)active {
     if(!active) [_session releaseKeyboardFocus];
@@ -228,6 +264,7 @@ static CGRect MWToCGRect(MWRect r) { return CGRectMake(r.x,r.y,r.width,r.height)
     _active=active;
     _surface.layer.borderColor=MWGlassBorderColor(self.traitCollection,active).CGColor;
     _bar.emphasized=active;
+    _inputRail.emphasized=active;
     self.layer.shadowOpacity=active ? 0.19 : 0.1;
 }
 - (void)traitCollectionDidChange:(UITraitCollection *)previous {
@@ -398,6 +435,8 @@ static CGRect MWToCGRect(MWRect r) { return CGRectMake(r.x,r.y,r.width,r.height)
     MWLog(@"window.content_geometry",@{@"bundle":_application.bundleIdentifier,@"reason":reason,@"geometry":[_guestHost geometrySnapshot]});
 }
 - (void)requestClose { if(self.closeHandler) self.closeHandler(); }
+- (void)requestInput { if(self.inputHandler) self.inputHandler(); }
+- (void)requestOriginal { if(self.openOriginalHandler) self.openOriginalHandler(); }
 - (void)requestMinimize { if(self.minimizeHandler) self.minimizeHandler(); }
 - (void)minimize {
     [self cancelInteractions];

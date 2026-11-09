@@ -5,6 +5,8 @@
 
 typedef struct { double x, y, width, height; } MWRect;
 #define MWTitleHeight 48.0
+#define MWResizeRailHeight 44.0
+#define MWWindowChromeHeight (MWTitleHeight + MWResizeRailHeight)
 #define MWEdgeTouchWidth 56.0
 #define MWEdgeTouchHeight 76.0
 #define MWCornerTouchSize 44.0
@@ -23,6 +25,8 @@ typedef struct {
 
 MWWindowModel MWWindowCreate(MWRect frame);
 MWRect MWConstrainRect(MWRect rect, MWRect viewport);
+MWRect MWWindowContentRect(MWRect bounds,double extraTopInset,bool maximized);
+MWRect MWWindowRailRect(MWRect bounds,bool maximized);
 bool MWWindowApply(MWWindowModel *model, MWWindowEvent event);
 bool MWWindowToggleMaximize(MWWindowModel *model, MWRect viewport);
 void MWWindowReflow(MWWindowModel *model, MWRect viewport);

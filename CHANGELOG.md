@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.7 — Separate resize area and input board
+
+- Move the bottom-right proportional handle into a dedicated 44-point footer outside guest content, use its full square touch target, and account for both title and footer in original-aspect geometry.
+- Add a normal-app input board accessible from window footers and the edge panel, including full-screen windows. Use the system keyboard, explicitly copy and return, then paste in the target app.
+- Offer “Type in the original app”: collect guest surfaces into the panel and open the selected installed app normally. Restore the previous surfaces if the system rejects the launch.
+- Clear input drafts on cancellation/background/lock and record input stages without text. Clipboard writes are local to this device and expire after ten minutes.
+
+Direct guest keyboard presentation remains unresolved; the input board provides a separate copy/paste workflow.
+
 ## 0.3.6 — Free movement and resize access
 
 - Allow direct entry dragging in all directions; keep the release position and dock only near a side. Save normalized x/y and preserve existing edge positions on upgrade.

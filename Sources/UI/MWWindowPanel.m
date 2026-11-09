@@ -25,8 +25,9 @@
         _minimize=[self action:@"minus" label:@"最小化到面板" handler:^{if(weakPanel.minimizeHandler) weakPanel.minimizeHandler(bundle);}];
         _fullscreen=[self action:@"arrow.up.left.and.arrow.down.right" label:@"铺满屏幕" handler:^{if(weakPanel.fullscreenHandler) weakPanel.fullscreenHandler(bundle);}];
         UIButton *close=[self action:@"xmark" label:@"关闭窗口" handler:^{if(weakPanel.closeHandler) weakPanel.closeHandler(bundle);}];
+        UIButton *input=[self action:@"keyboard" label:@"输入板或在原应用中输入" handler:^{if(weakPanel.inputHandler) weakPanel.inputHandler(bundle);}];
         close.tintColor=UIColor.systemRedColor;
-        _actions=[[UIStackView alloc] initWithArrangedSubviews:@[_minimize,_fullscreen,close]];
+        _actions=[[UIStackView alloc] initWithArrangedSubviews:@[_minimize,_fullscreen,input,close]];
         _actions.axis=UILayoutConstraintAxisHorizontal; _actions.distribution=UIStackViewDistributionFillEqually;
         [self addSubview:_actions];
         [self updateWindow:window];
@@ -69,7 +70,7 @@
 
 @implementation MWWindowPanel {
     UILabel *_title, *_hint, *_empty;
-    UIButton *_open, *_settings;
+    UIButton *_open, *_settings, *_input;
     UIScrollView *_scroll;
     NSArray<MWPanelRow *> *_rows;
     NSDictionary<NSString *,MWPanelRow *> *_rowsByBundle;
@@ -83,6 +84,11 @@
         _hint=[UILabel new]; _hint.text=@"收纳后不占底部 · 轻点窗口恢复"; _hint.font=[UIFont systemFontOfSize:11]; _hint.textColor=UIColor.secondaryLabelColor; [self.contentView addSubview:_hint];
         _open=[UIButton buttonWithType:UIButtonTypeSystem]; [_open setTitle:@"＋ 打开应用" forState:UIControlStateNormal];
         [_open addTarget:self action:@selector(openApplication) forControlEvents:UIControlEventTouchUpInside]; [self.contentView addSubview:_open];
+        _input=[UIButton buttonWithType:UIButtonTypeSystem];
+        [_input setImage:[UIImage systemImageNamed:@"keyboard"] forState:UIControlStateNormal];
+        [_input setTitle:@" 输入板" forState:UIControlStateNormal];
+        [_input addTarget:self action:@selector(inputBoard) forControlEvents:UIControlEventTouchUpInside];
+        [self.contentView addSubview:_input];
         _settings=[UIButton buttonWithType:UIButtonTypeSystem]; [_settings setImage:[UIImage systemImageNamed:@"slider.horizontal.3"] forState:UIControlStateNormal];
         _settings.accessibilityLabel=@"设置"; [_settings addTarget:self action:@selector(settings) forControlEvents:UIControlEventTouchUpInside]; [self.contentView addSubview:_settings];
         _scroll=[UIScrollView new]; [self.contentView addSubview:_scroll];
@@ -94,6 +100,7 @@
 }
 - (void)openApplication { if(self.openApplicationHandler) self.openApplicationHandler(); }
 - (void)settings { if(self.settingsHandler) self.settingsHandler(); }
+- (void)inputBoard { if(self.inputBoardHandler) self.inputBoardHandler(); }
 - (void)updateWindows:(NSArray<MWWindowView *> *)windows {
     NSMutableArray *snapshot=[NSMutableArray arrayWithCapacity:windows.count];
     for(MWWindowView *window in windows) [snapshot addObject:@[
@@ -125,7 +132,8 @@
     _settings.frame=CGRectMake(width-56,compact ? 0 : 8,44,44);
     _hint.hidden=compact;
     _hint.frame=CGRectMake(16,43,width-32,18);
-    _open.frame=CGRectMake(12,compact ? 42 : 68,width-24,44);
+    _open.frame=CGRectMake(12,compact ? 42 : 68,(width-24)/2,44);
+    _input.frame=CGRectMake(CGRectGetMaxX(_open.frame),compact ? 42 : 68,(width-24)/2,44);
     _scroll.frame=CGRectMake(12,compact ? 90 : 118,width-24,MAX(1,self.bounds.size.height-(compact ? 102 : 130)));
     CGFloat y=0;
     for(MWPanelRow *row in _rows) { row.frame=CGRectMake(0,y,_scroll.bounds.size.width,98); y+=108; }

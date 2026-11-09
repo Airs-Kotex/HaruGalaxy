@@ -92,15 +92,15 @@ static void free_resize_and_snap(void) {
     m.snapTarget=MWSnapNone;
     m.aspectRatio=0.5;
     MWWindowReflow(&m,screen);
-    assert(fabs(m.frame.width/(m.frame.height-48)-0.5)<0.00001);
+    assert(fabs(m.frame.width/(m.frame.height-MWWindowChromeHeight)-0.5)<0.00001);
     MWRect pinned={0,0,430,466};
     MWRect detached=MWUnpinFrame(pinned,59);
     equal_rect(detached,(MWRect){0,59,430,407});
     // Both modes start with the same screen-space guest origin and dimensions.
-    assert(detached.y+48==pinned.y+59+48);
-    assert(detached.height-48==pinned.height-59-48);
+    assert(detached.y+MWTitleHeight==pinned.y+59+MWTitleHeight);
+    assert(detached.height-MWWindowChromeHeight==pinned.height-59-MWWindowChromeHeight);
     equal_rect(MWResizeFreeRect(detached,0,0,screen,true),detached);
-    equal_rect(MWResizeAspectRect(detached,0,0,screen,430.0/359),detached);
+    equal_rect(MWResizeAspectRect(detached,0,0,screen,430.0/(407-MWWindowChromeHeight)),detached);
     for(int dx=-600;dx<600;dx+=23) for(int dy=-500;dy<900;dy+=29) {
         r=MWResizeFreeRect(start,dx,dy,screen,true);
         assert(r.x>=0 && r.y>=0 && r.x+r.width<=430.001 && r.y+r.height<=932.001);
@@ -135,23 +135,23 @@ static void original_canvas_and_reachable_snap(void) {
 }
 
 static void proportional_scaling(void) {
-    MWRect viewport={8,60,414,780}, initial={30,90,240,48+240.0*932/430};
+    MWRect viewport={8,60,414,780}, initial={30,90,240,MWWindowChromeHeight+240.0*932/430};
     double ratio=430.0/932;
     for(int dx=-800;dx<800;dx+=19) for(int dy=-800;dy<800;dy+=23) {
         MWRect r=MWResizeAspectRect(initial,dx,dy,viewport,ratio);
-        assert(fabs(r.width/(r.height-MWTitleHeight)-ratio)<0.00001);
+        assert(fabs(r.width/(r.height-MWWindowChromeHeight)-ratio)<0.00001);
         assert(r.x>=viewport.x && r.y>=viewport.y);
         assert(r.x+r.width<=viewport.x+viewport.width+0.001);
         assert(r.y+r.height<=viewport.y+viewport.height+0.001);
     }
     MWRect wide=MWMaximizedAspectRect((MWRect){60,8,800,340},932.0/430);
-    assert(fabs(wide.width/(wide.height-MWTitleHeight)-932.0/430)<0.00001);
+    assert(fabs(wide.width/(wide.height-MWWindowChromeHeight)-932.0/430)<0.00001);
     MWRect tiny=MWFitAspectRect(initial,(MWRect){0,0,100,120},ratio);
-    assert(fabs(tiny.width/(tiny.height-MWTitleHeight)-ratio)<0.00001);
+    assert(fabs(tiny.width/(tiny.height-MWWindowChromeHeight)-ratio)<0.00001);
     assert(tiny.width<=100 && tiny.height<=120);
     assert(isfinite(MWFitAspectRect(initial,viewport,NAN).width));
     equal_rect(MWResizeAspectRect(initial,100,100,(MWRect){0,0,20,30},ratio),(MWRect){0,0,20,30});
-    for(int height=47;height<56;height++) {
+    for(int height=91;height<100;height++) {
         const double ratios[]={0.02,0.1,0.25,0.5,2,8};
         for(unsigned i=0;i<sizeof(ratios)/sizeof(ratios[0]);i++) {
             MWRect r=MWResizeAspectRect(initial,300,300,(MWRect){0,0,100,height},ratios[i]);
@@ -215,8 +215,27 @@ static void free_entry_placement(void) {
     assert(panel.y+panel.height<=248 || panel.y>=340);
 }
 
+static void isolated_resize_rail(void) {
+    for(int height=200;height<=950;height+=23) for(int width=220;width<=900;width+=61) {
+        MWRect bounds={0,0,width,height};
+        MWRect content=MWWindowContentRect(bounds,0,false);
+        MWRect rail=MWWindowRailRect(bounds,false);
+        assert(content.y==MWTitleHeight);
+        assert(content.y+content.height<=rail.y+0.001);
+        assert(rail.height==MWResizeRailHeight && rail.y+rail.height==height);
+        assert(MWCornerTouchSize<=rail.height);
+        equal_rect(MWWindowContentRect(bounds,0,true),bounds);
+        assert(MWWindowRailRect(bounds,true).height==0);
+    }
+    MWRect content=MWWindowContentRect((MWRect){0,0,320,466},59,false);
+    assert(content.y==MWTitleHeight+59);
+    assert(content.y+content.height==466-MWResizeRailHeight);
+    MWRect tiny=MWWindowContentRect((MWRect){0,0,20,30},59,false);
+    assert(tiny.height>=0 && tiny.y+tiny.height<=30);
+}
+
 int main(void) {
-    lifecycle(); bounds(); maximize_restore(); proportional_scaling(); free_resize_and_snap(); original_canvas_and_reachable_snap(); free_entry_placement();
+    lifecycle(); bounds(); maximize_restore(); proportional_scaling(); free_resize_and_snap(); original_canvas_and_reachable_snap(); free_entry_placement(); isolated_resize_rail();
     puts("PASS: lifecycle, free/proportional resize, full/half-screen, top inset continuity, rotation and edge handle");
     return 0;
 }

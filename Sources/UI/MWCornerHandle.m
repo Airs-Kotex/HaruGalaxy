@@ -22,6 +22,7 @@
 }
 - (BOOL)pointInside:(CGPoint)point withEvent:(UIEvent *)event {
     (void)event;
+    if(!_top) return CGRectContainsPoint(self.bounds,point); // Dedicated host-only rail.
     return MWCornerHit(point.x,point.y,self.bounds.size.width,self.bounds.size.height,_top);
 }
 - (void)layoutSubviews {
@@ -44,6 +45,10 @@
 }
 - (void)updateColor {
     _arc.lineWidth=(_dragging || _contact) ? 3.5 : 2.5;
+    if(!_top) {
+        self.backgroundColor=[self.tintColor colorWithAlphaComponent:(_dragging || _contact) ? 0.22 : 0.09];
+        self.layer.cornerRadius=10;
+    }
     _arc.strokeColor=[[self.tintColor colorWithAlphaComponent:(_dragging || _contact) ? 1 : 0.8] resolvedColorWithTraitCollection:self.traitCollection].CGColor;
 }
 - (void)traitCollectionDidChange:(UITraitCollection *)previous { [super traitCollectionDidChange:previous]; [self updateColor]; }

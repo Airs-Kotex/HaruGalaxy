@@ -19,9 +19,22 @@ MWRect MWConstrainRect(MWRect r, MWRect viewport) {
     return r;
 }
 
+MWRect MWWindowRailRect(MWRect bounds,bool maximized) {
+    MWRect v=safe_viewport(bounds);
+    double height=maximized ? 0 : fmin(MWResizeRailHeight,v.height);
+    return (MWRect){v.x,v.y+v.height-height,v.width,height};
+}
+MWRect MWWindowContentRect(MWRect bounds,double extraTopInset,bool maximized) {
+    MWRect v=safe_viewport(bounds);
+    if(maximized) return v;
+    MWRect rail=MWWindowRailRect(v,false);
+    double header=fmin(rail.y-v.y,MWTitleHeight+fmax(0,finite_or(extraTopInset,0)));
+    return (MWRect){v.x,v.y+header,v.width,fmax(0,rail.y-v.y-header)};
+}
+
 MWWindowModel MWWindowCreate(MWRect frame) {
     MWWindowModel m={.state=MWWindowLoading,.frame=frame,.restoreFrame=frame,.maximized=false,
-        .aspectRatio=frame.width/fmax(1,frame.height-MWTitleHeight),.resizeMode=MWResizeFree,.restoreResizeMode=MWResizeFree,
+        .aspectRatio=frame.width/fmax(1,frame.height-MWWindowChromeHeight),.resizeMode=MWResizeFree,.restoreResizeMode=MWResizeFree,
         .snapTarget=MWSnapNone,.restoreSnapTarget=MWSnapNone};
     return m;
 }
@@ -108,7 +121,7 @@ bool MWCornerHit(double x,double y,double width,double height,bool top) {
     return dx*dx+dy*dy<=radius*radius;
 }
 MWRect MWUnpinFrame(MWRect frame,double extraTopInset) {
-    double inset=clamp(finite_or(extraTopInset,0),0,fmax(0,frame.height-MWTitleHeight-1));
+    double inset=clamp(finite_or(extraTopInset,0),0,fmax(0,frame.height-MWWindowChromeHeight-1));
     frame.y+=inset; frame.height-=inset;
     return frame;
 }
@@ -170,25 +183,25 @@ bool MWWindowSnap(MWWindowModel *m,MWSnapTarget target,MWRect viewport) {
 static double safe_ratio(double r) { return isfinite(r) && r>0.01 && r<100 ? r : 0.5; }
 MWRect MWFitAspectRect(MWRect r, MWRect viewport, double ratio) {
     MWRect v=safe_viewport(viewport); ratio=safe_ratio(ratio);
-    if(v.height<=MWTitleHeight+1) return v; // No positive content height can fit.
-    double maximum=fmin(v.width,(v.height-MWTitleHeight)*ratio);
-    double minimum=fmin(maximum,fmax(220,(200-MWTitleHeight)*ratio));
+    if(v.height<=MWWindowChromeHeight+1) return v; // No positive content height can fit.
+    double maximum=fmin(v.width,(v.height-MWWindowChromeHeight)*ratio);
+    double minimum=fmin(maximum,fmax(220,(200-MWWindowChromeHeight)*ratio));
     r.width=clamp(finite_or(r.width,minimum),minimum,maximum);
-    r.height=r.width/ratio+MWTitleHeight;
+    r.height=r.width/ratio+MWWindowChromeHeight;
     r.x=clamp(finite_or(r.x,v.x),v.x,v.x+v.width-r.width);
     r.y=clamp(finite_or(r.y,v.y),v.y,v.y+v.height-r.height);
     return r;
 }
 MWRect MWResizeAspectRect(MWRect start, double dx, double dy, MWRect viewport, double ratio) {
     MWRect v=safe_viewport(viewport); ratio=safe_ratio(ratio);
-    if(v.height<=MWTitleHeight+1) return v;
+    if(v.height<=MWWindowChromeHeight+1) return v;
     start=MWFitAspectRect(start,v,ratio);
-    double content=fmax(1,start.height-MWTitleHeight);
+    double content=fmax(1,start.height-MWWindowChromeHeight);
     double scale=1+(finite_or(dx,0)*start.width+finite_or(dy,0)*content)/(start.width*start.width+content*content);
-    double maximum=fmin(v.x+v.width-start.x,(v.y+v.height-start.y-MWTitleHeight)*ratio);
-    double minimum=fmin(maximum,fmax(220,(200-MWTitleHeight)*ratio));
+    double maximum=fmin(v.x+v.width-start.x,(v.y+v.height-start.y-MWWindowChromeHeight)*ratio);
+    double minimum=fmin(maximum,fmax(220,(200-MWWindowChromeHeight)*ratio));
     start.width=clamp(start.width*scale,minimum,maximum);
-    start.height=start.width/ratio+MWTitleHeight;
+    start.height=start.width/ratio+MWWindowChromeHeight;
     return start;
 }
 MWRect MWMaximizedAspectRect(MWRect viewport, double ratio) {
