@@ -1,22 +1,28 @@
 # Changelog
 
-## 0.3.3 — Device-testing candidate
+## 0.3.4 — Search input
+
+- Embed the search bar directly in the app picker and focus its text field after presentation.
+- When the floating keyboard is unavailable, open HaruGalaxy's normal scene automatically; keep a direct “Search in the main app” action.
+- Add checked LaunchServices foreground requests, a scene-activation fallback and bounded presentation waiting.
+- Restore floating windows on selection, cancellation, lock or timeout; keep late callbacks from affecting a newer search.
+- Add search-stage diagnostics and simplify the public README and release descriptions.
+
+## 0.3.3 — Edge recall
 
 - Correct `beginTrackingWithTouch:withEvent:`, `continueTrackingWithTouch:withEvent:` and `endTrackingWithTouch:withEvent:`. The withdrawn version implemented different selectors, leaving UIKit's actual callbacks inherited and the entry inactive.
 - Call UIKit's superclass cleanup on every end/cancel path, including programmatic cancellation and nil-touch completion, so UIKit's tracking state and the entry model finish together.
 - Check compiled implementation methods against SDK UIControl declarations before packaging. The original 0.3.2 source is rejected by this check; header declarations alone cannot satisfy it.
 - Restore the forgiving 56×76-point touch target, inward pull, stationary hold release, deliberate hold-and-drag and persistent expanded-entry option.
-- Restore panel row reuse, skipped duplicate layout/style work and queued routine diagnostic flushes. These reduce inspected UI work; device latency/FPS gains have not been measured.
+- Restore panel row reuse, skipped duplicate layout/style work and queued routine diagnostic flushes.
 - Add sampled root query logs and entry-only window delivery logs, callback/activation results and `panel.blocked`; expose these stages through the diagnostic reader.
 - Use build 8 with the existing bundle ID. Keep v0.3.2 withdrawn and v0.3.1 available for rollback.
-
-This candidate requires device confirmation; it does not establish that every guest window or system touch-routing path works.
 
 ## 0.3.2 — Withdrawn (2026-11-09)
 
 - Withdrawn following device feedback that the floating window no longer responded to taps across screens after the update.
 - Release and tag removed; main branch application code reverted to the 0.3.1 baseline by commit `398c901693a76af4efc694a0fe3d58e0129f78e3`. The original changes remain in commit `e28b4204d14d52de4a90ced452fed62c2323b39b` for investigation.
-- Use the existing [0.3.1 package](https://github.com/Airs-Kotex/HaruGalaxy/releases/tag/v0.3.1). No replacement release has been published as part of this withdrawal.
+- The [0.3.1 package](https://github.com/Airs-Kotex/HaruGalaxy/releases/tag/v0.3.1) remains available for rollback.
 - Passing portable tests, static analysis and package checks did not validate real UIKit touch delivery. Subsequent investigation found an entry selector mismatch; see the [withdrawal record](docs/research/2026-11-09-0.3.2-withdrawal.md).
 
 ## 0.3.1 — HaruGalaxy / 初春星河
@@ -29,8 +35,6 @@ This candidate requires device confirmation; it does not establish that every gu
 - Coalesce guest geometry updates with a display link, skip duplicate layouts and shadow updates, and log resize duration/update counts.
 - Request search focus explicitly and observe keyboard visibility. Provide a normal-scene search path if the floating scene cannot show a keyboard.
 - Add open-source documentation, contribution templates, and Core test CI.
-
-These changes are compiled and checked locally; new keyboard and gesture behavior still needs device validation.
 
 ## 0.3.0
 

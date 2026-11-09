@@ -209,7 +209,7 @@
     MWLog(@"workspace.open",@{@"bundle":application.bundleIdentifier,@"floating":@(_floating)});
     MWWindowView *existing=_windows[application.bundleIdentifier];
     if(existing) { [self restoreBundle:application.bundleIdentifier]; return; }
-    if(_windows.count>=4) { [self showMessage:@"Alpha 版本最多同时保留 4 个窗口，请先关闭一个。"] ; return; }
+    if(_windows.count>=4) { [self showMessage:@"最多同时保留 4 个窗口，请先关闭一个。"] ; return; }
     [self.view layoutIfNeeded];
     CGFloat offset=(_windows.count%3)*20;
     CGRect frame=CGRectMake(_viewport.origin.x+12+offset,self.view.safeAreaInsets.top+24+offset,MIN(340,_viewport.size.width),MIN(460,_viewport.size.height));

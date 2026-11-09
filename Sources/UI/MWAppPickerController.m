@@ -3,12 +3,13 @@
 #import "MWPreferences.h"
 #import "../Diagnostics/MWDiagnostics.h"
 
-@interface MWAppPickerController () <UISearchResultsUpdating, UISearchBarDelegate, UIAdaptivePresentationControllerDelegate>
+@interface MWAppPickerController () <UISearchBarDelegate, UIAdaptivePresentationControllerDelegate>
 @end
 @implementation MWAppPickerController {
     NSArray<MWApplication *> *_apps, *_filtered, *_recent;
-    UISearchController *_search;
-    BOOL _keyboardVisible, _searchExpected, _finished, _levelChanged;
+    UISearchBar *_searchBar;
+    UIView *_searchHeader;
+    BOOL _keyboardVisible, _searchExpected, _finished, _levelChanged, _receivedInput, _fallbackStarted;
     NSUInteger _focusGeneration;
     UIWindowLevel _originalLevel;
     __weak UIWindow *_searchWindow;
@@ -19,77 +20,138 @@
     [super viewDidLoad]; self.title=@"打开应用小窗";
     self.navigationItem.leftBarButtonItem=[[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemClose target:self action:@selector(dismiss)];
     self.navigationItem.rightBarButtonItem=[[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemRefresh target:self action:@selector(reloadApplications)];
-    _search=[[UISearchController alloc] initWithSearchResultsController:nil];
-    _search.searchResultsUpdater=self; _search.obscuresBackgroundDuringPresentation=NO;
-    _search.searchBar.delegate=self;
-    _search.searchBar.placeholder=@"搜索应用名称";
-    _search.searchBar.text=self.initialQuery ?: @"";
-    self.navigationItem.searchController=_search;
-    self.navigationItem.hidesSearchBarWhenScrolling=NO; self.definesPresentationContext=YES;
+    // Keep input in this sheet: UISearchController creates another presentation
+    // whose lifecycle can invalidate focus/restore the floating window level.
+    _searchBar=[UISearchBar new]; _searchBar.delegate=self;
+    _searchBar.searchBarStyle=UISearchBarStyleMinimal;
+    _searchBar.placeholder=@"搜索应用名称或标识";
+    _searchBar.text=self.initialQuery ?: @"";
+    _searchBar.searchTextField.autocorrectionType=UITextAutocorrectionTypeNo;
+    _searchBar.searchTextField.autocapitalizationType=UITextAutocapitalizationTypeNone;
+    _searchBar.searchTextField.accessibilityIdentifier=@"harugalaxy.application.search";
+    _searchHeader=[UIView new]; [_searchHeader addSubview:_searchBar];
+    self.tableView.tableHeaderView=_searchHeader;
     self.tableView.rowHeight=64;
+    self.tableView.keyboardDismissMode=UIScrollViewKeyboardDismissModeOnDrag;
     NSNotificationCenter *center=NSNotificationCenter.defaultCenter;
     [center addObserver:self selector:@selector(keyboardShown:) name:UIKeyboardDidShowNotification object:nil];
+    [center addObserver:self selector:@selector(keyboardShown:) name:UIKeyboardDidChangeFrameNotification object:nil];
     [center addObserver:self selector:@selector(keyboardHidden:) name:UIKeyboardDidHideNotification object:nil];
     _fallback=[UIButton buttonWithType:UIButtonTypeSystem];
-    [_fallback setTitle:@"键盘未显示？在主应用中输入" forState:UIControlStateNormal];
+    [_fallback setTitle:@"在主应用中搜索" forState:UIControlStateNormal];
     _fallback.titleLabel.font=[UIFont systemFontOfSize:13];
     [_fallback addTarget:self action:@selector(useApplicationSearch) forControlEvents:UIControlEventTouchUpInside];
+    [_searchHeader addSubview:_fallback]; _fallback.hidden=!self.searchFallbackHandler;
     [self reloadApplications];
+}
+- (void)viewDidLayoutSubviews {
+    [super viewDidLayoutSubviews];
+    CGFloat width=self.tableView.bounds.size.width,height=self.searchFallbackHandler ? 100 : 60;
+    _searchBar.frame=CGRectMake(8,2,MAX(1,width-16),54);
+    _fallback.frame=CGRectMake(12,56,MAX(1,width-24),40);
+    if(!CGSizeEqualToSize(_searchHeader.frame.size,CGSizeMake(width,height))) {
+        _searchHeader.frame=CGRectMake(0,0,width,height);
+        self.tableView.tableHeaderView=_searchHeader;
+    }
 }
 - (void)viewDidAppear:(BOOL)animated {
     [super viewDidAppear:animated]; self.navigationController.presentationController.delegate=self;
     if(self.automaticallyFocusSearch) {
-        self.automaticallyFocusSearch=NO; _search.active=YES;
-        dispatch_async(dispatch_get_main_queue(),^{ if(self.view.window && !self->_finished) [self->_search.searchBar becomeFirstResponder]; });
+        self.automaticallyFocusSearch=NO;
+        NSUInteger generation=++_focusGeneration;
+        __weak typeof(self) weakSelf=self;
+        dispatch_async(dispatch_get_main_queue(),^{
+            MWAppPickerController *controller=weakSelf;
+            if(controller && generation==controller->_focusGeneration && !controller->_finished) [controller requestSearchFocus];
+        });
     }
 }
+- (void)invalidateSearch {
+    _finished=YES; _searchExpected=NO; _fallbackStarted=YES; _focusGeneration++;
+    self.automaticallyFocusSearch=NO;
+    [self.viewIfLoaded endEditing:YES]; [self restoreWindowLevel];
+}
 - (void)viewWillDisappear:(BOOL)animated {
-    [super viewWillDisappear:animated]; _focusGeneration++; [self restoreWindowLevel];
+    [super viewWillDisappear:animated]; _searchExpected=NO; _focusGeneration++; [self restoreWindowLevel];
 }
 - (void)restoreWindowLevel {
     if(_levelChanged) { _searchWindow.windowLevel=_originalLevel; _levelChanged=NO; }
 }
-- (BOOL)searchBarShouldBeginEditing:(UISearchBar *)searchBar {
-    (void)searchBar;
+- (void)prepareSearchWindow {
     UIWindow *window=self.view.window;
     _searchWindow=window;
-    if(window && !_levelChanged) {
+    if(window && self.searchFallbackHandler && !_levelChanged) {
         _originalLevel=window.windowLevel; _levelChanged=YES;
         // Keep our search sheet below the system keyboard's window layer.
-        window.windowLevel=UIWindowLevelNormal+1; [window makeKeyWindow];
+        window.windowLevel=UIWindowLevelNormal+1;
     }
-    MWLog(@"search.focus_request",@{@"keyWindow":@(window.isKeyWindow),@"sceneState":@(window.windowScene.activationState),@"windowLevel":@(window.windowLevel)});
+    [window makeKeyWindow];
+}
+- (void)requestSearchFocus {
+    if(_finished || !self.viewIfLoaded.window) return;
+    _searchExpected=YES; [self prepareSearchWindow];
+    BOOL accepted=[_searchBar.searchTextField becomeFirstResponder];
+    MWLog(@"search.focus_request",@{@"accepted":@(accepted),@"keyWindow":@(self.view.window.isKeyWindow),
+        @"sceneState":@(self.view.window.windowScene.activationState),@"windowLevel":@(self.view.window.windowLevel),
+        @"floating":@(self.searchFallbackHandler!=nil)});
+    [self scheduleKeyboardCheck];
+}
+- (BOOL)searchBarShouldBeginEditing:(UISearchBar *)searchBar {
+    (void)searchBar;
+    if(_finished) return NO;
+    _searchExpected=YES; _receivedInput=NO;
+    [self prepareSearchWindow]; [self scheduleKeyboardCheck];
     return YES;
 }
 - (void)searchBarTextDidBeginEditing:(UISearchBar *)searchBar {
-    _searchExpected=YES; NSUInteger generation=++_focusGeneration;
+    (void)searchBar; _searchExpected=YES;
+}
+- (void)scheduleKeyboardCheck {
+    NSUInteger generation=++_focusGeneration;
     __weak typeof(self) weakSelf=self;
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(0.8*NSEC_PER_SEC)),dispatch_get_main_queue(),^{
-        MWAppPickerController *controller=weakSelf;
-        if(!controller || generation!=controller->_focusGeneration || !controller->_searchExpected || !controller.view.window) return;
-        MWLog(@"search.keyboard_check",@{@"visible":@(controller->_keyboardVisible),@"firstResponder":@(searchBar.searchTextField.isFirstResponder),@"keyWindow":@(controller.view.window.isKeyWindow)});
-        if(!controller->_keyboardVisible && controller.searchFallbackHandler) [controller showFallback];
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(0.9*NSEC_PER_SEC)),dispatch_get_main_queue(),^{
+        [weakSelf checkKeyboard:generation retry:YES];
     });
+}
+- (void)checkKeyboard:(NSUInteger)generation retry:(BOOL)retry {
+    if(generation!=_focusGeneration || !_searchExpected || _finished || !self.viewIfLoaded.window) return;
+    MWLog(@"search.keyboard_check",@{@"visible":@(_keyboardVisible),@"firstResponder":@(_searchBar.searchTextField.isFirstResponder),
+        @"keyWindow":@(self.view.window.isKeyWindow),@"receivedInput":@(_receivedInput),@"retry":@(retry)});
+    if(_keyboardVisible || _receivedInput) return; // Hardware-keyboard input is sufficient.
+    if(retry) {
+        [self prepareSearchWindow];
+        // Avoid recursively restarting the deadline when editing was refused.
+        if(_searchBar.searchTextField.isFirstResponder) [_searchBar.searchTextField reloadInputViews];
+        __weak typeof(self) weakSelf=self;
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(0.6*NSEC_PER_SEC)),dispatch_get_main_queue(),^{
+            [weakSelf checkKeyboard:generation retry:NO];
+        });
+    } else if(self.searchFallbackHandler) {
+        MWLog(@"search.handoff_automatic",@{});
+        [self useApplicationSearch];
+    } else {
+        MWLog(@"search.keyboard_unavailable",@{@"sceneState":@(self.view.window.windowScene.activationState)});
+    }
 }
 - (void)searchBarTextDidEndEditing:(UISearchBar *)searchBar {
     (void)searchBar; _searchExpected=NO; _focusGeneration++; [self restoreWindowLevel];
 }
 - (void)keyboardShown:(NSNotification *)notification {
-    if(!_searchExpected || !_search.searchBar.searchTextField.isFirstResponder) return;
+    if(!_searchExpected || !_searchBar.searchTextField.isFirstResponder || !self.viewIfLoaded.window) return;
+    UIWindow *window=self.view.window;
+    if([notification.object isKindOfClass:UIScreen.class] && notification.object!=window.screen) return;
     CGRect frame=[notification.userInfo[UIKeyboardFrameEndUserInfoKey] CGRectValue];
-    _keyboardVisible=frame.size.height>0;
-    MWLog(@"search.keyboard_shown",@{@"height":@(frame.size.height),@"keyWindow":@(self.view.window.isKeyWindow)});
-    self.tableView.tableHeaderView=nil;
+    CGRect local=[window.screen.coordinateSpace convertRect:frame toCoordinateSpace:window];
+    CGRect intersection=CGRectIntersection(window.bounds,local);
+    _keyboardVisible=!CGRectIsNull(intersection) && intersection.size.width>0 && intersection.size.height>0;
+    MWLog(@"search.keyboard_shown",@{@"visible":@(_keyboardVisible),@"height":@(_keyboardVisible ? intersection.size.height : 0),
+        @"keyWindow":@(window.isKeyWindow)});
 }
 - (void)keyboardHidden:(NSNotification *)notification { (void)notification; _keyboardVisible=NO; }
-- (void)showFallback {
-    _fallback.frame=CGRectMake(0,0,self.tableView.bounds.size.width,44);
-    self.tableView.tableHeaderView=_fallback;
-}
 - (void)useApplicationSearch {
-    if(_finished || !self.searchFallbackHandler) return;
-    _finished=YES;
-    NSString *query=[_search.searchBar.text copy] ?: @"";
+    if(_finished || _fallbackStarted || !self.searchFallbackHandler) return;
+    _fallbackStarted=YES; _finished=YES; _searchExpected=NO; _focusGeneration++;
+    NSString *query=[_searchBar.text copy] ?: @"";
     void (^fallback)(NSString *)=self.searchFallbackHandler;
     [self.view endEditing:YES]; [self restoreWindowLevel];
     MWLog(@"search.main_scene_requested",@{});
@@ -102,11 +164,9 @@
     [self dismissPickerAnimated:YES completion:^{if(cancel) cancel();}];
 }
 - (void)dismissPickerAnimated:(BOOL)animated completion:(dispatch_block_t)completion {
-    // A UISearchController can itself be presented by this table controller.
-    // Dismiss the owner of the enclosing navigation sheet, not that child.
     UIViewController *container=self.navigationController ?: self;
     UIViewController *presenter=container.presentingViewController;
-    _search.active=NO; [self.view endEditing:YES]; [self restoreWindowLevel];
+    _searchExpected=NO; _focusGeneration++; [self.view endEditing:YES]; [self restoreWindowLevel];
     if(presenter) [presenter dismissViewControllerAnimated:animated completion:completion];
     else if(completion) completion();
 }
@@ -132,12 +192,17 @@
                 message.numberOfLines=0; message.textAlignment=NSTextAlignmentCenter;
                 message.textColor=UIColor.secondaryLabelColor; controller.tableView.backgroundView=message;
                 controller->_filtered=@[]; controller->_recent=@[]; [controller.tableView reloadData];
-            } else [controller updateSearchResultsForSearchController:controller->_search];
+            } else [controller filterApplications];
         });
     });
 }
-- (void)updateSearchResultsForSearchController:(UISearchController *)searchController {
-    NSString *query=[searchController.searchBar.text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+- (void)searchBar:(UISearchBar *)searchBar textDidChange:(NSString *)searchText {
+    (void)searchBar; (void)searchText;
+    _receivedInput=YES; [self filterApplications];
+}
+- (void)searchBarSearchButtonClicked:(UISearchBar *)searchBar { [searchBar.searchTextField resignFirstResponder]; }
+- (void)filterApplications {
+    NSString *query=[_searchBar.text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
     _filtered=query.length ? [_apps filteredArrayUsingPredicate:[NSPredicate predicateWithBlock:^BOOL(MWApplication *app,NSDictionary *bindings) {
         (void)bindings;
         return [app.name localizedCaseInsensitiveContainsString:query] || [app.bundleIdentifier localizedCaseInsensitiveContainsString:query];

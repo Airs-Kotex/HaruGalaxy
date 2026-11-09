@@ -8,6 +8,7 @@ FOUNDATION_EXPORT NSString *const MWFloatingHostDidBecomeReadyNotification;
 @interface MWFloatingHost : NSObject
 @property(nonatomic,readonly,getter=isEnabled) BOOL enabled;
 @property(nonatomic,readonly,getter=isReady) BOOL ready;
+@property(nonatomic,readonly,getter=isLocked) BOOL locked;
 @property(nonatomic,copy,readonly) NSString *sceneIdentifier;
 @property(nonatomic,weak) UIWindow *floatingWindow;
 + (instancetype)shared;

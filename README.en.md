@@ -1,78 +1,80 @@
 # HaruGalaxy · 初春星河
 
-[简体中文](README.md) · [Releases](https://github.com/Airs-Kotex/HaruGalaxy/releases) · [Issues](https://github.com/Airs-Kotex/HaruGalaxy/issues)
+[简体中文](README.md) · [Download 0.3.4](https://github.com/Airs-Kotex/HaruGalaxy/releases/tag/v0.3.4) · [Issues](https://github.com/Airs-Kotex/HaruGalaxy/issues)
 
-An experimental native multi-window workspace for TrollStore. HaruGalaxy hosts installed applications through FrontBoard scenes and provides movable windows, an edge window panel, free/original-aspect resizing, half-screen snapping, and local diagnostic exports.
-
-**This branch is the 0.3.3 device-testing candidate; [0.3.1 Alpha](https://github.com/Airs-Kotex/HaruGalaxy/releases/tag/v0.3.1) remains the rollback download.** Investigation found that three Objective-C entry methods in the withdrawn 0.3.2 did not override UIKit tracking callbacks. This branch corrects those selectors, retains entry recall and UI work reductions, and adds input-stage diagnostics. See the [investigation record](docs/research/2026-11-09-0.3.2-withdrawal.md).
-
-Earlier feedback on iPhone 14 Pro Max / iOS 16.2 confirmed background floating use and broadly usable interaction, with remaining entry recall and smoothness issues. Version 0.3.1 is the rollback baseline. Compilation and interface availability do not prove universal runtime compatibility.
+A native multi-window workspace for TrollStore. HaruGalaxy hosts installed apps in movable windows with an edge panel, free or original-aspect resizing, half-screen snapping and local diagnostic exports.
 
 ## Install
 
-Download [HaruGalaxy-0.3.1.tipa](https://github.com/Airs-Kotex/HaruGalaxy/releases/download/v0.3.1/HaruGalaxy-0.3.1.tipa) and install it with [TrollStore](https://github.com/opa334/TrollStore). If 0.3.2 is installed, install this package over it; both versions use the same bundle identifier, so uninstalling first is unnecessary. Test an app inside HaruGalaxy before enabling the floating workspace.
+1. Install [TrollStore](https://github.com/opa334/TrollStore) on a supported device.
+2. Download [HaruGalaxy-0.3.4.tipa](https://github.com/Airs-Kotex/HaruGalaxy/releases/download/v0.3.4/HaruGalaxy-0.3.4.tipa).
+3. Open the file in TrollStore and install it over an existing 0.3.1 or later installation.
+4. Open HaruGalaxy and enable the floating workspace in Settings.
 
-The bundle identifier is `io.github.airskotex.harugalaxy`, adopted in 0.3.1. iOS installs it separately from 0.3.0 and earlier; preferences and diagnostic logs from that identifier do not migrate automatically. The app displays as 初春星河 in Simplified Chinese and HaruGalaxy in English.
-
-For repair testing, install `HaruGalaxy-0.3.3.tipa` (build 8) from the [0.3.3 prerelease](https://github.com/Airs-Kotex/HaruGalaxy/releases/tag/v0.3.3) over 0.3.1 or withdrawn 0.3.2 and follow the [device checklist](docs/device-validation-0.3.3.md). The controls below describe this candidate; actual touch delivery and perceived responsiveness remain unverified here.
+Bundle identifier: `io.github.airskotex.harugalaxy`. Versions 0.3.0 and earlier use a different identifier; their preferences and logs do not migrate automatically. Version 0.3.2 was withdrawn. Other releases remain available in [Releases](https://github.com/Airs-Kotex/HaruGalaxy/releases).
 
 ## Controls
 
 | Gesture | Behavior |
 | --- | --- |
 | Tap the edge tab | Toggle the window panel |
-| Pull inward a short distance and release | Open the panel |
+| Pull inward and release | Open the panel; pull back to cancel |
 | Hold still and release | Toggle the panel |
-| Hold the tab for 0.35 seconds, then drag | Reposition the tab without opening the panel |
-| Settings → Floating workspace → “入口保持展开” | Keep the entry expanded |
-| Tap outside the panel | Close it; consume that tap |
-| Drag a title bar | Move the window across the screen |
-| Top-right arc | Free resize; apps reflow into the new viewport |
-| Bottom-right arc | Restore/use the system's original logical aspect ratio |
-| Drag a free window near an edge, dwell, release | Snap to top/bottom half in portrait or left/right half in landscape |
-| Minimize | Store the window in the edge panel, without a bottom shelf |
-| Maximize / title double tap | Fill the full bounds; restore through the edge panel |
+| Hold until the haptic, then drag | Move the entry to either side or a different height |
+| Settings → “入口保持展开” | Keep the entry expanded |
+| Tap outside the panel | Close it without activating the app underneath |
+| Drag a title bar | Move the window |
+| Top-right arc | Resize width and height freely |
+| Bottom-right arc | Resize using the system's original logical aspect ratio |
+| Drag a free window near an edge, dwell, release | Snap to top/bottom in portrait or left/right in landscape |
+| Minimize | Store the window in the edge panel |
+| Maximize / double-tap the title | Fill the screen; restore through the edge panel |
 
-The retracted visual is 12×60 points in a stable 56×76-point touch target. Retraction pauses while interacting with the entry or panel. Move the entry if its touch area overlaps a frequently used app control.
+Each app has one window, with up to four sessions at a time. Move the edge entry if its touch target overlaps a frequently used app control.
 
-Keyboard focus is requested explicitly. If the floating scene cannot display a keyboard, use **“在主应用中输入”** (“Type in the main app”) to search in the normal app scene and return to floating windows afterward. Existing guest sessions remain alive. Query text is not logged.
+## Search
 
-System gestures, the Home indicator, and hardware cutouts remain subject to iOS behavior. Some apps do not accept external scenes or dynamic sizes. iOS 14 has known upstream scene-hosting limitations. The iOS 14 minimum build target is not a claim that every feature works on every TrollStore-supported release.
+Tap the search field to filter apps by name or bundle identifier. If the floating scene does not display a keyboard, HaruGalaxy opens its normal app interface for input. You can also tap **“在主应用中搜索”** (“Search in the main app”). Selecting an app or cancelling restores the floating workspace and preserves existing sessions.
 
-## Build and test
+If iOS rejects the foreground request, the floating workspace returns with a message. Search text is never written to diagnostic logs.
+
+## Compatibility
+
+The arm64 build targets the officially supported TrollStore range: iOS/iPadOS 14.0 beta 2–16.6.1, 16.7 RC (20H18), and 17.0. User feedback covers background floating use and entry interaction on iPhone 14 Pro Max / iOS 16.2.
+
+External scenes, keyboard routing and dynamic sizes depend on iOS and the hosted app. iOS 14 has upstream scene-hosting limitations; see the [compatibility record](docs/compatibility.md). System gestures and hardware cutouts remain controlled by iOS. Restarting HaruGalaxy does not automatically reopen guest windows or the floating workspace.
+
+## Build
 
 ```sh
 git clone https://github.com/Airs-Kotex/HaruGalaxy.git
 cd HaruGalaxy
-git switch fix/edge-tracking-0.3.3
 make test
 make package
 make verify
 ```
 
-Native packaging requires Clang, an iPhoneOS SDK, a Mach-O linker and ldid. See [build instructions](docs/build-environment.md). No SDK, credentials or user logs are distributed in source. Windows developers can build through WSL. The macOS discovery path is not yet independently validated.
+Requires Clang, an iPhoneOS SDK, a Mach-O linker and ldid. See [build instructions](docs/build-environment.md) for Linux/WSL setup. Source archives build without Git metadata. SDKs, caches and user logs are excluded.
 
-The CI job runs portable geometry, entry decisions, startup, logging, selector regression and diagnostic-parser tests. Native packaging also checks the compiled entry implementation against SDK UIControl selectors, excluding header-only declarations. Neither check runs UIKit on a device.
+Packages, checksums and build reports are written to `dist/`. Developer checks and device records live in `Tests/`, `docs/` and release attachments.
 
-## Report issues
+## Feedback
 
-Open the window panel → Settings → Diagnostics → mark the problem → export. Include the app version, device, exact iOS build, TrollStore version and reproduction steps. Inspect/redact application identifiers before posting a diagnostic bundle publicly. Never upload credentials or private account contents.
+Open the window panel → Settings → Diagnostics → mark the issue → export. Include the app version, device, exact iOS build and reproduction steps when reporting an [issue](https://github.com/Airs-Kotex/HaruGalaxy/issues).
 
-Diagnostics are local, bounded to approximately 8 MiB, and exported only by the user. They include state transitions and device metadata, not screen recording or typed text. Read them with:
+Logs stay on the device, rotate at approximately 8 MiB, and are exported only by the user. They record scene, window and input stages without recording the screen or typed text. Inspect and redact application identifiers before sharing publicly.
 
 ```sh
 python3 scripts/inspect_diagnostics.py /path/to/HaruGalaxy-Diagnostics-example.json
 ```
 
-Version 0.3.3 adds sampled root hit queries, actual entry event delivery, tracking, activation and blocked/open panel stages. The reader's `input_pipeline` orders the last 80 relevant events. Queries are not proof of delivered touches, missing records alone do not locate a failure, and panel preparation time is not FPS.
-
 ## Credits and license
 
 Maintained by [Airs-Kotex](https://github.com/Airs-Kotex). Thanks to [straight-tamago / UiharuX](https://github.com/straight-tamago/UiharuX), [YuriDevTeam / MilkyWay3](https://github.com/YuriDevTeam/MilkyWay3-Public), [khanhduytran0 / FrontBoardAppLauncher](https://github.com/khanhduytran0/FrontBoardAppLauncher), [Lessica / TrollSpeed](https://github.com/Lessica/TrollSpeed), [LiveContainer](https://github.com/LiveContainer/LiveContainer), [opa334 / TrollStore](https://github.com/opa334/TrollStore), Theos, runtime-header maintainers and LLVM contributors.
 
-The [Chinese README](README.md#借鉴项目与致谢) explains each project's role and reuse boundary. This is an independent project, not an official release or endorsement from those authors. New implementation is Apache-2.0; third-party licenses and notices are retained in [NOTICE.md](NOTICE.md) and `ThirdParty/`.
+The [Chinese README](README.md#借鉴项目与致谢) describes each project's role and reuse boundary. HaruGalaxy is an independent project. New implementation uses Apache-2.0; third-party licenses and notices are retained in [NOTICE.md](NOTICE.md) and `ThirdParty/`.
 
-Contributions are welcome: [CONTRIBUTING.md](CONTRIBUTING.md), [CHANGELOG.md](CHANGELOG.md), [security reporting](SECURITY.md).
+[Contributing](CONTRIBUTING.md) · [Changelog](CHANGELOG.md) · [Security reporting](SECURITY.md)
 
 ## Star history
 

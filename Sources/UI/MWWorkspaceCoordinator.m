@@ -4,6 +4,8 @@
 #import "MWAppPickerController.h"
 #import "../Diagnostics/MWDiagnostics.h"
 #import "../Platform/MWFloatingHost.h"
+#import "../Platform/MWApplicationActivation.h"
+#import "../Core/MWSearchHandoff.h"
 
 @interface MWFloatingPlaceholder : UIViewController
 @end
@@ -34,7 +36,7 @@
     UINavigationController *_inputNavigation;
     NSString *_inputQuery;
     void (^_inputSelection)(MWApplication *);
-    NSUInteger _inputGeneration;
+    MWSearchHandoff _inputState;
     BOOL _inputPending;
 }
 + (instancetype)shared {
@@ -49,6 +51,7 @@
         [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(floatingReady:) name:MWFloatingHostDidBecomeReadyNotification object:nil];
         [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(inputSceneActivated:) name:UISceneDidActivateNotification object:nil];
         [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(inputSceneBackgrounded:) name:UISceneDidEnterBackgroundNotification object:nil];
+        [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(inputApplicationActivated:) name:UIApplicationDidBecomeActiveNotification object:nil];
     }
     return self;
 }
@@ -57,6 +60,7 @@
     _applicationWindow=window;
     if(_floatingWindow) window.rootViewController=[MWFloatingPlaceholder new];
     else { _workspace.floating=NO; window.rootViewController=_workspace; [_workspace setHostVisible:YES]; }
+    if(_inputPending) [self tryPresentApplicationSearch];
 }
 - (void)attachFloatingWindow:(UIWindow *)window {
     // There is exactly one workspace and therefore one bundle-ID registry.
@@ -91,6 +95,11 @@
 }
 - (void)floatingVisibility:(NSNotification *)notification {
     if(_inputPending && notification.object==_floatingWindow) {
+        if(MWFloatingHost.shared.isLocked) {
+            MWLog(@"search.handoff_cancelled",@{@"reason":@"locked"});
+            [self finishApplicationSearch:nil];
+            return;
+        }
         _floatingWindow.hidden=YES;
         return;
     }
@@ -101,66 +110,135 @@
     if(MWFloatingHost.shared.ready && window==MWFloatingHost.shared.floatingWindow) [self attachFloatingWindow:window];
 }
 - (void)presentApplicationSearchWithQuery:(NSString *)query selection:(void (^)(MWApplication *))selection {
-    if(_inputPending) return;
+    if(_inputPending || !_floatingWindow || !MWFloatingHost.shared.ready || MWFloatingHost.shared.isLocked) return;
     UIWindow *window=_applicationWindow;
-    if(!window.windowScene.session || window.rootViewController.presentedViewController) {
-        [_workspace showMessage:@"请先从主屏幕打开初春星河，再使用应用内搜索。"]; return;
-    }
     _inputPending=YES; _inputQuery=[query copy]; _inputSelection=[selection copy];
-    NSUInteger generation=++_inputGeneration;
+    uint64_t generation=MWSearchHandoffBegin(&_inputState,NSProcessInfo.processInfo.systemUptime);
     [MWFloatingHost.shared setSearchInputSuspended:YES]; [_workspace setHostVisible:NO];
+    MWLog(@"search.handoff_begin",@{@"mainWindow":@(window!=nil),@"mainSceneState":@(window ? window.windowScene.activationState : UISceneActivationStateUnattached)});
+    if(!MWSearchHandoffCurrent(&_inputState,generation)) return;
+    if(window && window.windowScene.activationState==UISceneActivationStateForegroundActive) {
+        [self tryPresentApplicationSearch];
+    } else {
+        NSError *error=nil;
+        BOOL accepted=MWRequestOwnApplicationForeground(&error);
+        MWSearchHandoffLaunchResult(&_inputState,generation,accepted,NSProcessInfo.processInfo.systemUptime);
+        MWLog(@"search.application_open",@{@"accepted":@(accepted),@"error":MWErrorFields(error)});
+    }
+    [self pollApplicationSearch:generation];
+}
+- (void)pollApplicationSearch:(uint64_t)generation {
+    if(!_inputPending || !MWSearchHandoffCurrent(&_inputState,generation)) return;
+    [self tryPresentApplicationSearch];
+    if(!_inputPending || !MWSearchHandoffCurrent(&_inputState,generation) || _inputState.phase==MWSearchActive) return;
     __weak typeof(self) weakSelf=self;
-    [[UIApplication sharedApplication] requestSceneSessionActivation:window.windowScene.session userActivity:nil options:nil errorHandler:^(NSError *error){
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(0.1*NSEC_PER_SEC)),dispatch_get_main_queue(),^{
+        [weakSelf pollApplicationSearch:generation];
+    });
+}
+- (void)requestInputScene:(uint64_t)generation {
+    UISceneSession *session=_applicationWindow.windowScene.session;
+    if(!session) {
+        MWLog(@"search.main_scene_request_unavailable",@{@"reason":@"normal scene not connected"});
+        return; // LaunchServices can still connect the normal scene before deadline.
+    }
+    UISceneActivationRequestOptions *options=[UISceneActivationRequestOptions new];
+    options.requestingScene=_floatingWindow.windowScene;
+    MWLog(@"search.main_scene_activation",@{@"mainSceneState":@(_applicationWindow.windowScene.activationState)});
+    __weak typeof(self) weakSelf=self;
+    [[UIApplication sharedApplication] requestSceneSessionActivation:session userActivity:nil options:options errorHandler:^(NSError *error){
         dispatch_async(dispatch_get_main_queue(),^{
             MWWorkspaceCoordinator *coordinator=weakSelf;
-            if(!coordinator || generation!=coordinator->_inputGeneration || !coordinator->_inputPending) return;
+            if(!coordinator || !coordinator->_inputPending || !MWSearchHandoffCurrent(&coordinator->_inputState,generation)) return;
             MWLog(@"search.main_scene_failed",MWErrorFields(error));
-            [coordinator finishApplicationSearch:nil]; [coordinator.workspace showMessage:@"系统未能打开主应用输入界面，请从主屏幕打开初春星河后搜索。"];
+            // A late scene error must not cancel an accepted app-open request
+            // or a picker already presented by the activation notification.
         });
     }];
-    [self tryPresentApplicationSearch];
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW,5*NSEC_PER_SEC),dispatch_get_main_queue(),^{
-        MWWorkspaceCoordinator *coordinator=weakSelf;
-        if(coordinator && generation==coordinator->_inputGeneration && coordinator->_inputPending && !coordinator->_inputNavigation) {
-            [coordinator finishApplicationSearch:nil];
-            [coordinator.workspace showMessage:@"主应用输入界面激活超时，请从主屏幕打开后搜索。"];
-        }
-    });
 }
 - (void)inputSceneActivated:(NSNotification *)notification {
     if(notification.object==_applicationWindow.windowScene) [self tryPresentApplicationSearch];
 }
+- (void)inputApplicationActivated:(NSNotification *)notification {
+    (void)notification; [self tryPresentApplicationSearch];
+}
 - (void)inputSceneBackgrounded:(NSNotification *)notification {
-    if(_inputPending && _inputNavigation && notification.object==_applicationWindow.windowScene) [self finishApplicationSearch:nil];
+    if(_inputPending && _inputNavigation && notification.object==_applicationWindow.windowScene) {
+        MWLog(@"search.handoff_cancelled",@{@"reason":@"main scene backgrounded"});
+        [self finishApplicationSearch:nil];
+    }
 }
 - (void)tryPresentApplicationSearch {
-    if(!_inputPending || _inputNavigation || _applicationWindow.windowScene.activationState!=UISceneActivationStateForegroundActive) return;
+    if(!_inputPending) return;
+    uint64_t generation=_inputState.generation;
+    UIWindow *window=_applicationWindow;
+    UIViewController *presenter=window.rootViewController;
+    BOOL foreground=window && window.windowScene.activationState==UISceneActivationStateForegroundActive;
+    BOOL presenterReady=presenter && !presenter.presentedViewController && !presenter.isBeingDismissed;
+    MWSearchAction action=MWSearchHandoffObserve(&_inputState,generation,NSProcessInfo.processInfo.systemUptime,foreground,presenterReady);
+    if(action==MWSearchActivateScene) { [self requestInputScene:generation]; return; }
+    if(action==MWSearchAbort) {
+        MWLog(@"search.handoff_timeout",@{@"mainWindow":@(window!=nil),@"mainSceneState":@(window ? window.windowScene.activationState : UISceneActivationStateUnattached),
+            @"presenterBusy":@(presenter.presentedViewController!=nil)});
+        [self finishApplicationSearch:nil];
+        [_workspace showMessage:@"主应用暂时未能打开，已恢复浮窗。可重新点击搜索，或从主屏幕打开初春星河。"];
+        return;
+    }
+    if(action!=MWSearchPresent) return;
     [_applicationWindow makeKeyAndVisible];
     MWAppPickerController *picker=[MWAppPickerController new]; picker.initialQuery=_inputQuery; picker.automaticallyFocusSearch=YES;
     __weak typeof(self) weakSelf=self;
-    NSUInteger generation=_inputGeneration;
     __weak MWAppPickerController *weakPicker=picker;
     picker.selectionHandler=^(MWApplication *application){
         MWWorkspaceCoordinator *coordinator=weakSelf;
-        if(coordinator && coordinator->_inputPending && generation==coordinator->_inputGeneration && coordinator->_inputNavigation.viewControllers.firstObject==weakPicker)
+        if(coordinator && coordinator->_inputPending && MWSearchHandoffCurrent(&coordinator->_inputState,generation) && coordinator->_inputNavigation.viewControllers.firstObject==weakPicker)
             [coordinator finishApplicationSearch:application];
     };
     picker.cancellationHandler=^{
         MWWorkspaceCoordinator *coordinator=weakSelf;
-        if(coordinator && coordinator->_inputPending && generation==coordinator->_inputGeneration && coordinator->_inputNavigation.viewControllers.firstObject==weakPicker)
+        if(coordinator && coordinator->_inputPending && MWSearchHandoffCurrent(&coordinator->_inputState,generation) && coordinator->_inputNavigation.viewControllers.firstObject==weakPicker)
             [coordinator finishApplicationSearch:nil];
     };
     _inputNavigation=[[UINavigationController alloc] initWithRootViewController:picker];
-    [_applicationWindow.rootViewController presentViewController:_inputNavigation animated:YES completion:nil];
-    MWLog(@"search.main_scene_presented",@{@"session":_applicationWindow.windowScene.session.persistentIdentifier ?: @"none"});
+    _inputNavigation.modalPresentationStyle=UIModalPresentationFullScreen;
+    __weak UINavigationController *weakNavigation=_inputNavigation;
+    [presenter presentViewController:_inputNavigation animated:YES completion:^{
+        MWWorkspaceCoordinator *coordinator=weakSelf;
+        UINavigationController *navigation=weakNavigation;
+        if(!coordinator || !coordinator->_inputPending || !MWSearchHandoffCurrent(&coordinator->_inputState,generation) ||
+           coordinator->_inputNavigation!=navigation) {
+            [weakPicker invalidateSearch];
+            // This presentation may complete after lock/timeout/cancellation.
+            // Dismiss only its owned controller, never a subsequent search.
+            if(navigation && navigation.presentingViewController.presentedViewController==navigation && !navigation.isBeingDismissed)
+                [navigation dismissViewControllerAnimated:NO completion:nil];
+            return;
+        }
+        if(MWSearchHandoffPresented(&coordinator->_inputState,generation))
+            MWLog(@"search.main_scene_presented",@{@"keyWindow":@(coordinator->_applicationWindow.isKeyWindow),
+                @"mainSceneState":@(coordinator->_applicationWindow.windowScene.activationState)});
+    }];
 }
 - (void)finishApplicationSearch:(MWApplication *)application {
     if(!_inputPending) return;
-    _inputPending=NO; _inputGeneration++;
+    _inputPending=NO; MWSearchHandoffFinish(&_inputState);
     void (^selection)(MWApplication *)=_inputSelection; _inputSelection=nil; _inputQuery=nil;
-    MWAppPickerController *picker=(MWAppPickerController *)_inputNavigation.viewControllers.firstObject;
+    UINavigationController *navigation=_inputNavigation; _inputNavigation=nil;
+    MWAppPickerController *picker=(MWAppPickerController *)navigation.viewControllers.firstObject;
+    [picker invalidateSearch];
     picker.selectionHandler=nil; picker.cancellationHandler=nil; picker.searchFallbackHandler=nil;
-    [_inputNavigation.presentingViewController dismissViewControllerAnimated:NO completion:nil]; _inputNavigation=nil;
+    if(navigation.isBeingPresented) {
+        // The presentation completion also checks ownership for the case where
+        // UIKit no longer accepts additional transition completion blocks.
+        __weak UINavigationController *weakNavigation=navigation;
+        [navigation.transitionCoordinator animateAlongsideTransition:nil completion:^(id<UIViewControllerTransitionCoordinatorContext> context){
+            (void)context; UINavigationController *owned=weakNavigation;
+            if(owned && owned.presentingViewController.presentedViewController==owned && !owned.isBeingDismissed)
+                [owned dismissViewControllerAnimated:NO completion:nil];
+        }];
+    } else if(navigation && navigation.presentingViewController.presentedViewController==navigation && !navigation.isBeingDismissed) {
+        [navigation dismissViewControllerAnimated:NO completion:nil];
+    }
     [MWFloatingHost.shared setSearchInputSuspended:NO];
     MWLog(@"search.main_scene_finished",@{@"selected":@(application!=nil)});
     if(application && selection) selection(application);

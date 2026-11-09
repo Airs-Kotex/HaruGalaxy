@@ -7,5 +7,6 @@
 @property(nonatomic,copy) void (^searchFallbackHandler)(NSString *query);
 @property(nonatomic,copy) NSString *initialQuery;
 @property(nonatomic) BOOL automaticallyFocusSearch;
+- (void)invalidateSearch;
 @end
 

@@ -52,5 +52,19 @@ class DiagnosticsReaderTests(unittest.TestCase):
         self.assertEqual(result["input_pipeline"]["recent_events"][0]["sequence"],20)
         self.assertEqual(reader.summarize({"schema":1,"logs":{}})["input_pipeline"]["counts"],{})
 
+    def test_search_trace_keeps_launch_acceptance_separate_from_visible_keyboard(self):
+        events=[
+            ("search.handoff_begin",{}),
+            ("overlay.search_input",{"suspended":True}),
+            ("search.application_open",{"accepted":True}),
+            ("search.handoff_timeout",{"mainSceneState":2}),
+            ("overlay.search_input",{"suspended":False})]
+        text="\n".join(json.dumps({"time":i,"sequence":i,"event":e,"fields":f}) for i,(e,f) in enumerate(events))
+        result=reader.summarize({"schema":1,"logs":{"events":text}})["search_pipeline"]
+        self.assertEqual(result["counts"]["overlay.search_input"],2)
+        self.assertNotIn("search.keyboard_shown",result["counts"])
+        self.assertIn("not foreground visibility",result["interpretation"])
+        self.assertEqual(result["recent_events"][-1]["fields"],{"suspended":False})
+
 
 if __name__=="__main__": unittest.main()

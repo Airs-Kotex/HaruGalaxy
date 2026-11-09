@@ -28,7 +28,7 @@
         return [NSString stringWithFormat:@"收起的入口可轻点或向内短划唤出，原地长按后松手也能打开。长按振动后拖动才移动位置。若不想收起，可开启“入口保持展开”。最小化窗口收进面板。\n后台执行状态：%@。",status];
     }
     if(section==2) return @"详细日志默认开启，保留约 8 MiB。遇到问题先点“标记刚发生的问题”，再导出 JSON。日志包含机型、系统、相关应用标识与窗口事件，保存在本机，由你决定分享给谁。不会录制画面或输入内容。";
-    return [NSString stringWithFormat:@"%@ Alpha · TrollStore\n面向 iOS 14–17.0 的受支持 TrollStore 系统逐项检测能力；各版本的小窗、触摸和后台行为需实机确认。",NSBundle.mainBundle.infoDictionary[@"CFBundleShortVersionString"]];
+    return [NSString stringWithFormat:@"%@ · TrollStore\n原生应用小窗、边缘收纳、自由与原始比例缩放。系统与应用兼容性见项目说明。",NSBundle.mainBundle.infoDictionary[@"CFBundleShortVersionString"]];
 }
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
     (void)tableView;

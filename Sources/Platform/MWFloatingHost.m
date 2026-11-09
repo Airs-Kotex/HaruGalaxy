@@ -179,7 +179,7 @@ NSString *const MWFloatingHostDidBecomeReadyNotification=@"MWFloatingHostDidBeco
             @try { _guardSettings=[self.floatingWindow.windowScene._effectiveSettings mutableCopy]; }
             @catch(NSException *exception) { MWLog(@"guard.snapshot_failed",@{@"reason":exception.reason ?: @"unknown"}); }
         }
-        _guardActive=_enabled && !locked;
+        _guardActive=_enabled && !locked && !_searchInputSuspended;
     }
     MWLog(@"overlay.lock",@{@"locked":@(locked)});
     self.floatingWindow.hidden=locked || _searchInputSuspended;
@@ -236,6 +236,7 @@ NSString *const MWFloatingHostDidBecomeReadyNotification=@"MWFloatingHostDidBeco
 }
 - (BOOL)backgroundExecutionValid { return _backgroundLease.valid; }
 - (BOOL)isReady { return _enabled && _startup.phase==MWOverlayStartupReady; }
+- (BOOL)isLocked { return _locked; }
 - (id)protectedDiff:(id)diff forIdentifier:(NSString *)identifier {
     @synchronized(self) {
         if(![_guardIdentifier isEqual:identifier] || !diff) return diff;
@@ -275,11 +276,15 @@ NSString *const MWFloatingHostDidBecomeReadyNotification=@"MWFloatingHostDidBeco
     [MWDiagnostics.shared flush];
 }
 - (void)setSearchInputSuspended:(BOOL)suspended {
+    if(_searchInputSuspended==suspended) return;
     _searchInputSuspended=suspended;
     MWLog(@"overlay.search_input",@{@"suspended":@(suspended)});
     if(self.ready) {
+        if(suspended) [self.floatingWindow resignKeyWindow];
         [self applyLocked:_locked];
-        if(!suspended && !_locked) [self.floatingWindow makeKeyAndVisible];
+        // Applying visibility does not itself transfer keyboard focus to the
+        // overlay while the normal scene is being activated for input.
+        if(!_searchInputSuspended && !_locked) [self.floatingWindow makeKeyAndVisible];
     }
 }
 @end

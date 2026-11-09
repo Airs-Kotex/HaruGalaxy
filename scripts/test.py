@@ -36,4 +36,9 @@ subprocess.run([cc, "-std=c11", "-Wall", "-Wextra", "-Werror", "-pedantic",
                 str(ROOT / "Sources/Core/MWEdgeInteraction.c"), str(ROOT / "Tests/edge_interaction_test.c"),
                 "-lm", "-o", str(build / "edge_interaction_test")], check=True)
 subprocess.run([str(build / "edge_interaction_test")], check=True)
+subprocess.run([cc, "-std=c11", "-Wall", "-Wextra", "-Werror", "-pedantic",
+                "-fsanitize=undefined", "-I" + str(ROOT / "Sources/Core"),
+                str(ROOT / "Sources/Core/MWSearchHandoff.c"), str(ROOT / "Tests/search_handoff_test.c"),
+                "-o", str(build / "search_handoff_test")], check=True)
+subprocess.run([str(build / "search_handoff_test")], check=True)
 subprocess.run([os.environ.get("PYTHON", "python3"), "-m", "unittest", "discover", "-s", str(ROOT / "Tests"), "-p", "test_*.py", "-v"], check=True)

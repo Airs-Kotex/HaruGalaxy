@@ -47,12 +47,22 @@ def summarize(bundle):
                   "edge.activate requests the panel; panel.blocked means a presented controller prevented it. "
                   "Missing records alone do not locate a failure: detailed logging, sampling, rotation and "
                   "different sessions can affect this trace. preparationMs is synchronous layout time, not FPS.")}
+    search_trace = [row for row in records if row["event"].startswith("search.") or row["event"]=="overlay.search_input"]
+    search_stages = {
+        "counts": dict(sorted(Counter(row["event"] for row in search_trace).items())),
+        "recent_events": search_trace[-80:],
+        "interpretation": (
+            "application_open.accepted reports LaunchServices request acceptance, not foreground visibility. "
+            "main_scene_presented is emitted after the normal scene is foreground and presentation completes. "
+            "keyboard_shown.visible checks keyboard intersection with the input window. "
+            "Late errors, cancelled generations, external keyboards and missing logs require context; query text is not recorded.")}
     return {"environment": environment, "events": len(records), "sessions": sorted({str(row.get("session", "unknown")) for row in records}),
             "counts": dict(sorted(counts.items())), "malformed_lines": malformed,
             "dropped": bundle.get("dropped"), "storage": bundle.get("storage"), "important_events": important[-80:],
             "export_errors": bundle.get("exportErrors", {}), "raw_files": list(bundle.get("rawFiles", {})),
             "recovered_tail_bytes": bundle.get("recoveredTailBytes", 0),
             "input_pipeline": stages,
+            "search_pipeline": search_stages,
             "interpretation": "A heartbeat gap is an observation, not proof of a crash. Assertion valid is not proof of rendering or input."}
 
 
