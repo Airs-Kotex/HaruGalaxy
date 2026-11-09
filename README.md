@@ -17,7 +17,9 @@
 
 HaruGalaxy 将已安装应用放进可移动、缩放和收纳的小窗。项目以 UiharuX 的能力和 MilkyWay 的交互为参考，基于开放的 FrontBoard 场景托管资料实现，使用 Objective-C、UIKit 和可测试的 C 几何模型。
 
-**当前版本为 0.3.1 Alpha。** 用户已确认 0.2.2 能在 **iPhone 14 Pro Max / iOS 16.2** 后台使用浮窗。后续新增的输入兼容路径、细弧手柄和交互优化仍需要设备验证。构建通过、接口存在或成功取得后台请求，均不等于所有 App/设备功能已验证。
+**0.3.2 已撤回，请使用 [0.3.1 Alpha](https://github.com/Airs-Kotex/HaruGalaxy/releases/tag/v0.3.1)。** 用户反馈升级至 0.3.2 后，悬浮窗在不同界面点击均无响应；该版 Release 和 tag 已移除，主分支代码已回滚至 0.3.1。具体失效原因尚未确认，详见 [撤回记录](docs/research/2026-11-09-0.3.2-withdrawal.md)。
+
+用户此前反馈 **iPhone 14 Pro Max / iOS 16.2** 后台浮窗可用、整体体验可用，仍有收起入口难唤出和流畅度问题。0.3.1 是本次回退版本；构建通过、接口存在或成功取得后台请求，均不等于所有 App/设备功能已验证。
 
 ## 功能
 
@@ -34,11 +36,9 @@ HaruGalaxy 将已安装应用放进可移动、缩放和收纳的小窗。项目
 ## 安装与升级
 
 1. 设备需已安装 [TrollStore](https://github.com/opa334/TrollStore)。普通签名/常规侧载无法等价提供本项目依赖的权限。
-2. 在 [Releases](https://github.com/Airs-Kotex/HaruGalaxy/releases) 下载 `HaruGalaxy-0.3.1.tipa`。
-3. 从“文件”或分享菜单交给 TrollStore 安装；本版使用新 Bundle ID，可与旧版并存；旧版设置与日志不会自动迁移。
+2. 下载 [HaruGalaxy-0.3.1.tipa](https://github.com/Airs-Kotex/HaruGalaxy/releases/download/v0.3.1/HaruGalaxy-0.3.1.tipa)。
+3. 从“文件”或分享菜单交给 TrollStore 安装。已装 0.3.2 的用户请用此包覆盖回退，0.3.1 与 0.3.2 的 Bundle ID 相同，无须先卸载。0.3.0 及更早版本使用旧标识，设置与日志不会自动迁移。
 4. 打开 **初春星河**，先在应用内打开一个常用 App 验证，再启用设置中的“浮动工作区”。
-
-
 
 ## 使用教程
 

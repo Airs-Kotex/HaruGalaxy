@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.2 — Withdrawn (2026-11-09)
+
+- Withdrawn following device feedback that the floating window no longer responded to taps across screens after the update.
+- Release and tag removed; main branch application code reverted to the 0.3.1 baseline by commit `398c901693a76af4efc694a0fe3d58e0129f78e3`. The original changes remain in commit `e28b4204d14d52de4a90ced452fed62c2323b39b` for investigation.
+- Use the existing [0.3.1 package](https://github.com/Airs-Kotex/HaruGalaxy/releases/tag/v0.3.1). No replacement release has been published as part of this withdrawal.
+- Passing portable tests, static analysis and package checks did not validate real UIKit touch delivery. The root cause remains unconfirmed; see the [withdrawal record](docs/research/2026-11-09-0.3.2-withdrawal.md).
+
 ## 0.3.1 — HaruGalaxy / 初春星河
 
 - Adopt the HaruGalaxy name and localized app display names; use the new `io.github.airskotex.harugalaxy` identifier (a separate installation from the old app).

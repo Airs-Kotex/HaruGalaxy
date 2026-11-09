@@ -4,13 +4,15 @@
 
 An experimental native multi-window workspace for TrollStore. HaruGalaxy hosts installed applications through FrontBoard scenes and provides movable windows, an edge window panel, free/original-aspect resizing, half-screen snapping, and local diagnostic exports.
 
-**Version 0.3.1 is an alpha.** A user confirmed background floating use with 0.2.2 on iPhone 14 Pro Max / iOS 16.2. New keyboard and gesture behavior still requires device verification. Compilation and interface availability do not prove universal runtime compatibility.
+**Version 0.3.2 has been withdrawn. Use [0.3.1 Alpha](https://github.com/Airs-Kotex/HaruGalaxy/releases/tag/v0.3.1).** A user reported that the floating window stopped responding to taps across screens after updating to 0.3.2. Its release and tag have been removed, and the main branch code has been reverted to 0.3.1. The cause has not yet been confirmed; see the [withdrawal record](docs/research/2026-11-09-0.3.2-withdrawal.md).
+
+Earlier feedback on iPhone 14 Pro Max / iOS 16.2 confirmed background floating use and broadly usable interaction, with remaining entry recall and smoothness issues. Version 0.3.1 is the rollback baseline. Compilation and interface availability do not prove universal runtime compatibility.
 
 ## Install
 
-Download `HaruGalaxy-0.3.1.tipa` from [Releases](https://github.com/Airs-Kotex/HaruGalaxy/releases) and install it with [TrollStore](https://github.com/opa334/TrollStore). Test an app inside HaruGalaxy before enabling the floating workspace.
+Download [HaruGalaxy-0.3.1.tipa](https://github.com/Airs-Kotex/HaruGalaxy/releases/download/v0.3.1/HaruGalaxy-0.3.1.tipa) and install it with [TrollStore](https://github.com/opa334/TrollStore). If 0.3.2 is installed, install this package over it; both versions use the same bundle identifier, so uninstalling first is unnecessary. Test an app inside HaruGalaxy before enabling the floating workspace.
 
-The bundle identifier is now `io.github.airskotex.harugalaxy`. iOS installs it separately from the previous identifier; preferences and diagnostic logs do not migrate automatically. The app displays as 初春星河 in Simplified Chinese and HaruGalaxy in English.
+The bundle identifier is `io.github.airskotex.harugalaxy`, adopted in 0.3.1. iOS installs it separately from 0.3.0 and earlier; preferences and diagnostic logs from that identifier do not migrate automatically. The app displays as 初春星河 in Simplified Chinese and HaruGalaxy in English.
 
 ## Controls
 
