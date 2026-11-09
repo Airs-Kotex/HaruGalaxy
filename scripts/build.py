@@ -69,6 +69,8 @@ def main():
     signer = resolve_tool(args.ldid, [ROOT / ".toolchain/ldid", "ldid"])
     info = plistlib.loads((ROOT / "Resources/Info.plist").read_bytes())
     deployment = info["MinimumOSVersion"]
+    run([os.environ.get("PYTHON", "python3"), ROOT / "scripts/check_ui_control_selectors.py",
+         "--clang", compiler, "--sdk", sdk, "--deployment", deployment])
     sdk_settings = sdk / "SDKSettings.plist"
     sdk_version = plistlib.loads(sdk_settings.read_bytes()).get("Version", "16.5") if sdk_settings.exists() else "16.5"
     build = ROOT / "build/ios"

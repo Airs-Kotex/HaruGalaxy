@@ -29,5 +29,28 @@ class DiagnosticsReaderTests(unittest.TestCase):
         self.assertEqual(result["events"],0)
         self.assertEqual(len(result["malformed_lines"]),1)
 
+    def test_input_pipeline_orders_stages_and_keeps_block_reason(self):
+        def record(sequence, event, fields):
+            return json.dumps({"time":sequence,"sequence":sequence,"event":event,"fields":fields,"session":"touch-test"})+"\n"
+        result=reader.summarize({"schema":1,"logs":{
+            "new":record(5,"panel.blocked",{"reason":"presented_controller"}),
+            "old":record(1,"overlay.hit_test",{"gatedIn":True})+
+                  record(2,"input.edge_delivery",{"phase":0})+
+                  record(3,"edge.touch_begin",{})+record(4,"edge.activate",{})}})
+        pipeline=result["input_pipeline"]
+        self.assertEqual([row["sequence"] for row in pipeline["recent_events"]],[1,2,3,4,5])
+        self.assertEqual(pipeline["counts"]["panel.blocked"],1)
+        self.assertNotIn("panel.open",pipeline["counts"])
+        self.assertEqual(pipeline["recent_events"][-1]["fields"]["reason"],"presented_controller")
+        self.assertIn("not delivered touches",pipeline["interpretation"])
+
+    def test_input_trace_is_bounded_and_old_bundles_are_supported(self):
+        rows=[json.dumps({"time":i,"sequence":i,"event":"edge.activate","fields":{}}) for i in range(100)]
+        result=reader.summarize({"schema":1,"logs":{"events":"\n".join(rows)}})
+        self.assertEqual(result["input_pipeline"]["counts"]["edge.activate"],100)
+        self.assertEqual(len(result["input_pipeline"]["recent_events"]),80)
+        self.assertEqual(result["input_pipeline"]["recent_events"][0]["sequence"],20)
+        self.assertEqual(reader.summarize({"schema":1,"logs":{}})["input_pipeline"]["counts"],{})
+
 
 if __name__=="__main__": unittest.main()

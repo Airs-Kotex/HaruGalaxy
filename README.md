@@ -17,7 +17,7 @@
 
 HaruGalaxy 将已安装应用放进可移动、缩放和收纳的小窗。项目以 UiharuX 的能力和 MilkyWay 的交互为参考，基于开放的 FrontBoard 场景托管资料实现，使用 Objective-C、UIKit 和可测试的 C 几何模型。
 
-**0.3.2 已撤回，请使用 [0.3.1 Alpha](https://github.com/Airs-Kotex/HaruGalaxy/releases/tag/v0.3.1)。** 用户反馈升级至 0.3.2 后，悬浮窗在不同界面点击均无响应；该版 Release 和 tag 已移除，主分支代码已回滚至 0.3.1。具体失效原因尚未确认，详见 [撤回记录](docs/research/2026-11-09-0.3.2-withdrawal.md)。
+**本分支为 0.3.3 真机测试候选版，默认回退包仍为 [0.3.1 Alpha](https://github.com/Airs-Kotex/HaruGalaxy/releases/tag/v0.3.1)。** 0.3.2 因入口触摸回归已撤回；继续排查确认它的三个 Objective-C 跟踪方法未覆盖 UIKit 回调。此分支修正方法名、保留入口容错和减少重复界面工作的改进，并增加输入阶段日志。源码证据与测试边界见 [调查记录](docs/research/2026-11-09-0.3.2-withdrawal.md)。
 
 用户此前反馈 **iPhone 14 Pro Max / iOS 16.2** 后台浮窗可用、整体体验可用，仍有收起入口难唤出和流畅度问题。0.3.1 是本次回退版本；构建通过、接口存在或成功取得后台请求，均不等于所有 App/设备功能已验证。
 
@@ -40,6 +40,8 @@ HaruGalaxy 将已安装应用放进可移动、缩放和收纳的小窗。项目
 3. 从“文件”或分享菜单交给 TrollStore 安装。已装 0.3.2 的用户请用此包覆盖回退，0.3.1 与 0.3.2 的 Bundle ID 相同，无须先卸载。0.3.0 及更早版本使用旧标识，设置与日志不会自动迁移。
 4. 打开 **初春星河**，先在应用内打开一个常用 App 验证，再启用设置中的“浮动工作区”。
 
+参与修复测试可在 [v0.3.3 预发布](https://github.com/Airs-Kotex/HaruGalaxy/releases/tag/v0.3.3) 下载 `HaruGalaxy-0.3.3.tipa`（build 8），并按 [真机验收步骤](docs/device-validation-0.3.3.md) 测试。候选版沿用相同 Bundle ID，可从 0.3.1 或撤回的 0.3.2 覆盖安装。以下教程描述本分支 0.3.3 的行为；0.3.1 仍使用原来的轻点/长按手势。
+
 ## 使用教程
 
 ### 入口与窗口管理
@@ -47,12 +49,17 @@ HaruGalaxy 将已安装应用放进可移动、缩放和收纳的小窗。项目
 | 动作 | 结果 |
 | --- | --- |
 | 轻点边缘凸起 | 打开或关闭窗口面板 |
+| 从凸起处向屏幕内短拉后松手 | 打开面板；手指收回原位置则取消 |
+| 原地长按后松手 | 打开或关闭面板 |
 | 长按约 0.35 秒，振动后拖动 | 移动入口；松手吸附左右边缘，不触发轻点 |
+| 设置 → 浮动工作区 → 入口保持展开 | 保留较宽图标，关闭后恢复自动收起 |
 | 面板 → 打开应用 | 搜索或选择已安装 App |
 | 黄色减号 | 将窗口收入边缘面板 |
 | 点面板中的窗口条目 | 恢复或聚焦该窗口 |
 | 红色关闭 | 关闭小窗并释放其场景 |
 | 面板外轻点 | 仅关闭面板，该次点击不操作下层 App |
+
+0.3.3 收起后显示 **12×60 点**的小凸起，固定触摸区域为 **56×76 点**。按住入口、移动入口或打开面板时暂停自动收起，收放动画允许继续点击。该触摸区会接收入口操作；如挡住 App 常用控件，可长按拖到另一侧或其他高度。
 
 ### 自由缩放与系统等比
 
@@ -91,10 +98,11 @@ HaruGalaxy 将已安装应用放进可移动、缩放和收纳的小窗。项目
 | TrollStore 范围 | 按官方支持版本：14.0 beta 2–16.6.1、16.7 RC（20H18）、17.0 |
 | 已有真机反馈 | iPhone 14 Pro Max / iOS 16.2，0.2.2 后台浮窗可用 |
 | 0.3.1 新交互与键盘 | 本地构建/逻辑检查完成，真机验收待补充 |
+| 0.3.3 入口修复候选版 | 修正确定的 selector 错误；触摸投递和流畅度仍待设备确认 |
 | iOS 14 外部场景 | 上游已知存在限制；可安装不等于完整窗口能力可用 |
 | iPad / 其他版本 | 需要更多设备记录，不宣称全部验证 |
 
-更多见 [兼容性记录](docs/compatibility.md) 和 [0.3.1 真机验收](docs/device-validation-0.3.1.md)。
+更多见 [兼容性记录](docs/compatibility.md)、[0.3.3 真机验收](docs/device-validation-0.3.3.md) 和 [0.3.1 输入/缩放验收](docs/device-validation-0.3.1.md)。
 
 已知边界：部分单场景 App 可能空窗；动态视口、键盘焦点和远程触摸坐标依赖私有接口；不保证系统强制结束进程后自动恢复。重启不会自动重开 guest 或自动启用浮动模式。项目没有注入 SpringBoard 插件，也未实现 AppSwitcher 卡片长按入口。
 
@@ -103,6 +111,8 @@ HaruGalaxy 将已安装应用放进可移动、缩放和收纳的小窗。项目
 在窗口面板进入 **设置 → 真机诊断 → 标记刚发生的问题 → 导出诊断包**。
 
 导出 `HaruGalaxy-Diagnostics-….json`，包含型号、系统 build、版本、相关 App 标识、场景阶段、后台申请结果、键盘是否显示、窗口几何和运行心跳。默认详细记录，滚动存储约 **8 MiB**；不录屏、不记录键盘输入、不自动上传。
+
+0.3.3 增加抽样根命中查询、入口的窗口事件投递、UIControl 跟踪开始/取消、激活请求及面板阻挡/打开记录。日志读取脚本的 `input_pipeline` 按时间展示这些阶段。根命中查询不代表真正送达触摸；日志缺少某个阶段也不能单独判定根因。面板 `preparationMs` 仅反映同步准备/布局时间，不是 FPS 或屏幕呈现延迟。
 
 提交 [Issue](https://github.com/Airs-Kotex/HaruGalaxy/issues/new/choose) 时说明：版本、机型、精确 iOS build、TrollStore 版本、复现步骤、预期与实际结果。**公开上传前检查并按需脱敏日志**，不要放入密码、token 或账号数据。
 
@@ -117,6 +127,7 @@ python3 scripts/inspect_diagnostics.py /path/to/HaruGalaxy-Diagnostics-example.j
 ```sh
 git clone https://github.com/Airs-Kotex/HaruGalaxy.git
 cd HaruGalaxy
+git switch fix/edge-tracking-0.3.3
 make test
 make package
 make verify
@@ -135,6 +146,8 @@ python3 scripts/build.py \
 Windows 可使用 WSL；macOS 有工具发现分支，但仍需在对应环境验证。源码归档可脱离 Git 构建。仓库与源码包不包含 Apple SDK、下载缓存或用户日志。
 
 输出在 `dist/`：`.tipa`、SHA-256 文件和构建报告。CI 运行 Core/日志/诊断测试，不把它标成真机 UI 验证，也不会自动下载并分发 SDK。
+
+`make package` 会先用 Clang AST 检查 `MWEdgeHandle` 自身实现的四个 UIControl 回调，并与当前 SDK 声明对照。仅在头文件里声明方法无法通过该检查；此前撤回版本的三个错误方法名会使构建中止。
 
 ## 工程结构
 

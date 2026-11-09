@@ -15,7 +15,7 @@
 }
 - (void)dismiss { [self dismissViewControllerAnimated:YES completion:nil]; }
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView { (void)tableView; return 4; }
-- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section { (void)tableView; return section==0 ? 2 : (section==2 ? 4 : 1); }
+- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section { (void)tableView; return section<2 ? 2 : (section==2 ? 4 : 1); }
 - (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
     (void)tableView; return @[@"外观",@"浮动工作区",@"真机诊断",@"关于"][section];
 }
@@ -25,7 +25,7 @@
     if(section==1) {
         NSString *status=!MWFloatingHost.shared.enabled ? @"未启用" : (!MWFloatingHost.shared.ready ? @"正在等待浮窗根视图与窗口连接" :
             (MWFloatingHost.shared.backgroundExecutionValid ? @"系统已批准当前请求" : @"请求未获批准或已失效，请导出诊断"));
-        return [NSString stringWithFormat:@"轻点边缘入口管理窗口；长按振动后拖动移动。最小化收进面板。右上弧线自由缩放、右下弧线按系统原始比例缩放；自由模式拖标题栏到屏幕边缘，停留后松手进入半屏。全屏可从面板还原。\n后台执行状态：%@。",status];
+        return [NSString stringWithFormat:@"收起的入口可轻点或向内短划唤出，原地长按后松手也能打开。长按振动后拖动才移动位置。若不想收起，可开启“入口保持展开”。最小化窗口收进面板。\n后台执行状态：%@。",status];
     }
     if(section==2) return @"详细日志默认开启，保留约 8 MiB。遇到问题先点“标记刚发生的问题”，再导出 JSON。日志包含机型、系统、相关应用标识与窗口事件，保存在本机，由你决定分享给谁。不会录制画面或输入内容。";
     return [NSString stringWithFormat:@"%@ Alpha · TrollStore\n面向 iOS 14–17.0 的受支持 TrollStore 系统逐项检测能力；各版本的小窗、触摸和后台行为需实机确认。",NSBundle.mainBundle.infoDictionary[@"CFBundleShortVersionString"]];
@@ -42,9 +42,11 @@
         cell.accessoryView=theme;
     } else if(indexPath.section<2) {
         UISwitch *toggle=[UISwitch new];
-        toggle.tag=indexPath.section;
-        cell.textLabel.text=indexPath.section==0 ? @"减少动画" : @"浮动工作区";
-        toggle.on=indexPath.section==0 ? MWPreferences.shared.reduceMotion : MWFloatingHost.shared.enabled;
+        BOOL keepExpanded=indexPath.section==1 && indexPath.row==1;
+        toggle.tag=keepExpanded ? 2 : indexPath.section;
+        cell.textLabel.text=indexPath.section==0 ? @"减少动画" : (keepExpanded ? @"入口保持展开" : @"浮动工作区");
+        toggle.on=indexPath.section==0 ? MWPreferences.shared.reduceMotion :
+            (keepExpanded ? MWPreferences.shared.edgeAlwaysExpanded : MWFloatingHost.shared.enabled);
         [toggle addTarget:self action:@selector(toggleChanged:) forControlEvents:UIControlEventValueChanged];
         cell.accessoryView=toggle;
     } else if(indexPath.section==2) {
@@ -98,6 +100,7 @@
 - (void)themeChanged:(UISegmentedControl *)sender { MWPreferences.shared.appearance=sender.selectedSegmentIndex; }
 - (void)toggleChanged:(UISwitch *)sender {
     if(sender.tag==0) { MWPreferences.shared.reduceMotion=sender.on; return; }
+    if(sender.tag==2) { MWPreferences.shared.edgeAlwaysExpanded=sender.on; return; }
     BOOL enabled=sender.on;
     void (^handler)(BOOL)=self.floatingHandler;
     [self dismissViewControllerAnimated:YES completion:^{if(handler) handler(enabled);}];

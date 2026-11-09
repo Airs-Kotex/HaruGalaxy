@@ -125,6 +125,8 @@ NSString *const MWFloatingHostDidBecomeReadyNotification=@"MWFloatingHostDidBeco
         window.hidden=_locked;
         if(!_locked) [window makeKeyAndVisible];
         [self applyLocked:_locked];
+        MWLog(@"overlay.interaction_ready",@{@"enabled":@(window.userInteractionEnabled),@"hidden":@(window.hidden),
+            @"key":@(window.isKeyWindow),@"rootController":window.rootViewController ? NSStringFromClass(window.rootViewController.class) : @"none"});
         return;
     }
     if(action==MWOverlayStartupWait) {

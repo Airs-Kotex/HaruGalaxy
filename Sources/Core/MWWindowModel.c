@@ -197,7 +197,7 @@ MWRect MWMaximizedAspectRect(MWRect viewport, double ratio) {
 }
 MWRect MWEdgeHandleRect(MWRect viewport, bool right, double position) {
     MWRect v=safe_viewport(viewport);
-    double height=fmin(48,v.height),width=fmin(44,v.width);
+    double height=fmin(MWEdgeTouchHeight,v.height),width=fmin(MWEdgeTouchWidth,v.width);
     double normalized=clamp(finite_or(position,0.35),0,1);
     return (MWRect){right ? v.x+v.width-width : v.x,v.y+normalized*(v.height-height),width,height};
 }

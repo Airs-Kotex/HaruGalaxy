@@ -4,7 +4,7 @@
 
 An experimental native multi-window workspace for TrollStore. HaruGalaxy hosts installed applications through FrontBoard scenes and provides movable windows, an edge window panel, free/original-aspect resizing, half-screen snapping, and local diagnostic exports.
 
-**Version 0.3.2 has been withdrawn. Use [0.3.1 Alpha](https://github.com/Airs-Kotex/HaruGalaxy/releases/tag/v0.3.1).** A user reported that the floating window stopped responding to taps across screens after updating to 0.3.2. Its release and tag have been removed, and the main branch code has been reverted to 0.3.1. The cause has not yet been confirmed; see the [withdrawal record](docs/research/2026-11-09-0.3.2-withdrawal.md).
+**This branch is the 0.3.3 device-testing candidate; [0.3.1 Alpha](https://github.com/Airs-Kotex/HaruGalaxy/releases/tag/v0.3.1) remains the rollback download.** Investigation found that three Objective-C entry methods in the withdrawn 0.3.2 did not override UIKit tracking callbacks. This branch corrects those selectors, retains entry recall and UI work reductions, and adds input-stage diagnostics. See the [investigation record](docs/research/2026-11-09-0.3.2-withdrawal.md).
 
 Earlier feedback on iPhone 14 Pro Max / iOS 16.2 confirmed background floating use and broadly usable interaction, with remaining entry recall and smoothness issues. Version 0.3.1 is the rollback baseline. Compilation and interface availability do not prove universal runtime compatibility.
 
@@ -14,12 +14,17 @@ Download [HaruGalaxy-0.3.1.tipa](https://github.com/Airs-Kotex/HaruGalaxy/releas
 
 The bundle identifier is `io.github.airskotex.harugalaxy`, adopted in 0.3.1. iOS installs it separately from 0.3.0 and earlier; preferences and diagnostic logs from that identifier do not migrate automatically. The app displays as 初春星河 in Simplified Chinese and HaruGalaxy in English.
 
+For repair testing, install `HaruGalaxy-0.3.3.tipa` (build 8) from the [0.3.3 prerelease](https://github.com/Airs-Kotex/HaruGalaxy/releases/tag/v0.3.3) over 0.3.1 or withdrawn 0.3.2 and follow the [device checklist](docs/device-validation-0.3.3.md). The controls below describe this candidate; actual touch delivery and perceived responsiveness remain unverified here.
+
 ## Controls
 
 | Gesture | Behavior |
 | --- | --- |
 | Tap the edge tab | Toggle the window panel |
+| Pull inward a short distance and release | Open the panel |
+| Hold still and release | Toggle the panel |
 | Hold the tab for 0.35 seconds, then drag | Reposition the tab without opening the panel |
+| Settings → Floating workspace → “入口保持展开” | Keep the entry expanded |
 | Tap outside the panel | Close it; consume that tap |
 | Drag a title bar | Move the window across the screen |
 | Top-right arc | Free resize; apps reflow into the new viewport |
@@ -27,6 +32,8 @@ The bundle identifier is `io.github.airskotex.harugalaxy`, adopted in 0.3.1. iOS
 | Drag a free window near an edge, dwell, release | Snap to top/bottom half in portrait or left/right half in landscape |
 | Minimize | Store the window in the edge panel, without a bottom shelf |
 | Maximize / title double tap | Fill the full bounds; restore through the edge panel |
+
+The retracted visual is 12×60 points in a stable 56×76-point touch target. Retraction pauses while interacting with the entry or panel. Move the entry if its touch area overlaps a frequently used app control.
 
 Keyboard focus is requested explicitly. If the floating scene cannot display a keyboard, use **“在主应用中输入”** (“Type in the main app”) to search in the normal app scene and return to floating windows afterward. Existing guest sessions remain alive. Query text is not logged.
 
@@ -37,6 +44,7 @@ System gestures, the Home indicator, and hardware cutouts remain subject to iOS 
 ```sh
 git clone https://github.com/Airs-Kotex/HaruGalaxy.git
 cd HaruGalaxy
+git switch fix/edge-tracking-0.3.3
 make test
 make package
 make verify
@@ -44,7 +52,7 @@ make verify
 
 Native packaging requires Clang, an iPhoneOS SDK, a Mach-O linker and ldid. See [build instructions](docs/build-environment.md). No SDK, credentials or user logs are distributed in source. Windows developers can build through WSL. The macOS discovery path is not yet independently validated.
 
-The CI job runs portable geometry, startup, logging and diagnostic-parser tests. It does not run UIKit or install the app on a device.
+The CI job runs portable geometry, entry decisions, startup, logging, selector regression and diagnostic-parser tests. Native packaging also checks the compiled entry implementation against SDK UIControl selectors, excluding header-only declarations. Neither check runs UIKit on a device.
 
 ## Report issues
 
@@ -55,6 +63,8 @@ Diagnostics are local, bounded to approximately 8 MiB, and exported only by the 
 ```sh
 python3 scripts/inspect_diagnostics.py /path/to/HaruGalaxy-Diagnostics-example.json
 ```
+
+Version 0.3.3 adds sampled root hit queries, actual entry event delivery, tracking, activation and blocked/open panel stages. The reader's `input_pipeline` orders the last 80 relevant events. Queries are not proof of delivered touches, missing records alone do not locate a failure, and panel preparation time is not FPS.
 
 ## Credits and license
 

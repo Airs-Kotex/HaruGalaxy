@@ -8,6 +8,9 @@
 #import <objc/runtime.h>
 
 static char MWRootAdapterKey;
+@interface MWRootWindowAdapter ()
+- (void)recordHitQuery:(UIView *)original overlayHit:(UIView *)overlayHit window:(UIWindow *)window event:(UIEvent *)event;
+@end
 static void (*MWOriginalRootLayout)(id,SEL);
 static UIView *(*MWOriginalRootHitTest)(id,SEL,CGPoint,UIEvent *);
 static void MWRootLayout(id window,SEL selector) {
@@ -20,11 +23,16 @@ static UIView *MWRootHitTest(id window,SEL selector,CGPoint point,UIEvent *event
     MWRootWindowAdapter *adapter=objc_getAssociatedObject(window,&MWRootAdapterKey);
     if(!adapter) return original;
     UIWindow *overlay=adapter.overlayWindow;
-    if(!overlay || overlay.hidden) return nil;
+    if(!overlay || overlay.hidden) {
+        [adapter recordHitQuery:original overlayHit:nil window:window event:event];
+        return nil;
+    }
     CGPoint overlayPoint=[overlay convertPoint:point fromWindow:window];
     // Use our window only to gate empty regions; keep UIKit's native routing
     // result for real controls/guest views rather than cross-window substitution.
-    return [overlay hitTest:overlayPoint withEvent:event] ? original : nil;
+    UIView *overlayHit=[overlay hitTest:overlayPoint withEvent:event];
+    [adapter recordHitQuery:original overlayHit:overlayHit window:window event:event];
+    return overlayHit ? original : nil;
 }
 
 static BOOL MWInstallRootAdapter(void) {
@@ -50,6 +58,23 @@ static BOOL MWInstallRootAdapter(void) {
 @implementation MWRootWindowAdapter {
     __weak UIView *_root;
     __weak UIWindow *_rootWindow;
+    NSUInteger _hitQueries;
+    NSTimeInterval _lastHitLog;
+}
+- (void)recordHitQuery:(UIView *)original overlayHit:(UIView *)overlayHit window:(UIWindow *)window event:(UIEvent *)event {
+    _hitQueries++;
+    NSTimeInterval now=NSProcessInfo.processInfo.systemUptime;
+    if(_hitQueries>3 && now-_lastHitLog<1.0) return;
+    _lastHitLog=now;
+    // A root query is not evidence of delivered touch. Sample it without
+    // recording coordinates or changing focus/visibility/routing.
+    MWTrace(@"overlay.hit_test",@{@"queries":@(_hitQueries),@"hasEvent":@(event!=nil),
+        @"nativeHit":original ? NSStringFromClass(original.class) : @"none",
+        @"overlayHit":overlayHit ? NSStringFromClass(overlayHit.class) : @"none",
+        @"gatedIn":@(overlayHit!=nil && original!=nil),
+        @"rootHidden":@(window.hidden),@"rootInteractive":@(window.userInteractionEnabled),
+        @"overlayHidden":@(self.overlayWindow.hidden),@"overlayPresent":@(self.overlayWindow!=nil),
+        @"overlayInteractive":@(self.overlayWindow.userInteractionEnabled)});
 }
 - (BOOL)prepareWithError:(NSError **)error {
     if(MWInstallRootAdapter()) return YES;

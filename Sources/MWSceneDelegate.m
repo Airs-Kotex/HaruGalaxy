@@ -4,10 +4,28 @@
 #import "UI/MWWorkspaceController.h"
 #import "UI/MWPreferences.h"
 #import "UI/MWWorkspaceCoordinator.h"
+#import "UI/MWEdgeHandle.h"
 #import "Platform/MWPrivate.h"
 #import "Diagnostics/MWDiagnostics.h"
 
-@interface MWOverlayWindow : UIWindow
+@interface MWInputWindow : UIWindow
+@end
+@implementation MWInputWindow
+- (void)sendEvent:(UIEvent *)event {
+    if(event.type==UIEventTypeTouches) for(UITouch *touch in [event touchesForWindow:self]) {
+        if(touch.phase!=UITouchPhaseBegan && touch.phase!=UITouchPhaseEnded && touch.phase!=UITouchPhaseCancelled) continue;
+        for(UIView *view=touch.view;view && view!=self;view=view.superview) if([view isKindOfClass:MWEdgeHandle.class]) {
+            // Only the app-owned entry, never guest touches or keyboard input.
+            MWTrace(@"input.edge_delivery",@{@"phase":@(touch.phase),@"windowClass":NSStringFromClass(self.class),
+                @"interactive":@(self.userInteractionEnabled),@"key":@(self.isKeyWindow)});
+            break;
+        }
+    }
+    [super sendEvent:event];
+}
+@end
+
+@interface MWOverlayWindow : MWInputWindow
 @end
 @implementation MWOverlayWindow
 - (BOOL)_allowsOcclusionDetectionOverride { return YES; }
@@ -35,7 +53,7 @@
         @catch(NSException *exception) { NSLog(@"Discarding stale overlay: %@",exception.reason); }
         return;
     }
-    self.window=_floating ? [[MWOverlayWindow alloc] initWithWindowScene:windowScene] : [[UIWindow alloc] initWithWindowScene:windowScene];
+    self.window=_floating ? [[MWOverlayWindow alloc] initWithWindowScene:windowScene] : [[MWInputWindow alloc] initWithWindowScene:windowScene];
     self.window.backgroundColor=UIColor.clearColor;
     self.window.opaque=NO; self.window.layer.opaque=NO;
     self.window.overrideUserInterfaceStyle=MWPreferences.shared.appearance;

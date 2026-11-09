@@ -10,6 +10,7 @@ FOUNDATION_EXPORT NSDictionary *MWErrorFields(NSError *error);
 @property(nonatomic,copy,readonly) NSString *sessionIdentifier;
 - (void)start;
 - (void)flush;
+- (void)flushSoon;
 - (void)markProblem;
 - (NSDictionary *)environmentSnapshot;
 - (void)exportWithCompletion:(void (^)(NSURL *file, NSError *error))completion;

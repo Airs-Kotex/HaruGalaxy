@@ -33,11 +33,26 @@ def summarize(bundle):
     counts = Counter(row["event"] for row in records)
     important = [row for row in records if any(token in row["event"] for token in
                  ("failed", "exception", "timeout", "invalidated", "unavailable", "gap", "problem_marker", "background.requested", "guard."))]
+    input_events = (
+        "overlay.interaction_ready", "overlay.hit_test", "input.edge_delivery",
+        "edge.touch_begin", "edge.touch_rejected", "edge.touch_end", "edge.touch_cancelled",
+        "edge.activate", "edge.move_begin", "edge.move_end", "panel.blocked", "panel.open", "panel.close",
+    )
+    input_trace = [row for row in records if row["event"] in input_events]
+    stages = {"counts": {name: counts[name] for name in input_events if counts[name]},
+              "recent_events": input_trace[-80:],
+              "interpretation": (
+                  "Root hit tests are sampled queries, not delivered touches. input.edge_delivery records only "
+                  "app-owned entry touch delivery; edge.touch_begin confirms the UIControl callback ran. "
+                  "edge.activate requests the panel; panel.blocked means a presented controller prevented it. "
+                  "Missing records alone do not locate a failure: detailed logging, sampling, rotation and "
+                  "different sessions can affect this trace. preparationMs is synchronous layout time, not FPS.")}
     return {"environment": environment, "events": len(records), "sessions": sorted({str(row.get("session", "unknown")) for row in records}),
             "counts": dict(sorted(counts.items())), "malformed_lines": malformed,
             "dropped": bundle.get("dropped"), "storage": bundle.get("storage"), "important_events": important[-80:],
             "export_errors": bundle.get("exportErrors", {}), "raw_files": list(bundle.get("rawFiles", {})),
             "recovered_tail_bytes": bundle.get("recoveredTailBytes", 0),
+            "input_pipeline": stages,
             "interpretation": "A heartbeat gap is an observation, not proof of a crash. Assertion valid is not proof of rendering or input."}
 
 
