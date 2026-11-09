@@ -4,6 +4,15 @@
 NSString *const MWPreferencesDidChangeNotification=@"MWPreferencesDidChange";
 
 @implementation MWPreferences
+- (MWResizeMode)resizeModeForBundle:(NSString *)bundle {
+    NSNumber *value=[NSUserDefaults.standardUserDefaults dictionaryForKey:@"windowResizeModes"][bundle];
+    return [value isKindOfClass:NSNumber.class] && value.integerValue==MWResizeProportional ? MWResizeProportional : MWResizeFree;
+}
+- (void)saveResizeMode:(MWResizeMode)mode forBundle:(NSString *)bundle {
+    NSMutableDictionary *modes=[[NSUserDefaults.standardUserDefaults dictionaryForKey:@"windowResizeModes"] mutableCopy] ?: [NSMutableDictionary dictionary];
+    if(modes.count>=50 && !modes[bundle]) [modes removeAllObjects];
+    modes[bundle]=@(mode); [NSUserDefaults.standardUserDefaults setObject:modes forKey:@"windowResizeModes"];
+}
 + (instancetype)shared {
     static MWPreferences *prefs; static dispatch_once_t once;
     dispatch_once(&once,^{prefs=[self new];}); return prefs;

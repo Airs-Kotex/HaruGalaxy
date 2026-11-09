@@ -12,6 +12,7 @@
 @property(nonatomic,copy) void (^closeHandler)(void);
 @property(nonatomic,copy) void (^geometryHandler)(CGRect frame);
 @property(nonatomic,copy) void (^stateHandler)(void);
+@property(nonatomic,copy) void (^snapPreviewHandler)(CGRect frame, BOOL visible);
 @property(nonatomic,getter=isActive) BOOL active;
 - (instancetype)initWithApplication:(MWApplication *)application frame:(CGRect)frame;
 - (void)start;
@@ -20,5 +21,8 @@
 - (void)restore;
 - (void)close;
 - (void)setHostVisible:(BOOL)visible;
+- (void)toggleMaximize;
+- (void)setInitialResizeMode:(MWResizeMode)mode;
+- (void)cancelInteractions;
 @end
 

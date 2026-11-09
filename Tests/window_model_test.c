@@ -43,7 +43,7 @@ static void maximize_restore(void) {
     assert(!MWWindowToggleMaximize(&m,viewport));
     assert(MWWindowApply(&m,MWEventReady));
     assert(MWWindowToggleMaximize(&m,viewport));
-    assert(fabs(m.frame.width/(m.frame.height-MWTitleHeight)-m.aspectRatio)<0.001);
+    equal_rect(m.frame,viewport);
     assert(MWWindowApply(&m,MWEventMinimize));
     assert(m.maximized);
     assert(MWWindowApply(&m,MWEventRestore));
@@ -52,9 +52,60 @@ static void maximize_restore(void) {
     assert(MWWindowToggleMaximize(&m,viewport));
     MWRect rotated={30,10,730,370};
     MWWindowReflow(&m,rotated);
-    assert(m.frame.width<=rotated.width && m.frame.height<=rotated.height);
+    equal_rect(m.frame,rotated);
     assert(MWWindowToggleMaximize(&m,rotated));
-    equal_rect(m.frame,MWFitAspectRect(original,rotated,m.aspectRatio));
+    equal_rect(m.frame,MWConstrainRect(original,rotated));
+}
+
+static void free_resize_and_snap(void) {
+    MWRect screen={0,0,430,932}, start={40,80,300,500};
+    MWRect r=MWResizeFreeRect(start,50,80,screen,true);
+    equal_rect(r,(MWRect){90,80,250,580});
+    assert(r.x+r.width==start.x+start.width);
+    r=MWResizeFreeRect(start,-1000,2000,screen,true);
+    assert(r.x==0 && r.width==340 && r.y+r.height==932);
+    assert(MWSnapTargetAtPoint(screen,215,12)==MWSnapTop);
+    assert(MWSnapTargetAtPoint(screen,215,920)==MWSnapBottom);
+    assert(MWSnapTargetAtPoint(screen,3,400)==MWSnapNone);
+    assert(MWSnapTargetAtPoint((MWRect){0,0,932,430},12,215)==MWSnapLeft);
+    assert(MWSnapTargetAtPoint((MWRect){0,0,932,430},920,215)==MWSnapRight);
+    assert(MWSnapTargetAtPoint(screen,NAN,12)==MWSnapNone);
+    equal_rect(MWHalfScreenRect(screen,MWSnapTop),(MWRect){0,0,430,466});
+    equal_rect(MWHalfScreenRect(screen,MWSnapBottom),(MWRect){0,466,430,466});
+    equal_rect(MWHalfScreenRect((MWRect){0,0,933,430},MWSnapRight),(MWRect){466.5,0,466.5,430});
+    MWWindowModel m=MWWindowCreate(start);
+    assert(m.resizeMode==MWResizeFree);
+    MWWindowApply(&m,MWEventReady);
+    assert(MWWindowSnap(&m,MWSnapBottom,screen));
+    equal_rect(m.frame,(MWRect){0,466,430,466});
+    MWWindowReflow(&m,(MWRect){0,0,932,430});
+    assert(m.snapTarget==MWSnapRight);
+    equal_rect(m.frame,(MWRect){466,0,466,430});
+    MWWindowReflow(&m,screen);
+    assert(MWWindowToggleMaximize(&m,screen));
+    equal_rect(m.frame,screen);
+    assert(MWWindowToggleMaximize(&m,screen));
+    assert(m.snapTarget==MWSnapBottom);
+    equal_rect(m.frame,(MWRect){0,466,430,466});
+    m.resizeMode=MWResizeProportional;
+    assert(!MWWindowSnap(&m,MWSnapTop,screen));
+    m.snapTarget=MWSnapNone;
+    m.aspectRatio=0.5;
+    MWWindowReflow(&m,screen);
+    assert(fabs(m.frame.width/(m.frame.height-48)-0.5)<0.00001);
+    MWRect pinned={0,0,430,466};
+    MWRect detached=MWUnpinFrame(pinned,59);
+    equal_rect(detached,(MWRect){0,59,430,407});
+    // Both modes start with the same screen-space guest origin and dimensions.
+    assert(detached.y+48==pinned.y+59+48);
+    assert(detached.height-48==pinned.height-59-48);
+    equal_rect(MWResizeFreeRect(detached,0,0,screen,true),detached);
+    equal_rect(MWResizeAspectRect(detached,0,0,screen,430.0/359),detached);
+    for(int dx=-600;dx<600;dx+=23) for(int dy=-500;dy<900;dy+=29) {
+        r=MWResizeFreeRect(start,dx,dy,screen,true);
+        assert(r.x>=0 && r.y>=0 && r.x+r.width<=430.001 && r.y+r.height<=932.001);
+        assert(fabs(r.x+r.width-340)<0.0001);
+    }
 }
 
 static void proportional_scaling(void) {
@@ -101,7 +152,7 @@ static void proportional_scaling(void) {
 }
 
 int main(void) {
-    lifecycle(); bounds(); maximize_restore(); proportional_scaling();
-    puts("PASS: lifecycle, boundaries, proportional scaling, maximize/restore, rotation and edge handle");
+    lifecycle(); bounds(); maximize_restore(); proportional_scaling(); free_resize_and_snap();
+    puts("PASS: lifecycle, free/proportional resize, full/half-screen, top inset continuity, rotation and edge handle");
     return 0;
 }

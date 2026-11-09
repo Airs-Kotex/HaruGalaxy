@@ -20,7 +20,9 @@ MWRect MWConstrainRect(MWRect r, MWRect viewport) {
 }
 
 MWWindowModel MWWindowCreate(MWRect frame) {
-    MWWindowModel m={MWWindowLoading,frame,frame,false,frame.width/fmax(1,frame.height-MWTitleHeight)};
+    MWWindowModel m={.state=MWWindowLoading,.frame=frame,.restoreFrame=frame,.maximized=false,
+        .aspectRatio=frame.width/fmax(1,frame.height-MWTitleHeight),.resizeMode=MWResizeFree,.restoreResizeMode=MWResizeFree,
+        .snapTarget=MWSnapNone,.restoreSnapTarget=MWSnapNone};
     return m;
 }
 
@@ -50,15 +52,83 @@ bool MWWindowApply(MWWindowModel *m, MWWindowEvent e) {
 
 bool MWWindowToggleMaximize(MWWindowModel *m, MWRect viewport) {
     if(!m || m->state!=MWWindowVisible) return false;
-    if(m->maximized) m->frame=MWFitAspectRect(m->restoreFrame,viewport,m->aspectRatio);
-    else { m->restoreFrame=m->frame; m->frame=MWMaximizedAspectRect(viewport,m->aspectRatio); }
+    if(m->maximized) {
+        m->resizeMode=m->restoreResizeMode; m->snapTarget=MWReorientedSnapTarget(viewport,m->restoreSnapTarget);
+        m->frame=m->snapTarget!=MWSnapNone ? MWHalfScreenRect(viewport,m->snapTarget) :
+            (m->resizeMode==MWResizeProportional ? MWFitAspectRect(m->restoreFrame,viewport,m->aspectRatio) : MWConstrainRect(m->restoreFrame,viewport));
+    } else {
+        m->restoreFrame=m->frame; m->restoreResizeMode=m->resizeMode; m->restoreSnapTarget=m->snapTarget;
+        m->snapTarget=MWSnapNone; m->frame=safe_viewport(viewport);
+    }
     m->maximized=!m->maximized;
     return true;
 }
 
 void MWWindowReflow(MWWindowModel *m, MWRect viewport) {
     if(!m) return;
-    m->frame=m->maximized ? MWMaximizedAspectRect(viewport,m->aspectRatio) : MWFitAspectRect(m->frame,viewport,m->aspectRatio);
+    if(m->maximized) { m->frame=safe_viewport(viewport); m->restoreSnapTarget=MWReorientedSnapTarget(viewport,m->restoreSnapTarget); }
+    else if(m->snapTarget!=MWSnapNone) {
+        m->snapTarget=MWReorientedSnapTarget(viewport,m->snapTarget);
+        m->frame=MWHalfScreenRect(viewport,m->snapTarget);
+    }
+    else m->frame=m->resizeMode==MWResizeProportional ? MWFitAspectRect(m->frame,viewport,m->aspectRatio) : MWConstrainRect(m->frame,viewport);
+}
+
+MWRect MWResizeFreeRect(MWRect start,double dx,double dy,MWRect viewport,bool leftHandle) {
+    MWRect v=safe_viewport(viewport); start=MWConstrainRect(start,v);
+    double right=start.x+start.width;
+    double maxWidth=leftHandle ? right-v.x : v.x+v.width-start.x;
+    double maxHeight=v.y+v.height-start.y;
+    start.width=clamp(start.width+(leftHandle ? -1 : 1)*finite_or(dx,0),fmin(220,maxWidth),maxWidth);
+    start.height=clamp(start.height+finite_or(dy,0),fmin(200,maxHeight),maxHeight);
+    if(leftHandle) start.x=right-start.width;
+    return start;
+}
+MWRect MWUnpinFrame(MWRect frame,double extraTopInset) {
+    double inset=clamp(finite_or(extraTopInset,0),0,fmax(0,frame.height-MWTitleHeight-1));
+    frame.y+=inset; frame.height-=inset;
+    return frame;
+}
+MWRect MWHalfScreenRect(MWRect viewport,MWSnapTarget target) {
+    MWRect r=safe_viewport(viewport);
+    switch(target) {
+        case MWSnapTop: r.height/=2; break;
+        case MWSnapBottom: r.height/=2; r.y+=r.height; break;
+        case MWSnapLeft: r.width/=2; break;
+        case MWSnapRight: r.width/=2; r.x+=r.width; break;
+        case MWSnapNone: break;
+    }
+    return r;
+}
+MWSnapTarget MWReorientedSnapTarget(MWRect viewport,MWSnapTarget target) {
+    MWRect v=safe_viewport(viewport);
+    if(v.height>=v.width) {
+        if(target==MWSnapLeft) return MWSnapTop;
+        if(target==MWSnapRight) return MWSnapBottom;
+    } else {
+        if(target==MWSnapTop) return MWSnapLeft;
+        if(target==MWSnapBottom) return MWSnapRight;
+    }
+    return target;
+}
+MWSnapTarget MWSnapTargetAtPoint(MWRect viewport,double x,double y) {
+    if(!isfinite(x) || !isfinite(y)) return MWSnapNone;
+    MWRect v=safe_viewport(viewport);
+    if(x<v.x-24 || y<v.y-24 || x>v.x+v.width+24 || y>v.y+v.height+24) return MWSnapNone;
+    if(v.height>=v.width) {
+        double threshold=fmin(36,v.height/4);
+        if(y<=v.y+threshold) return MWSnapTop;
+        if(y>=v.y+v.height-threshold) return MWSnapBottom;
+    } else {
+        double threshold=fmin(36,v.width/4);
+        if(x<=v.x+threshold) return MWSnapLeft;
+        if(x>=v.x+v.width-threshold) return MWSnapRight;
+    }
+    return MWSnapNone;
+}
+bool MWWindowSnap(MWWindowModel *m,MWSnapTarget target,MWRect viewport) {
+    if(!m || m->state!=MWWindowVisible || m->resizeMode!=MWResizeFree || target==MWSnapNone) return false;
+    m->maximized=false; m->snapTarget=MWReorientedSnapTarget(viewport,target); m->frame=MWHalfScreenRect(viewport,m->snapTarget); return true;
 }
 
 static double safe_ratio(double r) { return isfinite(r) && r>0.01 && r<100 ? r : 0.5; }
