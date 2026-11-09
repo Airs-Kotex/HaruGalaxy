@@ -5,8 +5,6 @@
 
 typedef struct { double x, y, width, height; } MWRect;
 #define MWTitleHeight 48.0
-#define MWEdgeTouchWidth 56.0
-#define MWEdgeTouchHeight 76.0
 typedef enum { MWWindowLoading, MWWindowVisible, MWWindowMinimized, MWWindowFailed, MWWindowClosed } MWWindowState;
 typedef enum { MWEventReady, MWEventFailed, MWEventRetry, MWEventMinimize, MWEventRestore, MWEventClose } MWWindowEvent;
 typedef enum { MWResizeFree, MWResizeProportional } MWResizeMode;

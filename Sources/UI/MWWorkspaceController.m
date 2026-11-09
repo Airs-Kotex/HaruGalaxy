@@ -105,7 +105,6 @@
 - (void)applyPreferences {
     self.overrideUserInterfaceStyle=MWPreferences.shared.appearance;
     self.view.window.overrideUserInterfaceStyle=MWPreferences.shared.appearance;
-    [_bubble applyPreferences];
     [self updateChrome];
 }
 - (void)viewDidLayoutSubviews {
@@ -119,11 +118,9 @@
     _emptyTitle.frame=CGRectMake(left,emptyY,width,40);
     _emptyHint.frame=CGRectMake(left,emptyY+48,width,62);
     _add.frame=CGRectMake(CGRectGetMidX(bounds)-90,emptyY+128,180,48);
-    [_bubble applyViewport:CGRectMake(0,safe.top+12,bounds.size.width,MAX(1,bounds.size.height-safe.top-safe.bottom-24))];
-    if(!_panel.hidden) {
-        _panelShield.frame=bounds;
-        [_panel placeNearAnchor:_bubble.frame inBounds:UIEdgeInsetsInsetRect(bounds,safe)];
-    }
+    [_bubble applyViewport:CGRectMake(0,safe.top+12,bounds.size.width,MAX(48,bounds.size.height-safe.top-safe.bottom-24))];
+    _panelShield.frame=bounds;
+    [_panel placeNearAnchor:_bubble.frame inBounds:UIEdgeInsetsInsetRect(bounds,safe)];
     _snapHint.frame=CGRectMake(8,CGRectGetMidY(_snapPreview.bounds)-22,MAX(1,_snapPreview.bounds.size.width-16),44);
     CGRect viewport=bounds;
     if(!CGRectEqualToRect(_viewport,viewport)) {
@@ -163,12 +160,10 @@
 - (void)togglePanel {
     if(self.presentedViewController) return;
     if(!_panel.hidden) { [self closePanel]; return; }
-    CFTimeInterval started=CACurrentMediaTime();
     for(MWWindowView *window in _windows.allValues) [window cancelInteractions];
     _panel.hidden=NO; _panelShield.hidden=NO; _bubble.panelOpen=YES;
     [self refreshPanel]; [self raiseControls]; [self.view setNeedsLayout]; [self.view layoutIfNeeded];
-    MWLog(@"panel.open",@{@"windows":@(_windows.count),@"minimized":@(_bubble.minimizedCount),
-        @"preparationMs":@((CACurrentMediaTime()-started)*1000),@"rowsCreated":@(_panel.createdRowCount)});
+    MWLog(@"panel.open",@{@"windows":@(_windows.count),@"minimized":@(_bubble.minimizedCount)});
 }
 - (void)closePanel {
     if(!_panel || _panel.hidden) return;
@@ -275,7 +270,7 @@
 - (void)setHostVisible:(BOOL)visible {
     MWLog(@"workspace.visibility",@{@"visible":@(visible),@"floating":@(_floating),@"windows":@(_windows.count)});
     _hostHidden=!visible;
-    if(!visible) { [_bubble cancelInteraction]; [self closePanel]; }
+    if(!visible) [self closePanel];
     for(MWWindowView *window in _windows.allValues) [window setHostVisible:visible];
 }
 - (void)openSettings {

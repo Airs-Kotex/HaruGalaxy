@@ -6,7 +6,6 @@ FOUNDATION_EXPORT NSString *const MWPreferencesDidChangeNotification;
 + (instancetype)shared;
 @property(nonatomic) UIUserInterfaceStyle appearance;
 @property(nonatomic) BOOL reduceMotion;
-@property(nonatomic) BOOL edgeAlwaysExpanded;
 @property(nonatomic,readonly) NSArray<NSString *> *recentBundleIDs;
 - (void)recordUse:(NSString *)bundle;
 - (CGRect)frameForBundle:(NSString *)bundle viewport:(CGRect)viewport fallback:(CGRect)fallback;

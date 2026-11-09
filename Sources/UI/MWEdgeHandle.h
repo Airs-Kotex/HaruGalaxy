@@ -7,6 +7,4 @@
 @property(nonatomic) NSUInteger minimizedCount;
 @property(nonatomic) BOOL panelOpen;
 - (void)applyViewport:(CGRect)viewport;
-- (void)cancelInteraction;
-- (void)applyPreferences;
 @end

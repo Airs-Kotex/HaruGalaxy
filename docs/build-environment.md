@@ -1,6 +1,6 @@
 # 构建环境与复现
 
-0.3.2 构建使用 Debian 12 aarch64、Clang/LLD 14.0.6 和 Theos 发布的 iPhoneOS16.5.sdk 归档；早期版本使用 Ubuntu 22.04 x86_64、Clang/LLD 14.0.0。两种主机均交叉编译为 arm64 / iOS 14.0 的原生 Objective-C 应用。该 SDK 归档内部 `SDKSettings.plist` 的 Version 为 16.4，构建报告按实际元数据记录。源码未使用 Swift。
+本次构建使用 Ubuntu 22.04 x86_64、Clang 14 和 Theos 发布的 iPhoneOS16.5.sdk 归档，0.2.0 产物为 arm64 / iOS 14.0 的原生 Objective-C 应用。该 SDK 归档内部 `SDKSettings.plist` 的 Version 为 16.4，构建报告按实际元数据记录。源码未使用 Swift。
 
 ## Linux
 
@@ -10,12 +10,7 @@
 sudo apt-get install clang-14 lld-14 make python3 gcc xz-utils
 mkdir -p .toolchain
 curl -fL --retry 2 -o .toolchain/iPhoneOS16.5.sdk.tar.xz https://github.com/theos/sdks/releases/download/master-146e41f/iPhoneOS16.5.sdk.tar.xz
-case "$(uname -m)" in
-  x86_64) ldid_arch=x86_64 ;;
-  aarch64|arm64) ldid_arch=aarch64 ;;
-  *) echo 'Unsupported host architecture'; exit 1 ;;
-esac
-curl -fL --retry 2 -o .toolchain/ldid "https://github.com/ProcursusTeam/ldid/releases/download/v2.1.5-procursus7/ldid_linux_${ldid_arch}"
+curl -fL --retry 2 -o .toolchain/ldid https://github.com/ProcursusTeam/ldid/releases/download/v2.1.5-procursus7/ldid_linux_x86_64
 sha256sum .toolchain/iPhoneOS16.5.sdk.tar.xz .toolchain/ldid
 tar -xJf .toolchain/iPhoneOS16.5.sdk.tar.xz -C .toolchain
 chmod +x .toolchain/ldid
@@ -29,9 +24,8 @@ make package
 | --- | --- |
 | iPhoneOS16.5.sdk.tar.xz | `5e0fd3f01266cce4ce012d4a99b38eb56578fca40d09edc81cd83dee958202fb` |
 | ldid_linux_x86_64 | `4b8862b2fefa2cd7fa8f88cb0310779619aeaa8c72d6aff22f019b470f2fa99a` |
-| ldid_linux_aarch64 | `bddd525902f242d4cdf7aa40a7f0c2c85c42ab9440d58664251e8738ef0c565d` |
 
-0.3.2 工具版本：`Debian clang version 14.0.6`、`Debian LLD 14.0.6`、ldid 发布 `v2.1.5-procursus7`。更换主机架构后需重新选择 ldid，不能在 ARM 主机执行已有的 x86_64 二进制；iOS 输出架构仍由编译目标控制。
+工具版本：`Ubuntu clang version 14.0.0-1ubuntu1.1`、`Ubuntu LLD 14.0.0`、ldid 发布 `v2.1.5-procursus7`。
 
 SDK 来源：[theos/sdks 固定发布](https://github.com/theos/sdks/releases/tag/master-146e41f)。签名工具来源：[ProcursusTeam/ldid 固定发布](https://github.com/ProcursusTeam/ldid/releases/tag/v2.1.5-procursus7)。使用下载内容时请遵守其提供方的许可条件。
 

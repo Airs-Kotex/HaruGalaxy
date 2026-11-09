@@ -212,16 +212,13 @@ static CGRect MWToCGRect(MWRect r) { return CGRectMake(r.x,r.y,r.width,r.height)
     _resize.hidden=_freeResize.hidden=_model.maximized || _model.state!=MWWindowVisible;
 }
 - (void)setActive:(BOOL)active {
-    if(_active==active && _surface.layer.borderColor) return;
     _active=active;
     UIColor *color=active ? UIColor.systemTealColor : UIColor.separatorColor;
     _surface.layer.borderColor=[color resolvedColorWithTraitCollection:self.traitCollection].CGColor;
     self.layer.shadowOpacity=active ? 0.23 : 0.12;
 }
 - (void)traitCollectionDidChange:(UITraitCollection *)previous {
-    [super traitCollectionDidChange:previous];
-    UIColor *color=_active ? UIColor.systemTealColor : UIColor.separatorColor;
-    _surface.layer.borderColor=[color resolvedColorWithTraitCollection:self.traitCollection].CGColor;
+    [super traitCollectionDidChange:previous]; [self setActive:self.active];
 }
 - (BOOL)gestureRecognizer:(UIGestureRecognizer *)recognizer shouldReceiveTouch:(UITouch *)touch {
     if(recognizer.view==_resize || recognizer.view==_freeResize) return YES;

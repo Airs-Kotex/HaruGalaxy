@@ -114,11 +114,7 @@ NSDictionary *MWErrorFields(NSError *error) {
     if([notification.name isEqual:UIApplicationWillTerminateNotification]) {
         [NSUserDefaults.standardUserDefaults setObject:@{@"id":self.sessionIdentifier,@"cleanTerminationObserved":@YES} forKey:@"previousDiagnosticSession"];
     }
-    // Background/termination still need a durability boundary before the
-    // process may be suspended. Ordinary UI lifecycle changes do not.
-    if([notification.name isEqual:UIApplicationDidEnterBackgroundNotification] ||
-       [notification.name isEqual:UIApplicationWillTerminateNotification]) [self flush];
-    else [self flushSoon];
+    [self flush];
 }
 - (void)heartbeat {
     double now=NSProcessInfo.processInfo.systemUptime,interval=now-_lastHeartbeat; _lastHeartbeat=now;
@@ -165,8 +161,7 @@ NSDictionary *MWErrorFields(NSError *error) {
     if(dispatch_get_specific(MWLogQueueKey)) MWLogStoreFlush(&_store);
     else dispatch_sync(_queue,^{MWLogStoreFlush(&self->_store);});
 }
-- (void)flushSoon { dispatch_async(_queue,^{MWLogStoreFlush(&self->_store);}); }
-- (void)markProblem { MWLog(@"user.problem_marker",@{@"note":@"User marked the most recent issue"}); [self flushSoon]; }
+- (void)markProblem { MWLog(@"user.problem_marker",@{@"note":@"User marked the most recent issue"}); [self flush]; }
 - (void)exportWithCompletion:(void (^)(NSURL *,NSError *))completion {
     NSDictionary *environment=[self environmentSnapshot];
     MWLog(@"diagnostics.export",@{});

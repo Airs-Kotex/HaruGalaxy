@@ -30,11 +30,6 @@ NSString *const MWPreferencesDidChangeNotification=@"MWPreferencesDidChange";
     [NSUserDefaults.standardUserDefaults setBool:value forKey:@"reduceMotion"];
     [[NSNotificationCenter defaultCenter] postNotificationName:MWPreferencesDidChangeNotification object:self];
 }
-- (BOOL)edgeAlwaysExpanded { return [NSUserDefaults.standardUserDefaults boolForKey:@"edgeAlwaysExpanded"]; }
-- (void)setEdgeAlwaysExpanded:(BOOL)value {
-    [NSUserDefaults.standardUserDefaults setBool:value forKey:@"edgeAlwaysExpanded"];
-    [[NSNotificationCenter defaultCenter] postNotificationName:MWPreferencesDidChangeNotification object:self];
-}
 - (NSArray<NSString *> *)recentBundleIDs {
     NSArray *saved=[NSUserDefaults.standardUserDefaults arrayForKey:@"recentApps"] ?: @[];
     NSMutableArray *valid=[NSMutableArray array];
