@@ -7,7 +7,7 @@ import sys
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
-NAME = "UiharuXPro4MilkyWay"
+NAME = "HaruGalaxy"
 
 
 def verify(path):
@@ -17,8 +17,11 @@ def verify(path):
         assert all(name.startswith(prefix) for name in archive.namelist()), "Unexpected package path"
         assert archive.testzip() is None, "Corrupt zip member"
         info = plistlib.loads(archive.read(prefix + "Info.plist"))
-        assert info["CFBundleIdentifier"] == "io.github.uiharuxpro4milkyway", "Wrong bundle ID"
+        assert info["CFBundleIdentifier"] == "io.github.airskotex.harugalaxy", "Wrong bundle ID"
         assert info["CFBundleExecutable"] == NAME
+        assert info["CFBundleDisplayName"] == "初春星河" and info["CFBundleName"] == "HaruGalaxy"
+        assert '"初春星河"' in archive.read(prefix + "zh-Hans.lproj/InfoPlist.strings").decode()
+        assert '"HaruGalaxy"' in archive.read(prefix + "en.lproj/InfoPlist.strings").decode()
         assert info["MinimumOSVersion"] == expected_info["MinimumOSVersion"]
         assert info["CFBundleShortVersionString"] == expected_info["CFBundleShortVersionString"]
         assert info["UIDeviceFamily"] == [1, 2]

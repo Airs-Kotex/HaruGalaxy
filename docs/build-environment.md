@@ -37,7 +37,7 @@ python3 scripts/build.py --sdk /absolute/path/iPhoneOS16.5.sdk --clang /absolute
 
 也可以设置 `IOS_SDK`、`IOS_CLANG`、`IOS_LD`、`LDID`。macOS 默认通过 `xcrun --sdk iphoneos --show-sdk-path` 查找 SDK，并使用系统 Clang/ld；该分支尚未在 macOS 验证，报错时请保存完整编译输出。不同 Clang/SDK 组合可能需要调整声明或链接选项。
 
-编译启用 `-Wall -Wextra -Werror`、ARC、栈保护与 Objective-C exceptions。按参数数组调用工具，无 shell 命令拼接。脚本只清理自身的 `build/ios/objects` 和 `build/ios/Payload/UiharuXPro4MilkyWay.app`，防止旧文件进入新包。
+编译启用 `-Wall -Wextra -Werror`、ARC、栈保护与 Objective-C exceptions。按参数数组调用工具，无 shell 命令拼接。脚本只清理自身的 `build/ios/objects` 和 `build/ios/Payload/HaruGalaxy.app`，防止旧文件进入新包。0.3.1 起安装包为 `HaruGalaxy-<version>.tipa`，Bundle ID为`io.github.airskotex.harugalaxy`；从旧标识安装会形成独立应用，不能当作同标识覆盖升级。
 
 0.2.0 使用 iOS 14 目标和 `@available(iOS 15, *)` 样式回退。Linux 链接器不会自动提供 Apple compiler-rt，因此将 LLVM 14.0.0 原始 `os_version_check.c` 和许可证纳入 ThirdParty；它负责真实系统版本检测，未用恒真返回值绕过可用性检查。
 

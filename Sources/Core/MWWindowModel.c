@@ -84,6 +84,27 @@ MWRect MWResizeFreeRect(MWRect start,double dx,double dy,MWRect viewport,bool le
     if(leftHandle) start.x=right-start.width;
     return start;
 }
+MWRect MWResizeTopRightRect(MWRect start,double dx,double dy,MWRect viewport) {
+    MWRect v=safe_viewport(viewport); start=MWConstrainRect(start,v);
+    double bottom=start.y+start.height,maxWidth=v.x+v.width-start.x,maxHeight=bottom-v.y;
+    start.width=clamp(start.width+finite_or(dx,0),fmin(220,maxWidth),maxWidth);
+    start.height=clamp(start.height-finite_or(dy,0),fmin(200,maxHeight),maxHeight);
+    start.y=bottom-start.height; return start;
+}
+MWRect MWMoveRect(MWRect start,double dx,double dy,MWRect viewport) {
+    MWRect v=safe_viewport(viewport);
+    start.x=clamp(start.x+finite_or(dx,0),v.x,v.x+fmax(0,v.width-start.width));
+    start.y=clamp(start.y+finite_or(dy,0),v.y,v.y+fmax(0,v.height-start.height));
+    return start;
+}
+MWRect MWSystemCanvas(double width,double height,bool landscape) {
+    double w=fmax(1,finite_or(width,430)),h=fmax(1,finite_or(height,932));
+    return (MWRect){0,0,landscape ? fmax(w,h) : fmin(w,h),landscape ? fmin(w,h) : fmax(w,h)};
+}
+bool MWCornerHit(double x,double y,double width,double height,bool top) {
+    if(!isfinite(x)||!isfinite(y)||x<0||y<0||x>width||y>height) return false;
+    return x>=width-12 || (top ? y<=12 : y>=height-12);
+}
 MWRect MWUnpinFrame(MWRect frame,double extraTopInset) {
     double inset=clamp(finite_or(extraTopInset,0),0,fmax(0,frame.height-MWTitleHeight-1));
     frame.y+=inset; frame.height-=inset;
@@ -123,6 +144,19 @@ MWSnapTarget MWSnapTargetAtPoint(MWRect viewport,double x,double y) {
         double threshold=fmin(36,v.width/4);
         if(x<=v.x+threshold) return MWSnapLeft;
         if(x>=v.x+v.width-threshold) return MWSnapRight;
+    }
+    return MWSnapNone;
+}
+MWSnapTarget MWSnapTargetForDrag(MWRect viewport,MWRect start,MWRect proposed) {
+    MWRect v=safe_viewport(viewport);
+    if(!isfinite(proposed.x)||!isfinite(proposed.y)||!isfinite(proposed.width)||!isfinite(proposed.height)) return MWSnapNone;
+    double dx=proposed.x-start.x,dy=proposed.y-start.y;
+    if(v.height>=v.width) {
+        if(dy<=-24 && proposed.y<=v.y+48) return MWSnapTop;
+        if(dy>=24 && proposed.y+proposed.height>=v.y+v.height-48) return MWSnapBottom;
+    } else {
+        if(dx<=-24 && proposed.x<=v.x+48) return MWSnapLeft;
+        if(dx>=24 && proposed.x+proposed.width>=v.x+v.width-48) return MWSnapRight;
     }
     return MWSnapNone;
 }

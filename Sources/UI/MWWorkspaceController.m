@@ -6,6 +6,7 @@
 #import "MWPreferences.h"
 #import "MWEdgeHandle.h"
 #import "MWWindowPanel.h"
+#import "MWWorkspaceCoordinator.h"
 #import "../Diagnostics/MWDiagnostics.h"
 #import "../Platform/MWFloatingHost.h"
 
@@ -44,10 +45,10 @@
     [super viewDidLoad];
     _windows=[NSMutableDictionary dictionary]; _order=[NSMutableArray array];
     self.view.tintColor=[UIColor colorWithRed:0.05 green:0.52 blue:0.57 alpha:1];
-    _heading=[self label:@"UiharuX" size:32 weight:UIFontWeightBold color:UIColor.labelColor];
-    _subtitle=[self label:@"银河工作台  /  MILKYWAY" size:12 weight:UIFontWeightSemibold color:UIColor.secondaryLabelColor];
+    _heading=[self label:@"初春星河" size:32 weight:UIFontWeightBold color:UIColor.labelColor];
+    _subtitle=[self label:@"HARUGALAXY / 多窗口工作台" size:12 weight:UIFontWeightSemibold color:UIColor.secondaryLabelColor];
     _emptyTitle=[self label:@"让应用，各得其所。" size:24 weight:UIFontWeightSemibold color:UIColor.labelColor];
-    _emptyHint=[self label:@"左下自由缩放 · 右下等比缩放\n轻点边缘入口管理窗口" size:15 weight:UIFontWeightRegular color:UIColor.secondaryLabelColor];
+    _emptyHint=[self label:@"右上自由缩放 · 右下原始比例\n轻点边缘入口管理窗口" size:15 weight:UIFontWeightRegular color:UIColor.secondaryLabelColor];
     _emptyTitle.textAlignment=_emptyHint.textAlignment=NSTextAlignmentCenter; _emptyHint.numberOfLines=0;
     _add=[self button:@"plus" title:@"打开应用" action:@selector(openPicker)];
     if(@available(iOS 15.0,*)) {
@@ -189,6 +190,9 @@
     MWAppPickerController *picker=[MWAppPickerController new];
     __weak typeof(self) weakSelf=self;
     picker.selectionHandler=^(MWApplication *app) { [weakSelf openApplication:app]; };
+    if(_floating) picker.searchFallbackHandler=^(NSString *query) {
+        [MWWorkspaceCoordinator.shared presentApplicationSearchWithQuery:query selection:^(MWApplication *app){[weakSelf openApplication:app];}];
+    };
     UINavigationController *nav=[[UINavigationController alloc] initWithRootViewController:picker];
     nav.modalPresentationStyle=UIModalPresentationPageSheet;
     [self presentViewController:nav animated:!MWPreferences.shared.reduceMotion completion:nil];
@@ -297,7 +301,7 @@
 - (void)floatingFailed:(NSNotification *)notification { [self showMessage:[notification.object localizedDescription]]; }
 - (void)showMessage:(NSString *)message {
     if(!message.length || self.presentedViewController) return;
-    UIAlertController *alert=[UIAlertController alertControllerWithTitle:@"UiharuX" message:message preferredStyle:UIAlertControllerStyleAlert];
+    UIAlertController *alert=[UIAlertController alertControllerWithTitle:@"初春星河" message:message preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"知道了" style:UIAlertActionStyleDefault handler:nil]];
     [self presentViewController:alert animated:YES completion:nil];
 }

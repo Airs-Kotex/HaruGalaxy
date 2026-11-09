@@ -28,7 +28,7 @@
     UIWindowScene *windowScene=(UIWindowScene *)scene;
     _sceneIdentifier=[session.persistentIdentifier copy];
     MWLog(@"host_scene.connect",@{@"session":_sceneIdentifier ?: @"none"});
-    _floating=[_sceneIdentifier hasPrefix:@"io.github.uiharuxpro4milkyway.overlay."];
+    _floating=[_sceneIdentifier hasPrefix:@"io.github.airskotex.harugalaxy.overlay."];
     if(_floating && ![MWFloatingHost.shared ownsSceneIdentifier:_sceneIdentifier]) {
         // Cancelled or superseded connection: never create an opaque normal window.
         @try { [[PrivClass(FBSceneManager) sharedInstance] destroyScene:_sceneIdentifier withTransitionContext:nil]; }

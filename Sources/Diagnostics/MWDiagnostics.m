@@ -44,7 +44,7 @@ NSDictionary *MWErrorFields(NSError *error) {
 }
 - (instancetype)init {
     if((self=[super init])) {
-        _queue=dispatch_queue_create("io.github.uiharuxpro4milkyway.diagnostics",DISPATCH_QUEUE_SERIAL);
+        _queue=dispatch_queue_create("io.github.airskotex.harugalaxy.diagnostics",DISPATCH_QUEUE_SERIAL);
         dispatch_queue_set_specific(_queue,MWLogQueueKey,(void *)MWLogQueueKey,NULL);
         _sessionIdentifier=NSUUID.UUID.UUIDString;
         _applicationState=@"launching";
@@ -195,7 +195,7 @@ NSDictionary *MWErrorFields(NSError *error) {
             return [ad ?: NSDate.distantPast compare:bd ?: NSDate.distantPast];
         }];
         for(NSUInteger i=0;i+2<oldFiles.count;i++) [NSFileManager.defaultManager removeItemAtURL:oldFiles[i] error:nil];
-        NSString *filename=[NSString stringWithFormat:@"UiharuX-Diagnostics-%@.json",NSUUID.UUID.UUIDString];
+        NSString *filename=[NSString stringWithFormat:@"HaruGalaxy-Diagnostics-%@.json",NSUUID.UUID.UUIDString];
         NSURL *url=[NSURL fileURLWithPath:[exportDirectory stringByAppendingPathComponent:filename]];
         if(data && ![data writeToURL:url options:NSDataWritingAtomic error:&error]) data=nil;
         dispatch_async(dispatch_get_main_queue(),^{completion(data ? url : nil,error);});

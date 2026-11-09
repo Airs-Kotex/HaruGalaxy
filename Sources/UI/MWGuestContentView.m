@@ -26,6 +26,7 @@
 }
 - (void)setLogicalSize:(CGSize)logicalSize {
     if(!isfinite(logicalSize.width) || !isfinite(logicalSize.height) || logicalSize.width<1 || logicalSize.height<1) return;
+    if(CGSizeEqualToSize(_logicalSize,logicalSize)) return;
     _logicalSize=logicalSize; [self setNeedsLayout];
 }
 - (void)layoutSubviews {
@@ -34,11 +35,13 @@
     MWContentTransform placement=MWFitContent(_logicalSize.width,_logicalSize.height,self.bounds.size.width,self.bounds.size.height);
     // UIKit owns the guest's presentation transform. Keep our scale on a
     // separate parent so guest scene layout cannot reset it.
+    [CATransaction begin]; [CATransaction setDisableActions:YES];
     _logicalContainer.bounds=(CGRect){CGPointZero,_logicalSize};
     _logicalContainer.layer.position=CGPointMake(placement.x,placement.y);
     _logicalContainer.transform=CGAffineTransformMakeScale(placement.scale,placement.scale);
     _guestView.bounds=(CGRect){CGPointZero,_logicalSize};
     _guestView.center=CGPointMake(_logicalSize.width/2,_logicalSize.height/2);
+    [CATransaction commit];
 }
 - (NSDictionary *)geometrySnapshot {
     CGAffineTransform owned=_logicalContainer.transform,guest=_guestView.transform;

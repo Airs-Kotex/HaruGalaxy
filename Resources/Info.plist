@@ -24,9 +24,9 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>zh_CN</string>
 	<key>CFBundleDisplayName</key>
-	<string>UiharuX 银河</string>
+	<string>初春星河</string>
 	<key>CFBundleExecutable</key>
-	<string>UiharuXPro4MilkyWay</string>
+	<string>HaruGalaxy</string>
 	<key>CFBundleIcons</key>
 	<dict>
 		<key>CFBundlePrimaryIcon</key>
@@ -50,21 +50,22 @@
 		</dict>
 	</dict>
 	<key>CFBundleIdentifier</key>
-	<string>io.github.uiharuxpro4milkyway</string>
+	<string>io.github.airskotex.harugalaxy</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleLocalizations</key>
 	<array>
 		<string>zh-Hans</string>
+		<string>en</string>
 	</array>
 	<key>CFBundleName</key>
-	<string>UiharuXPro4MilkyWay</string>
+	<string>HaruGalaxy</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.3.0</string>
+	<string>0.3.1</string>
 	<key>CFBundleVersion</key>
-	<string>5</string>
+	<string>6</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>LSSupportsOpeningDocumentsInPlace</key>

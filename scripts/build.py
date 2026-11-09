@@ -12,7 +12,7 @@ import subprocess
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
-NAME = "UiharuXPro4MilkyWay"
+NAME = "HaruGalaxy"
 
 
 def resolve_tool(value, candidates):
@@ -101,6 +101,8 @@ def main():
             continue
         if resource.is_file():
             shutil.copy2(resource, app / resource.name)
+        elif resource.is_dir() and resource.suffix == ".lproj":
+            shutil.copytree(resource, app / resource.name)
     for name in ["LICENSE", "NOTICE.md"]:
         shutil.copy2(ROOT / name, app / name)
     shutil.copy2(ROOT / "ThirdParty/CompilerRT/LICENSE.TXT", app / "CompilerRT-LICENSE.txt")

@@ -23,7 +23,7 @@
 - (instancetype)initWithBundleIdentifier:(NSString *)bundleIdentifier {
     if((self=[super init])) {
         _bundleIdentifier=[bundleIdentifier copy];
-        _sceneIdentifier=[@"io.github.uiharuxpro4milkyway.guest." stringByAppendingString:NSUUID.UUID.UUIDString];
+        _sceneIdentifier=[@"io.github.airskotex.harugalaxy.guest." stringByAppendingString:NSUUID.UUID.UUIDString];
         _visible=YES; _orientation=UIInterfaceOrientationPortrait;
     }
     return self;

@@ -25,7 +25,7 @@
     if(section==1) {
         NSString *status=!MWFloatingHost.shared.enabled ? @"未启用" : (!MWFloatingHost.shared.ready ? @"正在等待浮窗根视图与窗口连接" :
             (MWFloatingHost.shared.backgroundExecutionValid ? @"系统已批准当前请求" : @"请求未获批准或已失效，请导出诊断"));
-        return [NSString stringWithFormat:@"轻点边缘入口管理窗口；长按振动后拖动移动。最小化收进面板。左下角自由缩放、右下角等比缩放；自由模式拖标题栏到屏幕边缘，停留后松手进入半屏。全屏可从面板还原。\n后台执行状态：%@。",status];
+        return [NSString stringWithFormat:@"轻点边缘入口管理窗口；长按振动后拖动移动。最小化收进面板。右上弧线自由缩放、右下弧线按系统原始比例缩放；自由模式拖标题栏到屏幕边缘，停留后松手进入半屏。全屏可从面板还原。\n后台执行状态：%@。",status];
     }
     if(section==2) return @"详细日志默认开启，保留约 8 MiB。遇到问题先点“标记刚发生的问题”，再导出 JSON。日志包含机型、系统、相关应用标识与窗口事件，保存在本机，由你决定分享给谁。不会录制画面或输入内容。";
     return [NSString stringWithFormat:@"%@ Alpha · TrollStore\n面向 iOS 14–17.0 的受支持 TrollStore 系统逐项检测能力；各版本的小窗、触摸和后台行为需实机确认。",NSBundle.mainBundle.infoDictionary[@"CFBundleShortVersionString"]];
@@ -57,7 +57,7 @@
             cell.textLabel.textColor=indexPath.row==3 ? UIColor.systemRedColor : self.view.tintColor;
         }
     } else {
-        cell.textLabel.text=@"UiharuXPro4MilkyWay";
+        cell.textLabel.text=@"HaruGalaxy · 初春星河";
         cell.textLabel.font=[UIFont systemFontOfSize:15 weight:UIFontWeightSemibold];
     }
     return cell;

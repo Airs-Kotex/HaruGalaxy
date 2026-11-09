@@ -30,7 +30,8 @@ def render(size, name):
     for x, fill in [(376,"f3726c"),(426,"e9b452"),(476,"2c9a8b")]:
         color(fill); ctx.arc(x,365,14,0,2*math.pi); ctx.fill()
     color("167c83"); ctx.set_line_width(42); ctx.set_line_cap(cairo.LINE_CAP_ROUND)
-    ctx.move_to(463,524); ctx.line_to(463,646); ctx.curve_to(463,778,679,778,679,646); ctx.line_to(679,524); ctx.stroke()
+    ctx.move_to(463,524); ctx.line_to(463,744); ctx.move_to(679,524); ctx.line_to(679,744)
+    ctx.move_to(463,634); ctx.line_to(679,634); ctx.stroke()
     color("b3eae1")
     for i, point in enumerate([(787,156),(803,204),(851,220),(803,236),(787,284),(771,236),(723,220),(771,204)]):
         (ctx.move_to if i==0 else ctx.line_to)(*point)

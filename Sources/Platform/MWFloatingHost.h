@@ -16,6 +16,7 @@ FOUNDATION_EXPORT NSString *const MWFloatingHostDidBecomeReadyNotification;
 - (void)sceneDisconnected:(NSString *)identifier;
 - (id)protectedDiff:(id)diff forIdentifier:(NSString *)identifier;
 - (void)refreshAfterBackgroundTransition;
+- (void)setSearchInputSuspended:(BOOL)suspended;
 @property(nonatomic,readonly) BOOL backgroundExecutionValid;
 @end
 

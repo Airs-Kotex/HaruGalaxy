@@ -1,6 +1,6 @@
-# Source and attribution
+# HaruGalaxy — Source and attribution
 
-UiharuXPro4MilkyWay is an independent native alpha project. It is not an official UiharuX or MilkyWay release.
+HaruGalaxy (初春星河), formerly UiharuXPro4MilkyWay, is an independent native alpha project maintained by Airs-Kotex. It is not an official UiharuX or MilkyWay release.
 
 - UiharuX by straight-tamago: product/behavior reference. The official 2.0 binary was inspected locally; no upstream executable, icons or other binary assets are bundled.
 - MilkyWay 3 by YuriDevTeam / Soh Satoh: interaction reference. No MilkyWay binary or implementation source is bundled.

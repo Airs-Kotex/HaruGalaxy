@@ -1,0 +1,34 @@
+name: Bug report / 问题反馈
+description: Report a reproducible device issue / 提交可复现的真机问题
+title: "[Bug] "
+body:
+  - type: input
+    id: version
+    attributes:
+      label: HaruGalaxy version / 应用版本
+      placeholder: 0.3.1 / build 6
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Device, iOS build, TrollStore / 设备与系统
+      placeholder: iPhone 14 Pro Max, iOS 16.2 (20C65), TrollStore version
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps and actual behavior / 复现步骤与实际现象
+      description: Include whether the issue occurs in the app or floating mode. / 请注明应用内或浮动模式。
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior / 预期结果
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Diagnostics / 诊断证据
+      description: Mark the issue in Settings, export diagnostics, inspect and redact app identifiers before attaching publicly. Never include tokens, account data, or typed text. / 请先检查并按需脱敏，切勿上传凭据或账号数据。

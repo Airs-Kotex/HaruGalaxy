@@ -8,7 +8,7 @@ import subprocess
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
-NAME = "UiharuXPro4MilkyWay"
+NAME = "HaruGalaxy"
 files = subprocess.check_output(["git", "ls-files", "-z"], cwd=ROOT).decode().split("\0")
 dist = ROOT / "dist"
 dist.mkdir(exist_ok=True)

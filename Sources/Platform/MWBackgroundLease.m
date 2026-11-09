@@ -28,7 +28,7 @@
     @try {
         // PreventSuspend | PreventThrottleDownCPU | AllowIdleSleep, Continuous.
         // Only holds our own process; no system or guest process assertion is taken.
-        _assertion=[[cls alloc] initWithPID:getpid() flags:7 reason:10005 name:@"UiharuX floating workspace" withHandler:nil];
+        _assertion=[[cls alloc] initWithPID:getpid() flags:7 reason:10005 name:@"HaruGalaxy floating workspace" withHandler:nil];
         if(!_assertion) { if(error) *error=MWError(41,@"系统未创建后台执行请求。"); return NO; }
         _lastValid=[_assertion valid];
         MWLog(@"background.requested",@{@"valid":@(_lastValid),@"pid":@(getpid()),@"flags":@7,@"reason":@10005});

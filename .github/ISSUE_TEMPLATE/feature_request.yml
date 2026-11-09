@@ -1,0 +1,14 @@
+name: Feature request / 功能建议
+description: Describe a concrete interaction improvement / 描述具体的操作改进
+title: "[Feature] "
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem and proposed interaction / 问题与建议操作
+    validations:
+      required: true
+  - type: textarea
+    id: device
+    attributes:
+      label: Device context and alternatives / 设备场景与替代方案

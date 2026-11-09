@@ -1,6 +1,6 @@
 # HaruGalaxy 0.3.1 输入与手势修订
 
-用户要求：悬浮入口的搜索可调起键盘；等比使用系统原始画布比例；自由/等比手柄迁到右上/右下并显示细小弧线；下半屏快捷操作可达；普通拖动能进入顶部状态区域；交互更连贯。追加品牌：英文 HaruGalaxy、中文 初春星河。安装标识和原工作副本保持不变以延续升级数据。
+用户要求：悬浮入口的搜索可调起键盘；等比使用系统原始画布比例；自由/等比手柄迁到右上/右下并显示细小弧线；下半屏快捷操作可达；普通拖动能进入顶部状态区域；交互更连贯。追加品牌：英文 HaruGalaxy、中文 初春星河。用户追加要求更改 Bundle ID；使用 io.github.airskotex.harugalaxy，原工作副本路径不变。
 
 ## 明确行为
 
@@ -18,7 +18,7 @@
 
 ## 品牌
 
-CFBundleDisplayName使用初春星河，CFBundleName/可执行文件/包名使用HaruGalaxy；Bundle ID保持`io.github.uiharuxpro4milkyway`。界面标题、诊断导出文件名、源码归档和README更新。原版本归档不覆盖。
+CFBundleDisplayName使用初春星河，CFBundleName/可执行文件/包名使用HaruGalaxy；Bundle ID改为`io.github.airskotex.harugalaxy`，以独立应用安装，旧设置和日志不自动迁移。界面标题、诊断导出文件名、源码归档和README更新。原版本归档不覆盖。
 
 ## 验证
 

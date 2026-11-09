@@ -32,6 +32,7 @@ NSString *const MWFloatingHostDidBecomeReadyNotification=@"MWFloatingHostDidBeco
     BOOL _cleanupFailed;
     id _retainedFailedBinder, _retainedFailedScene;
     MWOverlayStartup _startup;
+    BOOL _searchInputSuspended;
 }
 + (instancetype)shared {
     static MWFloatingHost *host; static dispatch_once_t once;
@@ -64,7 +65,7 @@ NSString *const MWFloatingHostDidBecomeReadyNotification=@"MWFloatingHostDidBeco
             MWLog(@"overlay.background_failed",MWErrorFields(leaseError));
             if(error) *error=leaseError; _backgroundLease=nil; _rootAdapter=nil; return NO;
         }
-        _sceneIdentifier=[@"io.github.uiharuxpro4milkyway.overlay." stringByAppendingString:NSUUID.UUID.UUIDString];
+        _sceneIdentifier=[@"io.github.airskotex.harugalaxy.overlay." stringByAppendingString:NSUUID.UUID.UUIDString];
         _binder=[[binderClass alloc] initWithPriority:0 displayConfiguration:source._effectiveSettings.displayConfiguration];
         FBSMutableSceneDefinition *definition=[PrivClass(FBSMutableSceneDefinition) definition];
         definition.identity=[PrivClass(FBSSceneIdentity) identityForIdentifier:_sceneIdentifier];
@@ -179,9 +180,9 @@ NSString *const MWFloatingHostDidBecomeReadyNotification=@"MWFloatingHostDidBeco
         _guardActive=_enabled && !locked;
     }
     MWLog(@"overlay.lock",@{@"locked":@(locked)});
-    self.floatingWindow.hidden=locked;
+    self.floatingWindow.hidden=locked || _searchInputSuspended;
     if(!self.ready) return;
-    if(self.floatingWindow) [[NSNotificationCenter defaultCenter] postNotificationName:MWFloatingHostVisibilityNotification object:self.floatingWindow userInfo:@{@"visible":@(!locked)}];
+    if(self.floatingWindow) [[NSNotificationCenter defaultCenter] postNotificationName:MWFloatingHostVisibilityNotification object:self.floatingWindow userInfo:@{@"visible":@(!locked && !_searchInputSuspended)}];
     if(!locked) [self refreshAfterBackgroundTransition];
 }
 - (void)sceneDisconnected:(NSString *)identifier {
@@ -225,6 +226,7 @@ NSString *const MWFloatingHostDidBecomeReadyNotification=@"MWFloatingHostDidBeco
     }
     [rootAdapter detach]; _rootAdapter=nil;
     _scene=nil; _binder=nil; _sceneIdentifier=nil; _locked=NO;
+    _searchInputSuspended=NO;
     [_backgroundLease invalidate]; _backgroundLease=nil;
     _stopping=NO;
     if(!binderInvalidated) [[NSNotificationCenter defaultCenter] postNotificationName:MWFloatingHostFailedNotification object:MWError(34,@"浮窗已隐藏，但系统呈现对象清理失败。请导出日志后重新启动本应用。")];
@@ -260,7 +262,7 @@ NSString *const MWFloatingHostDidBecomeReadyNotification=@"MWFloatingHostDidBeco
     }
 }
 - (void)refreshAfterBackgroundTransition {
-    if(!self.ready || _locked) return;
+    if(!self.ready || _locked || _searchInputSuspended) return;
     MWLog(@"overlay.host_background",@{@"backgroundValid":@(self.backgroundExecutionValid),@"attached":@(_floatingWindow!=nil)});
     @try {
         [_scene updateSettingsWithBlock:^(UIMutableApplicationSceneSettings *settings) {
@@ -269,6 +271,14 @@ NSString *const MWFloatingHostDidBecomeReadyNotification=@"MWFloatingHostDidBeco
         _floatingWindow.hidden=NO;
     } @catch(NSException *exception) { MWLog(@"overlay.refresh_failed",@{@"reason":exception.reason ?: @"unknown"}); }
     [MWDiagnostics.shared flush];
+}
+- (void)setSearchInputSuspended:(BOOL)suspended {
+    _searchInputSuspended=suspended;
+    MWLog(@"overlay.search_input",@{@"suspended":@(suspended)});
+    if(self.ready) {
+        [self applyLocked:_locked];
+        if(!suspended && !_locked) [self.floatingWindow makeKeyAndVisible];
+    }
 }
 @end
 

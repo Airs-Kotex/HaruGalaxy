@@ -2,18 +2,28 @@
 #import "MWWindowView.h"
 #import "MWPreferences.h"
 #import "MWGuestContentView.h"
+#import "MWCornerHandle.h"
 #import "../Diagnostics/MWDiagnostics.h"
 
 static MWRect MWFromCGRect(CGRect r) { return (MWRect){r.origin.x,r.origin.y,r.size.width,r.size.height}; }
 static CGRect MWToCGRect(MWRect r) { return CGRectMake(r.x,r.y,r.width,r.height); }
 
+@interface MWGeometryDisplayTarget : NSObject
+@property(nonatomic,weak) MWWindowView *owner;
+- (void)tick:(CADisplayLink *)link;
+@end
 @interface MWWindowView () <UIGestureRecognizerDelegate>
+- (void)flushFrameGeometry:(CADisplayLink *)link;
+@end
+@implementation MWGeometryDisplayTarget
+- (void)tick:(CADisplayLink *)link { [self.owner flushFrameGeometry:link]; }
 @end
 @implementation MWWindowView {
     UIView *_surface, *_content;
     UIVisualEffectView *_bar;
     UILabel *_title, *_message;
-    UIButton *_minimize, *_maximize, *_retry, *_resize, *_freeResize;
+    UIButton *_minimize, *_maximize, *_retry;
+    MWCornerHandle *_resize, *_freeResize;
     UIActivityIndicatorView *_spinner;
     MWWindowModel _model;
     CGRect _viewport, _gestureFrame;
@@ -29,6 +39,11 @@ static CGRect MWToCGRect(MWRect r) { return CGRectMake(r.x,r.y,r.width,r.height)
     BOOL _resizing, _dragging, _snapArmed, _geometryUpdatePending;
     MWSnapTarget _snapCandidate;
     NSUInteger _snapGeneration, _geometryGeneration;
+    CGSize _shadowSize;
+    BOOL _shadowMaximized;
+    CADisplayLink *_geometryDisplayLink;
+    NSUInteger _resizeSceneUpdates;
+    CFTimeInterval _resizeStartedAt;
 }
 @synthesize model=_model;
 
@@ -64,18 +79,8 @@ static CGRect MWToCGRect(MWRect r) { return CGRectMake(r.x,r.y,r.width,r.height)
         _retry=[UIButton buttonWithType:UIButtonTypeSystem]; [_retry setTitle:@"重试打开" forState:UIControlStateNormal];
         [_retry addTarget:self action:@selector(retry) forControlEvents:UIControlEventTouchUpInside];
         [_content addSubview:_retry];
-        _resize=[UIButton buttonWithType:UIButtonTypeSystem];
-        [_resize setImage:[UIImage systemImageNamed:@"arrow.up.left.and.arrow.down.right"] forState:UIControlStateNormal];
-        _resize.accessibilityLabel=@"拖动以调整窗口大小";
-        _resize.backgroundColor=[UIColor.tertiarySystemBackgroundColor colorWithAlphaComponent:0.92];
-        _resize.layer.cornerRadius=12; [_surface addSubview:_resize];
-        _resize.accessibilityLabel=@"右下角：等比缩放";
-        _freeResize=[UIButton buttonWithType:UIButtonTypeSystem];
-        [_freeResize setImage:[UIImage systemImageNamed:@"arrow.up.right.and.arrow.down.left"] forState:UIControlStateNormal];
-        _freeResize.accessibilityLabel=@"左下角：自由缩放";
-        _freeResize.backgroundColor=_resize.backgroundColor; _freeResize.layer.cornerRadius=12;
-        _freeResize.tintColor=UIColor.systemOrangeColor; [_surface addSubview:_freeResize];
-        [self addResizeCaption:@"自由" toButton:_freeResize]; [self addResizeCaption:@"等比" toButton:_resize];
+        _resize=[[MWCornerHandle alloc] initAtTop:NO]; [_surface addSubview:_resize];
+        _freeResize=[[MWCornerHandle alloc] initAtTop:YES]; [_surface addSubview:_freeResize];
         UIPanGestureRecognizer *drag=[[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(drag:)];
         drag.delegate=self; drag.maximumNumberOfTouches=1; [_bar addGestureRecognizer:drag];
         UITapGestureRecognizer *doubleTap=[[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(toggleMaximize)];
@@ -97,12 +102,6 @@ static CGRect MWToCGRect(MWRect r) { return CGRectMake(r.x,r.y,r.width,r.height)
     [button setImage:[UIImage systemImageNamed:symbol withConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:13 weight:UIImageSymbolWeightBold]] forState:UIControlStateNormal];
     button.accessibilityLabel=label; [button addTarget:self action:action forControlEvents:UIControlEventTouchUpInside];
     [_bar.contentView addSubview:button]; return button;
-}
-- (void)addResizeCaption:(NSString *)caption toButton:(UIButton *)button {
-    UILabel *label=[[UILabel alloc] initWithFrame:CGRectMake(0,2,44,14)];
-    label.text=caption; label.font=[UIFont systemFontOfSize:10 weight:UIFontWeightSemibold];
-    label.textAlignment=NSTextAlignmentCenter; label.textColor=button.tintColor; label.userInteractionEnabled=NO;
-    [button addSubview:label]; button.imageEdgeInsets=UIEdgeInsetsMake(12,10,2,10);
 }
 - (void)layoutSubviews {
     [super layoutSubviews];
@@ -127,10 +126,13 @@ static CGRect MWToCGRect(MWRect r) { return CGRectMake(r.x,r.y,r.width,r.height)
     _spinner.center=CGPointMake(CGRectGetMidX(_content.bounds),CGRectGetMidY(_content.bounds)-32);
     _message.frame=CGRectMake(16,MAX(12,CGRectGetMidY(_content.bounds)-16),MAX(1,_content.bounds.size.width-32),72);
     _retry.frame=CGRectMake(20,MIN(_content.bounds.size.height-48,CGRectGetMaxY(_message.frame)),MAX(1,_content.bounds.size.width-40),44);
-    _resize.frame=CGRectMake(self.bounds.size.width-44,self.bounds.size.height-44,44,44);
-    _freeResize.frame=CGRectMake(0,self.bounds.size.height-44,44,44);
+    _resize.frame=CGRectMake(self.bounds.size.width-28,self.bounds.size.height-28,28,28);
+    _freeResize.frame=CGRectMake(self.bounds.size.width-28,0,28,28);
     _resize.hidden=_freeResize.hidden=_model.maximized || _model.state!=MWWindowVisible;
-    self.layer.shadowPath=[UIBezierPath bezierPathWithRoundedRect:self.bounds cornerRadius:_model.maximized ? 0 : 18].CGPath;
+    if(!CGSizeEqualToSize(_shadowSize,self.bounds.size) || _shadowMaximized!=_model.maximized) {
+        _shadowSize=self.bounds.size; _shadowMaximized=_model.maximized;
+        self.layer.shadowPath=[UIBezierPath bezierPathWithRoundedRect:self.bounds cornerRadius:_model.maximized ? 0 : 18].CGPath;
+    }
     UIInterfaceOrientation orientation=self.window.windowScene.interfaceOrientation;
     if(!CGSizeEqualToSize(_lastSize,_logicalSize) || _lastOrientation!=orientation) {
         if(_resizing) [self scheduleSceneGeometry]; else [self submitSceneGeometry];
@@ -138,20 +140,30 @@ static CGRect MWToCGRect(MWRect r) { return CGRectMake(r.x,r.y,r.width,r.height)
 }
 - (void)scheduleSceneGeometry {
     if(_geometryUpdatePending) return;
-    _geometryUpdatePending=YES; NSUInteger generation=++_geometryGeneration;
-    __weak typeof(self) weakSelf=self;
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(0.05*NSEC_PER_SEC)),dispatch_get_main_queue(),^{
-        MWWindowView *view=weakSelf;
-        if(!view || view->_geometryGeneration!=generation || view->_model.state==MWWindowClosed) return;
-        view->_geometryUpdatePending=NO; [view submitSceneGeometry];
-    });
+    _geometryUpdatePending=YES;
+    if(!_geometryDisplayLink) {
+        MWGeometryDisplayTarget *target=[MWGeometryDisplayTarget new]; target.owner=self;
+        _geometryDisplayLink=[CADisplayLink displayLinkWithTarget:target selector:@selector(tick:)];
+        _geometryDisplayLink.preferredFramesPerSecond=30;
+        [_geometryDisplayLink addToRunLoop:NSRunLoop.mainRunLoop forMode:NSRunLoopCommonModes];
+    }
+    _geometryDisplayLink.paused=NO;
+}
+- (void)flushFrameGeometry:(CADisplayLink *)link {
+    link.paused=YES;
+    if(!_geometryUpdatePending || _model.state==MWWindowClosed) return;
+    _geometryUpdatePending=NO;
+    [self submitSceneGeometry];
 }
 - (void)submitSceneGeometry {
-    _lastSize=_logicalSize; _lastOrientation=self.window.windowScene.interfaceOrientation;
+    UIInterfaceOrientation orientation=self.window.windowScene.interfaceOrientation;
+    if(CGSizeEqualToSize(_lastSize,_logicalSize) && _lastOrientation==orientation) return;
+    _lastSize=_logicalSize; _lastOrientation=orientation;
+    if(_resizing) _resizeSceneUpdates++;
     [_session updateSize:_logicalSize orientation:_lastOrientation];
 }
 - (void)commitSceneGeometry {
-    _geometryGeneration++; _geometryUpdatePending=NO;
+    _geometryGeneration++; _geometryUpdatePending=NO; _geometryDisplayLink.paused=YES;
     [self setNeedsLayout]; [self layoutIfNeeded]; [self submitSceneGeometry];
 }
 - (void)start {
@@ -229,17 +241,17 @@ static CGRect MWToCGRect(MWRect r) { return CGRectMake(r.x,r.y,r.width,r.height)
     CGPoint delta=[gesture translationInView:self.superview];
     CGRect frame=_gestureFrame; frame.origin.x+=delta.x; frame.origin.y+=delta.y;
     if(gesture.state==UIGestureRecognizerStateChanged || gesture.state==UIGestureRecognizerStateBegan) {
-        CGRect moveBounds=_viewport;
-        CGFloat safeTop=self.window.safeAreaInsets.top;
-        moveBounds.origin.y+=safeTop; moveBounds.size.height=MAX(1,moveBounds.size.height-safeTop);
-        _model.frame=_model.resizeMode==MWResizeProportional ? MWFitAspectRect(MWFromCGRect(frame),MWFromCGRect(moveBounds),_model.aspectRatio) : MWConstrainRect(MWFromCGRect(frame),MWFromCGRect(moveBounds));
+        _model.frame=MWMoveRect(MWFromCGRect(_gestureFrame),delta.x,delta.y,MWFromCGRect(_viewport));
         self.frame=MWToCGRect(_model.frame);
-        CGPoint location=[gesture locationInView:self.superview];
-        [self updateSnapCandidate:_model.resizeMode==MWResizeFree ? MWSnapTargetAtPoint(MWFromCGRect(_viewport),location.x,location.y) : MWSnapNone];
+        [self updateSnapCandidate:_model.resizeMode==MWResizeFree ? MWSnapTargetForDrag(MWFromCGRect(_viewport),MWFromCGRect(_gestureFrame),MWFromCGRect(frame)) : MWSnapNone];
     }
     if(gesture.state==UIGestureRecognizerStateEnded || gesture.state==UIGestureRecognizerStateCancelled || gesture.state==UIGestureRecognizerStateFailed) {
         if(!_dragging) return;
         BOOL cancelled=gesture.state!=UIGestureRecognizerStateEnded;
+        if(!cancelled) {
+            MWSnapTarget finalTarget=_model.resizeMode==MWResizeFree ? MWSnapTargetForDrag(MWFromCGRect(_viewport),MWFromCGRect(_gestureFrame),MWFromCGRect(frame)) : MWSnapNone;
+            if(finalTarget!=_snapCandidate) [self updateSnapCandidate:finalTarget];
+        }
         if(cancelled) { _model=_gestureModel; _proportionalSize=_gestureLogicalSize; }
         else if(_snapArmed) {
             MWWindowSnap(&_model,_snapCandidate,MWFromCGRect(_viewport));
@@ -256,7 +268,7 @@ static CGRect MWToCGRect(MWRect r) { return CGRectMake(r.x,r.y,r.width,r.height)
     if(self.snapPreviewHandler) self.snapPreviewHandler(CGRectZero,NO);
     if(target==MWSnapNone || !_dragging || _model.state!=MWWindowVisible) return;
     __weak typeof(self) weakSelf=self;
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(0.2*NSEC_PER_SEC)),dispatch_get_main_queue(),^{
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(0.18*NSEC_PER_SEC)),dispatch_get_main_queue(),^{
         MWWindowView *view=weakSelf;
         if(!view || generation!=view->_snapGeneration || !view->_dragging || view->_model.state!=MWWindowVisible) return;
         view->_snapArmed=YES;
@@ -274,22 +286,28 @@ static CGRect MWToCGRect(MWRect r) { return CGRectMake(r.x,r.y,r.width,r.height)
         [self detachFromSnap];
         [self setNeedsLayout]; [self layoutIfNeeded];
         _gestureFrame=self.frame; _resizing=YES; [self focus];
+        _resizeStartedAt=CACurrentMediaTime(); _resizeSceneUpdates=0;
+        _freeResize.dragging=free; _resize.dragging=!free;
         _model.resizeMode=free ? MWResizeFree : MWResizeProportional;
         if(!free) {
-            _proportionalSize=_logicalSize;
-            _model.aspectRatio=self.bounds.size.width/MAX(1,self.bounds.size.height-MWTitleHeight);
+            _proportionalSize=[self systemCanvasSize];
+            _model.aspectRatio=_proportionalSize.width/_proportionalSize.height;
+            _model.frame=MWFitAspectRect(MWFromCGRect(_gestureFrame),MWFromCGRect(_viewport),_model.aspectRatio);
+            self.frame=MWToCGRect(_model.frame); _gestureFrame=self.frame;
         }
         MWLog(@"window.resize_begin",@{@"bundle":_application.bundleIdentifier,@"mode":free ? @"free" : @"proportional"});
     }
     if(!_resizing) return;
     CGPoint delta=[gesture translationInView:self.superview];
-    _model.frame=free ? MWResizeFreeRect(MWFromCGRect(_gestureFrame),delta.x,delta.y,MWFromCGRect(_viewport),YES) :
+    _model.frame=free ? MWResizeTopRightRect(MWFromCGRect(_gestureFrame),delta.x,delta.y,MWFromCGRect(_viewport)) :
         MWResizeAspectRect(MWFromCGRect(_gestureFrame),delta.x,delta.y,MWFromCGRect(_viewport),_model.aspectRatio);
     self.frame=MWToCGRect(_model.frame);
     if(gesture.state==UIGestureRecognizerStateEnded || gesture.state==UIGestureRecognizerStateCancelled || gesture.state==UIGestureRecognizerStateFailed) {
         BOOL cancelled=gesture.state!=UIGestureRecognizerStateEnded;
         if(cancelled) { _model=_gestureModel; _proportionalSize=_gestureLogicalSize; self.frame=MWToCGRect(_model.frame); }
-        _resizing=NO; [self commitSceneGeometry]; if(!cancelled) [self geometryChanged];
+        _resizing=NO; _freeResize.dragging=NO; _resize.dragging=NO;
+        [self commitSceneGeometry]; if(!cancelled) [self geometryChanged];
+        MWLog(@"window.resize_finished",@{@"bundle":_application.bundleIdentifier,@"mode":free ? @"free" : @"system_proportional",@"duration":@(CACurrentMediaTime()-_resizeStartedAt),@"sceneUpdates":@(_resizeSceneUpdates),@"cancelled":@(cancelled)});
         if(self.stateHandler) self.stateHandler();
     }
 }
@@ -322,6 +340,10 @@ static CGRect MWToCGRect(MWRect r) { return CGRectMake(r.x,r.y,r.width,r.height)
 }
 - (void)applyViewport:(CGRect)viewport {
     [self cancelInteractions];
+    if(_model.resizeMode==MWResizeProportional) {
+        _proportionalSize=[self systemCanvasSize]; _model.aspectRatio=_proportionalSize.width/_proportionalSize.height;
+        if(_model.maximized) _restoreLogicalSize=_proportionalSize;
+    }
     _viewport=viewport; MWWindowReflow(&_model,MWFromCGRect(viewport)); self.frame=MWToCGRect(_model.frame);
     [self setNeedsLayout];
 }
@@ -330,6 +352,7 @@ static CGRect MWToCGRect(MWRect r) { return CGRectMake(r.x,r.y,r.width,r.height)
     MWWindowState state=_model.state;
     _model=_gestureModel; _model.state=state; _proportionalSize=_gestureLogicalSize;
     _dragging=NO; _resizing=NO; _geometryGeneration++; _geometryUpdatePending=NO;
+    _freeResize.dragging=NO; _resize.dragging=NO;
     [self updateSnapCandidate:MWSnapNone]; self.frame=MWToCGRect(_model.frame);
     [self commitSceneGeometry];
     MWTrace(@"window.gesture_cancelled",@{@"bundle":_application.bundleIdentifier});
@@ -337,8 +360,17 @@ static CGRect MWToCGRect(MWRect r) { return CGRectMake(r.x,r.y,r.width,r.height)
 - (void)setInitialResizeMode:(MWResizeMode)mode {
     if(_session) return;
     _model.resizeMode=mode;
-    _proportionalSize=CGSizeMake(MAX(1,self.bounds.size.width),MAX(1,self.bounds.size.height-MWTitleHeight));
+    _proportionalSize=[self systemCanvasSize];
     _model.aspectRatio=_proportionalSize.width/_proportionalSize.height;
+}
+- (CGSize)systemCanvasSize {
+    UIScreen *screen=self.window.windowScene.screen ?: UIScreen.mainScreen;
+    CGSize reference=screen.fixedCoordinateSpace.bounds.size;
+    UIInterfaceOrientation orientation=self.window.windowScene.interfaceOrientation;
+    BOOL landscape=UIInterfaceOrientationIsLandscape(orientation);
+    if(orientation==UIInterfaceOrientationUnknown) landscape=screen.bounds.size.width>screen.bounds.size.height;
+    MWRect canvas=MWSystemCanvas(reference.width,reference.height,landscape);
+    return CGSizeMake(canvas.width,canvas.height);
 }
 - (void)logContentGeometry:(NSString *)reason {
     MWLog(@"window.content_geometry",@{@"bundle":_application.bundleIdentifier,@"reason":reason,@"geometry":[_guestHost geometrySnapshot]});
@@ -359,6 +391,7 @@ static CGRect MWToCGRect(MWRect r) { return CGRectMake(r.x,r.y,r.width,r.height)
 - (void)close {
     if(!MWWindowApply(&_model,MWEventClose)) return;
     _snapGeneration++; _geometryGeneration++;
+    [_geometryDisplayLink invalidate]; _geometryDisplayLink=nil;
     _dragging=NO; _resizing=NO;
     if(self.snapPreviewHandler) self.snapPreviewHandler(CGRectZero,NO);
     _guestHost.guestView=nil; [_guestView removeFromSuperview]; _guestView=nil; [_session close]; [self removeFromSuperview];
@@ -368,5 +401,5 @@ static CGRect MWToCGRect(MWRect r) { return CGRectMake(r.x,r.y,r.width,r.height)
     _hostHidden=!visible;
     [_session setVisible:visible && _model.state!=MWWindowMinimized];
 }
-- (void)dealloc { [_session close]; }
+- (void)dealloc { [_geometryDisplayLink invalidate]; [_session close]; }
 @end

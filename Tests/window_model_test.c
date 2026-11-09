@@ -108,6 +108,29 @@ static void free_resize_and_snap(void) {
     }
 }
 
+static void original_canvas_and_reachable_snap(void) {
+    MWRect screen={0,0,430,932},start={20,100,320,460};
+    MWRect canvas=MWSystemCanvas(430,932,false);
+    equal_rect(canvas,(MWRect){0,0,430,932});
+    equal_rect(MWSystemCanvas(430,932,true),(MWRect){0,0,932,430});
+    MWRect changed=MWResizeTopRightRect(start,40,-30,screen);
+    equal_rect(changed,(MWRect){20,70,360,490});
+    assert(changed.y+changed.height==start.y+start.height);
+    assert(MWSnapTargetForDrag(screen,start,(MWRect){20,400,320,460})==MWSnapNone);
+    assert(MWSnapTargetForDrag(screen,start,(MWRect){20,430,320,460})==MWSnapBottom);
+    assert(MWSnapTargetForDrag(screen,start,(MWRect){20,30,320,460})==MWSnapTop);
+    assert(MWSnapTargetForDrag(screen,(MWRect){20,472,320,460},(MWRect){20,480,320,460})==MWSnapNone);
+    assert(MWSnapTargetForDrag((MWRect){0,0,932,430},(MWRect){100,10,400,300},(MWRect){500,10,400,300})==MWSnapRight);
+    MWRect top=MWMoveRect(start,0,-100,screen);
+    assert(top.y==0 && top.width==start.width && top.height==start.height);
+    assert(MWCornerHit(23,4,28,28,true));
+    assert(MWCornerHit(25,23,28,28,true));
+    assert(!MWCornerHit(4,23,28,28,true));
+    assert(MWCornerHit(5,25,28,28,false));
+    assert(!MWCornerHit(5,4,28,28,false));
+    assert(!MWCornerHit(-1,10,28,28,false));
+}
+
 static void proportional_scaling(void) {
     MWRect viewport={8,60,414,780}, initial={30,90,240,48+240.0*932/430};
     double ratio=430.0/932;
@@ -152,7 +175,7 @@ static void proportional_scaling(void) {
 }
 
 int main(void) {
-    lifecycle(); bounds(); maximize_restore(); proportional_scaling(); free_resize_and_snap();
+    lifecycle(); bounds(); maximize_restore(); proportional_scaling(); free_resize_and_snap(); original_canvas_and_reachable_snap();
     puts("PASS: lifecycle, free/proportional resize, full/half-screen, top inset continuity, rotation and edge handle");
     return 0;
 }
