@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.2 — Edge recall and response
+
+- Keep a stable 56×76-point entry touch target and a 12×60-point retracted visual. Allow interaction during expand/retract animations and pause automatic retraction while touching or using the panel.
+- Use one touch-tracking path for forgiving taps, short inward pulls, stationary hold release and deliberate hold-then-drag. Measure movement from the hold position so earlier finger drift does not start a drag; cancel pending gestures on hide/window/viewport changes.
+- Add “入口保持展开” to keep the entry expanded, preserving the default compact presentation.
+- Reuse panel rows and skip unchanged snapshots, hidden panel layout and redundant active border updates. Queue routine foreground diagnostic flushes while retaining background/termination/crash durability boundaries.
+- Log entry outcomes, panel preparation time and cumulative row creation counts. Add portable behavioral tests for both edges, hold drift, cancellation and gesture exclusivity.
+- Retain the HaruGalaxy bundle ID from 0.3.1 for an in-place update.
+
+Native compilation, static analysis and offline package checks cover the source and artifact. Entry routing, system edge-gesture interaction and perceived smoothness still need device testing; no FPS claim is made.
+
 ## 0.3.1 — HaruGalaxy / 初春星河
 
 - Adopt the HaruGalaxy name and localized app display names; use the new `io.github.airskotex.harugalaxy` identifier (a separate installation from the old app).

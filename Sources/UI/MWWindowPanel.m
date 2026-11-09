@@ -4,34 +4,44 @@
 
 @interface MWPanelRow : UIView
 - (instancetype)initWithWindow:(MWWindowView *)window panel:(MWWindowPanel *)panel;
+- (void)updateWindow:(MWWindowView *)window;
 @end
 @implementation MWPanelRow {
     UIButton *_main;
+    UIButton *_minimize, *_fullscreen;
     UIStackView *_actions;
 }
 - (instancetype)initWithWindow:(MWWindowView *)window panel:(MWWindowPanel *)panel {
     if((self=[super initWithFrame:CGRectZero])) {
         self.backgroundColor=UIColor.tertiarySystemBackgroundColor; self.layer.cornerRadius=12;
         _main=[UIButton buttonWithType:UIButtonTypeSystem];
-        NSString *status=window.model.state==MWWindowMinimized ? @"已收纳 · 点按恢复" :
-            (window.model.state==MWWindowLoading ? @"启动中" : (window.model.state==MWWindowFailed ? @"启动失败 · 点按查看" : (window.model.maximized ? @"全屏" : @"窗口")));
-        [_main setTitle:[NSString stringWithFormat:@"%@\n%@",window.application.name,status] forState:UIControlStateNormal];
         _main.titleLabel.numberOfLines=2; _main.titleLabel.font=[UIFont systemFontOfSize:14 weight:UIFontWeightSemibold];
         _main.contentHorizontalAlignment=UIControlContentHorizontalAlignmentLeft; _main.contentEdgeInsets=UIEdgeInsetsMake(8,12,8,12);
         [self addSubview:_main];
         NSString *bundle=[window.application.bundleIdentifier copy]; __weak MWWindowPanel *weakPanel=panel;
         [_main addAction:[UIAction actionWithHandler:^(__kindof UIAction *action){ (void)action; if(weakPanel.activateHandler) weakPanel.activateHandler(bundle); }] forControlEvents:UIControlEventTouchUpInside];
-        UIButton *minimize=[self action:window.model.state==MWWindowMinimized ? @"arrow.up.forward.app" : @"minus" label:window.model.state==MWWindowMinimized ? @"恢复窗口" : @"最小化到面板" handler:^{if(weakPanel.minimizeHandler) weakPanel.minimizeHandler(bundle);}];
-        UIButton *fullscreen=[self action:window.model.maximized ? @"arrow.down.right.and.arrow.up.left" : @"arrow.up.left.and.arrow.down.right" label:window.model.maximized ? @"还原窗口" : @"铺满屏幕" handler:^{if(weakPanel.fullscreenHandler) weakPanel.fullscreenHandler(bundle);}];
+        _minimize=[self action:@"minus" label:@"最小化到面板" handler:^{if(weakPanel.minimizeHandler) weakPanel.minimizeHandler(bundle);}];
+        _fullscreen=[self action:@"arrow.up.left.and.arrow.down.right" label:@"铺满屏幕" handler:^{if(weakPanel.fullscreenHandler) weakPanel.fullscreenHandler(bundle);}];
         UIButton *close=[self action:@"xmark" label:@"关闭窗口" handler:^{if(weakPanel.closeHandler) weakPanel.closeHandler(bundle);}];
         close.tintColor=UIColor.systemRedColor;
-        minimize.enabled=window.model.state==MWWindowVisible || window.model.state==MWWindowMinimized;
-        fullscreen.enabled=minimize.enabled;
-        _actions=[[UIStackView alloc] initWithArrangedSubviews:@[minimize,fullscreen,close]];
+        _actions=[[UIStackView alloc] initWithArrangedSubviews:@[_minimize,_fullscreen,close]];
         _actions.axis=UILayoutConstraintAxisHorizontal; _actions.distribution=UIStackViewDistributionFillEqually;
         [self addSubview:_actions];
+        [self updateWindow:window];
     }
     return self;
+}
+- (void)updateWindow:(MWWindowView *)window {
+    BOOL minimized=window.model.state==MWWindowMinimized;
+    NSString *status=minimized ? @"已收纳 · 点按恢复" :
+        (window.model.state==MWWindowLoading ? @"启动中" : (window.model.state==MWWindowFailed ? @"启动失败 · 点按查看" : (window.model.maximized ? @"全屏" : @"窗口")));
+    [_main setTitle:[NSString stringWithFormat:@"%@\n%@",window.application.name,status] forState:UIControlStateNormal];
+    [_minimize setImage:[UIImage systemImageNamed:minimized ? @"arrow.up.forward.app" : @"minus"] forState:UIControlStateNormal];
+    _minimize.accessibilityLabel=minimized ? @"恢复窗口" : @"最小化到面板";
+    [_fullscreen setImage:[UIImage systemImageNamed:window.model.maximized ? @"arrow.down.right.and.arrow.up.left" : @"arrow.up.left.and.arrow.down.right"] forState:UIControlStateNormal];
+    _fullscreen.accessibilityLabel=window.model.maximized ? @"还原窗口" : @"铺满屏幕";
+    _minimize.enabled=window.model.state==MWWindowVisible || minimized;
+    _fullscreen.enabled=_minimize.enabled;
 }
 - (UIButton *)action:(NSString *)symbol label:(NSString *)label handler:(dispatch_block_t)handler {
     UIButton *button=[UIButton buttonWithType:UIButtonTypeSystem];
@@ -50,7 +60,11 @@
     UIButton *_open, *_settings;
     UIScrollView *_scroll;
     NSArray<MWPanelRow *> *_rows;
+    NSDictionary<NSString *,MWPanelRow *> *_rowsByBundle;
+    NSArray *_lastSnapshot;
+    NSUInteger _createdRowCount;
 }
+@synthesize createdRowCount=_createdRowCount;
 - (instancetype)init {
     if((self=[super initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemChromeMaterial]])) {
         self.layer.cornerRadius=20; self.layer.cornerCurve=kCACornerCurveContinuous; self.clipsToBounds=YES;
@@ -70,10 +84,22 @@
 - (void)openApplication { if(self.openApplicationHandler) self.openApplicationHandler(); }
 - (void)settings { if(self.settingsHandler) self.settingsHandler(); }
 - (void)updateWindows:(NSArray<MWWindowView *> *)windows {
-    for(UIView *row in _rows) [row removeFromSuperview];
+    NSMutableArray *snapshot=[NSMutableArray arrayWithCapacity:windows.count];
+    for(MWWindowView *window in windows) [snapshot addObject:@[
+        window.application.bundleIdentifier,window.application.name ?: @"",@(window.model.state),@(window.model.maximized)]];
+    if([snapshot isEqual:_lastSnapshot]) return;
     NSMutableArray *rows=[NSMutableArray array];
-    for(MWWindowView *window in windows) { MWPanelRow *row=[[MWPanelRow alloc] initWithWindow:window panel:self]; [_scroll addSubview:row]; [rows addObject:row]; }
-    _rows=rows; _empty.hidden=rows.count!=0; [self setNeedsLayout];
+    NSMutableDictionary *byBundle=[NSMutableDictionary dictionaryWithCapacity:windows.count];
+    for(MWWindowView *window in windows) {
+        NSString *bundle=window.application.bundleIdentifier;
+        MWPanelRow *row=_rowsByBundle[bundle];
+        if(!row) { row=[[MWPanelRow alloc] initWithWindow:window panel:self]; [_scroll addSubview:row]; _createdRowCount++; }
+        else [row updateWindow:window];
+        [rows addObject:row]; byBundle[bundle]=row;
+    }
+    for(NSString *bundle in _rowsByBundle) if(!byBundle[bundle]) [_rowsByBundle[bundle] removeFromSuperview];
+    _rows=rows; _rowsByBundle=byBundle; _lastSnapshot=[snapshot copy];
+    _empty.hidden=rows.count!=0; [self setNeedsLayout];
 }
 - (void)placeNearAnchor:(CGRect)anchor inBounds:(CGRect)bounds {
     CGFloat width=MIN(304,MAX(1,bounds.size.width-16)),height=MIN(MAX(220,118+_rows.count*108),MAX(1,bounds.size.height-16));
@@ -81,7 +107,8 @@
     CGFloat x=right ? CGRectGetMinX(anchor)-width-8 : CGRectGetMaxX(anchor)+8;
     x=MAX(bounds.origin.x+8,MIN(x,CGRectGetMaxX(bounds)-width-8));
     CGFloat y=MAX(bounds.origin.y+8,MIN(CGRectGetMidY(anchor)-height/2,CGRectGetMaxY(bounds)-height-8));
-    self.frame=CGRectMake(x,y,width,height);
+    CGRect next=CGRectMake(x,y,width,height);
+    if(!CGRectEqualToRect(next,self.frame)) self.frame=next;
 }
 - (void)layoutSubviews {
     [super layoutSubviews]; CGFloat width=self.bounds.size.width;

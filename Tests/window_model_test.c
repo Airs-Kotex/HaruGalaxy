@@ -156,9 +156,10 @@ static void proportional_scaling(void) {
         }
     }
     MWRect handle=MWEdgeHandleRect((MWRect){0,59,430,839},true,2.0);
-    equal_rect(handle,(MWRect){386,850,44,48});
+    equal_rect(handle,(MWRect){374,822,56,76});
     handle=MWEdgeHandleRect((MWRect){44,0,844,396},false,NAN);
-    assert(handle.x==44 && isfinite(handle.y) && handle.width==44);
+    assert(handle.x==44 && isfinite(handle.y) && handle.width==56);
+    equal_rect(MWEdgeHandleRect((MWRect){0,0,32,50},true,0.5),(MWRect){0,0,32,50});
     const double logical[][2]={{430,932},{932,430}};
     const double container[][2]={{311.42703862660943,675},{240,360},{400,100},{0,0}};
     for(unsigned i=0;i<2;i++) for(unsigned j=0;j<4;j++) {
