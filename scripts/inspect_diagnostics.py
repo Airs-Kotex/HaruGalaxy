@@ -56,6 +56,15 @@ def summarize(bundle):
             "main_scene_presented is emitted after the normal scene is foreground and presentation completes. "
             "keyboard_shown.visible checks keyboard intersection with the input window. "
             "Late errors, cancelled generations, external keyboards and missing logs require context; query text is not recorded.")}
+    keyboard_trace = [row for row in records if row["event"].startswith("keyboard.")]
+    keyboard_stages = {
+        "counts": dict(sorted(Counter(row["event"] for row in keyboard_trace).items())),
+        "recent_events": keyboard_trace[-100:],
+        "interpretation": (
+            "environment_registered means an owned PID/environment was recorded; environment_applied means "
+            "a matching target call occurred. focus_requested/completed do not prove a focus grant or keyboard "
+            "presentation. Compare visibility notifications and selected owner; unavailable selectors and "
+            "exceptions identify runtime gaps. No input text or continuous touch coordinates are recorded.")}
     return {"environment": environment, "events": len(records), "sessions": sorted({str(row.get("session", "unknown")) for row in records}),
             "counts": dict(sorted(counts.items())), "malformed_lines": malformed,
             "dropped": bundle.get("dropped"), "storage": bundle.get("storage"), "important_events": important[-80:],
@@ -63,6 +72,7 @@ def summarize(bundle):
             "recovered_tail_bytes": bundle.get("recoveredTailBytes", 0),
             "input_pipeline": stages,
             "search_pipeline": search_stages,
+            "keyboard_pipeline": keyboard_stages,
             "interpretation": "A heartbeat gap is an observation, not proof of a crash. Assertion valid is not proof of rendering or input."}
 
 

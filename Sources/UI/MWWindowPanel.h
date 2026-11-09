@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
-#import <UIKit/UIKit.h>
+#import "MWGlassSurface.h"
 @class MWWindowView;
-@interface MWWindowPanel : UIVisualEffectView
+@interface MWWindowPanel : MWGlassSurface
 @property(nonatomic,copy) void (^openApplicationHandler)(void);
 @property(nonatomic,copy) void (^settingsHandler)(void);
 @property(nonatomic,copy) void (^activateHandler)(NSString *bundle);

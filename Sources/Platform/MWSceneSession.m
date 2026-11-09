@@ -6,12 +6,15 @@
 #include <signal.h>
 #include <errno.h>
 #import "../Diagnostics/MWDiagnostics.h"
+#import "MWKeyboardFocus.h"
+#import "MWSceneInputEnvironment.h"
 
 @implementation MWSceneSession {
     FBApplicationProcessLaunchTransaction *_transaction;
     FBScene *_scene;
     _UIScenePresenter *_presenter;
     RBSProcessHandle *_process;
+    MWSceneInputEnvironment *_inputEnvironment;
     dispatch_source_t _monitor;
     void (^_completion)(NSError *);
     BOOL _started, _closed, _visible;
@@ -96,6 +99,7 @@
         client.interfaceOrientation=_orientation;
         parameters.clientSettings=client;
         _scene=[[PrivClass(FBSceneManager) sharedInstance] createSceneWithDefinition:definition initialParameters:parameters];
+        if(_scene) _inputEnvironment=[[MWSceneInputEnvironment alloc] initWithScene:_scene identifier:self.sceneIdentifier processIdentifier:_process.pid];
         _presenter=[_scene.uiPresentationManager createPresenterWithIdentifier:self.sceneIdentifier];
         if(!_scene || !_presenter) {
             [self fail:MWError(16,@"此应用未提供可显示的场景，可能不支持小窗。")]; return;
@@ -103,6 +107,7 @@
         [_presenter activate];
         if(!_presenter.presentationView) { [self fail:MWError(16,@"应用未提供可显示的小窗视图。")]; return; }
         if(!_visible) [_presenter deactivate];
+        [MWKeyboardFocus.shared registerGuest:self.sceneIdentifier processIdentifier:_process.pid scene:_scene];
         MWLog(@"guest.presenter_ready",@{@"bundle":self.bundleIdentifier,@"scene":self.sceneIdentifier,@"pid":@(_process.pid),@"note":@"presenter object only; first frame not observed"});
         _transaction=nil;
         void (^completion)(NSError *)=_completion; _completion=nil;
@@ -146,6 +151,7 @@
 - (void)setVisible:(BOOL)visible {
     if(_closed) return;
     _visible=visible;
+    if(!visible) [self releaseKeyboardFocus];
     MWTrace(@"guest.visibility",@{@"bundle":self.bundleIdentifier,@"visible":@(visible)});
     @try {
         [_scene updateSettingsWithBlock:^(UIMutableApplicationSceneSettings *settings) { settings.foreground=visible; }];
@@ -154,6 +160,11 @@
         [self fail:MWError(20,[NSString stringWithFormat:@"更新窗口状态失败：%@",exception.reason])];
     }
 }
+- (void)requestKeyboardFocusInWindow:(UIWindow *)window {
+    if(!_closed && _visible && _scene && _presenter.presentationView.window==window)
+        [MWKeyboardFocus.shared focusGuest:self.sceneIdentifier inWindow:window];
+}
+- (void)releaseKeyboardFocus { [MWKeyboardFocus.shared releaseGuest:self.sceneIdentifier]; }
 
 - (void)fail:(NSError *)error {
     if(_closed) return;
@@ -172,6 +183,7 @@
 }
 
 - (void)tearDown {
+    [MWKeyboardFocus.shared unregisterGuest:self.sceneIdentifier];
     if(_monitor) { dispatch_source_cancel(_monitor); _monitor=nil; }
     @try { [_transaction setCompletionBlock:nil]; } @catch(NSException *exception) { (void)exception; }
     _transaction=nil;
@@ -183,6 +195,7 @@
         @catch(NSException *exception) { MWLog(@"guest.cleanup_failed",@{@"scene":self.sceneIdentifier,@"reason":exception.reason ?: @"unknown"}); }
     }
     _scene=nil; _process=nil;
+    [_inputEnvironment invalidate]; _inputEnvironment=nil;
 }
 
 - (void)dealloc { [self tearDown]; }

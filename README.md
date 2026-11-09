@@ -17,12 +17,13 @@
 
 HaruGalaxy 将已安装应用放进可移动、缩放和收纳的小窗，让多个 App 在同一屏幕中协作。以 UiharuX 的多任务能力和 MilkyWay 的操作体验为参考，采用原生 Objective-C / UIKit 实现。
 
-**当前版本：[0.3.4](https://github.com/Airs-Kotex/HaruGalaxy/releases/tag/v0.3.4)** · [更新记录](CHANGELOG.md)
+**当前版本：[0.3.5](https://github.com/Airs-Kotex/HaruGalaxy/releases/tag/v0.3.5)** · [更新记录](CHANGELOG.md)
 
 ## 功能
 
 - **原生应用小窗**：启动已安装 App，直接操作真实内容。
 - **后台浮动工作区**：离开主应用后，通过屏幕边缘入口管理窗口。
+- **透明玻璃控件**：入口、标题栏和面板采用 Liquid Glass 风格，适配深浅色、降低透明度和高对比度。
 - **边缘收纳**：最小化收入面板，恢复、全屏和关闭集中管理。
 - **自由与等比缩放**：右上角调整宽高，右下角按系统原始比例缩放。
 - **半屏与全屏**：拖动并停留即可吸附半屏，也可铺满屏幕。
@@ -35,7 +36,7 @@ HaruGalaxy 将已安装应用放进可移动、缩放和收纳的小窗，让多
 ## 安装与升级
 
 1. 设备已安装 [TrollStore](https://github.com/opa334/TrollStore)。
-2. 下载 [HaruGalaxy-0.3.4.tipa](https://github.com/Airs-Kotex/HaruGalaxy/releases/download/v0.3.4/HaruGalaxy-0.3.4.tipa)。
+2. 下载 [HaruGalaxy-0.3.5.tipa](https://github.com/Airs-Kotex/HaruGalaxy/releases/download/v0.3.5/HaruGalaxy-0.3.5.tipa)。
 3. 从“文件”或分享菜单交给 TrollStore 安装，已有 0.3.1 及后续版本可直接覆盖。
 4. 打开 **初春星河**，在设置中启用“浮动工作区”。
 
@@ -74,6 +75,12 @@ Bundle ID：`io.github.airskotex.harugalaxy`。0.3.0 及更早版本使用旧标
 点击搜索栏即可按应用名称或标识筛选。如果浮窗没有显示键盘，会自动打开初春星河的主界面继续输入，也可以直接点击 **“在主应用中搜索”**。选中应用或取消后恢复浮窗，已打开的窗口会保留。
 
 切换过程中如系统拒绝打开主应用，会恢复浮窗并显示提示。搜索文字只用于本次筛选，不写入诊断日志。
+
+### 小窗输入与玻璃外观
+
+点选小窗时同步选择该 App 的键盘输入焦点，搜索时切回初春星河。若点击内容没有切换输入，可先点标题栏，再点文本框。最小化、关闭或锁屏会释放当前窗口的输入登记。
+
+玻璃材质用于操作控件，App 内容区保持清晰。iOS 14–17 使用现有 UIKit 材质实现 Liquid Glass 风格；它不是把 iOS 26+ 的系统效果移植到旧系统。开启“降低透明度”后自动改用不透明背景。
 
 ## 兼容性
 
@@ -129,6 +136,7 @@ scripts/               构建、打包、校验和日志读取
 | [FrontBoardAppLauncher](https://github.com/khanhduytran0/FrontBoardAppLauncher) · [khanhduytran0](https://github.com/khanhduytran0) 及贡献者 | 外部 App scene 启动、托管与浮动 binder 的核心参考 | 固定上游接口声明、保留 Apache-2.0 许可；生命周期另行修改 |
 | [TrollSpeed](https://github.com/Lessica/TrollSpeed) · [Lessica](https://github.com/Lessica) | TrollStore 全局窗口和生命周期资料 | 架构参考，未拷贝 HUD 实现 |
 | [LiveContainer](https://github.com/LiveContainer/LiveContainer) · 项目维护者与贡献者 | 场景/窗口管理参考 | 未拷贝其实现文件；上游头文件原有来源注释保留 |
+| [键盘焦点调查](https://gist.github.com/khanhduytran0/504b16d86a2091e676c412bd0a517306) · khanhduytran0、HugeBlack；[iOS 17 Runtime Headers](https://github.com/MTACS/iOS-17-Runtime-Headers) · MTACS | 托管场景可见性和键盘仲裁资料 | 本项目按已登记的 PID 与 scene 环境精确匹配，自行实现范围和生命周期控制 |
 | [TrollStore](https://github.com/opa334/TrollStore) · [opa334](https://github.com/opa334) 及贡献者 | 安装和权限机制 | 运行前提，遵循其支持范围 |
 | [Theos headers](https://github.com/theos/headers) · Theos 团队 | 私有接口声明与 SDK 工具资料 | 运行时检查所需接口 |
 | [Apple Runtime Headers](https://github.com/LeoNatan/Apple-Runtime-Headers) · [Leo Natan](https://github.com/LeoNatan)；[iOS Runtime Headers](https://github.com/nst/iOS-Runtime-Headers) · nst 及贡献者 | binder、scene diff 和 assertion 声明核实 | 声明参考，不代表所有 iOS 版本执行行为相同 |

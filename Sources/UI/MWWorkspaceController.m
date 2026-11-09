@@ -9,6 +9,7 @@
 #import "MWWorkspaceCoordinator.h"
 #import "../Diagnostics/MWDiagnostics.h"
 #import "../Platform/MWFloatingHost.h"
+#import "../Platform/MWKeyboardFocus.h"
 
 @interface MWCanvas : UIView
 @property(nonatomic) BOOL passThrough;
@@ -167,6 +168,7 @@
     }
     if(!_panel.hidden) { [self closePanel]; return; }
     CFTimeInterval started=CACurrentMediaTime();
+    [MWKeyboardFocus.shared focusHostWindow:self.view.window reason:@"window_panel"];
     for(MWWindowView *window in _windows.allValues) [window cancelInteractions];
     _panel.hidden=NO; _panelShield.hidden=NO; _bubble.panelOpen=YES;
     [self refreshPanel]; [self raiseControls]; [self.view setNeedsLayout]; [self.view layoutIfNeeded];
@@ -195,6 +197,7 @@
 - (void)openPicker {
     [self closePanel];
     if(self.presentedViewController) return;
+    [MWKeyboardFocus.shared focusHostWindow:self.view.window reason:@"open_picker"];
     MWAppPickerController *picker=[MWAppPickerController new];
     __weak typeof(self) weakSelf=self;
     picker.selectionHandler=^(MWApplication *app) { [weakSelf openApplication:app]; };
@@ -254,6 +257,9 @@
     [self.view bringSubviewToFront:selected];
     [_order removeObject:bundle]; [_order addObject:bundle];
     [self raiseControls];
+    if(!_hostHidden && _panel.hidden && !self.presentedViewController && !selected.hidden &&
+       selected.model.state==MWWindowVisible)
+        [selected.session requestKeyboardFocusInWindow:self.view.window];
     [self setNeedsStatusBarAppearanceUpdate]; [self setNeedsUpdateOfHomeIndicatorAutoHidden];
 }
 - (void)restoreBundle:(NSString *)bundle { [_windows[bundle] restore]; [self activateBundle:bundle]; [self updateChrome]; }
@@ -284,6 +290,7 @@
 - (void)openSettings {
     [self closePanel];
     if(self.presentedViewController) return;
+    [MWKeyboardFocus.shared focusHostWindow:self.view.window reason:@"settings"];
     MWSettingsController *settings=[MWSettingsController new];
     __weak typeof(self) weakSelf=self;
     settings.floatingHandler=^(BOOL enabled) {

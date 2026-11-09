@@ -10,6 +10,9 @@ HaruGalaxy (初春星河), formerly UiharuXPro4MilkyWay, is an independent nativ
 - Theos headers and nst/iOS-Runtime-Headers: reference declarations for BKSProcessAssertion flags/reasons and FBSSceneSettingsDiff construction. The project defines only the required declarations and probes them at runtime.
 - LeoNatan/Apple-Runtime-Headers: runtime declaration reference for binder removeScene/invalidate/_rootView, UIRootSceneWindow and the oneway scene-update method. 0.2.1 implements scoped adapters with runtime capability/ABI checks; no upstream implementation is copied.
 - LiveContainer: consulted as a scene-management reference. No LiveContainer implementation files are copied into this project. Some declarations in FrontBoardAppLauncher's retained upstream header identify LiveContainer as their original context; those notices remain intact.
+- MTACS/iOS-17-Runtime-Headers, commit `d1d960dfaa4107765dd7fcf891e4967c0930d5fd`: selector/type references for UIKeyboardArbiterManager, _UIKeyboardArbiterClient, UIScene, FBSSceneIdentityToken and RBSTarget. 0.3.5 checks method ABI at runtime; no complete runtime header collection is bundled.
+- khanhduytran0 and HugeBlack: hosted-scene keyboard/visibility investigation, gist `504b16d86a2091e676c412bd0a517306`, revision `90ff2251f458b9600292e3d8ed29105693e869c8`. The project's implementation independently limits environment mapping to registered exact PID/token-derived environment pairs and manages their lifetime. Research reference: https://gist.github.com/khanhduytran0/504b16d86a2091e676c412bd0a517306/90ff2251f458b9600292e3d8ed29105693e869c8
+- Apple Liquid Glass design guidance: visual reference for translucent controls, hierarchy, contrasting edges and accessibility. On TrollStore-supported iOS versions the project uses existing UIKit blur and custom layers, not Apple's iOS 26+ UIGlassEffect. No Apple design assets are copied.
 
 New project implementation is licensed under Apache License 2.0. See `LICENSE`.
 

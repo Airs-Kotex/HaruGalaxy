@@ -5,6 +5,8 @@
 #import "UI/MWPreferences.h"
 #import "UI/MWWorkspaceCoordinator.h"
 #import "UI/MWEdgeHandle.h"
+#import "UI/MWWindowView.h"
+#import "Platform/MWKeyboardFocus.h"
 #import "Platform/MWPrivate.h"
 #import "Diagnostics/MWDiagnostics.h"
 
@@ -14,11 +16,20 @@
 - (void)sendEvent:(UIEvent *)event {
     if(event.type==UIEventTypeTouches) for(UITouch *touch in [event touchesForWindow:self]) {
         if(touch.phase!=UITouchPhaseBegan && touch.phase!=UITouchPhaseEnded && touch.phase!=UITouchPhaseCancelled) continue;
-        for(UIView *view=touch.view;view && view!=self;view=view.superview) if([view isKindOfClass:MWEdgeHandle.class]) {
-            // Only the app-owned entry, never guest touches or keyboard input.
-            MWTrace(@"input.edge_delivery",@{@"phase":@(touch.phase),@"windowClass":NSStringFromClass(self.class),
-                @"interactive":@(self.userInteractionEnabled),@"key":@(self.isKeyWindow)});
-            break;
+        BOOL control=NO;
+        for(UIView *view=touch.view;view && view!=self;view=view.superview) {
+            if([view isKindOfClass:UIControl.class]) control=YES;
+            if(touch.phase==UITouchPhaseBegan && !control && [view isKindOfClass:MWWindowView.class]) {
+                // The touch has already been hit-tested. Select the guest before
+                // forwarding it; never mutate the global hit-testing path.
+                [(MWWindowView *)view prepareKeyboardFocus]; break;
+            }
+            if([view isKindOfClass:MWEdgeHandle.class]) {
+                // Only the app-owned entry, never guest touches or keyboard input.
+                MWTrace(@"input.edge_delivery",@{@"phase":@(touch.phase),@"windowClass":NSStringFromClass(self.class),
+                    @"interactive":@(self.userInteractionEnabled),@"key":@(self.isKeyWindow)});
+                break;
+            }
         }
     }
     [super sendEvent:event];
@@ -78,13 +89,14 @@
 - (void)sceneDidDisconnect:(UIScene *)scene {
     (void)scene;
     MWLog(@"host_scene.disconnect",@{@"session":_sceneIdentifier ?: @"none",@"floating":@(_floating)});
+    [MWKeyboardFocus.shared releaseForWindow:self.window];
     if(_floating) [MWFloatingHost.shared sceneDisconnected:_sceneIdentifier];
     [MWWorkspaceCoordinator.shared detachWindow:self.window]; self.window=nil;
 }
 - (void)sceneDidEnterBackground:(UIScene *)scene {
     (void)scene;
     MWLog(@"host_scene.background",@{@"session":_sceneIdentifier ?: @"none",@"floating":@(_floating)});
-    if(!_floating) { [MWWorkspaceCoordinator.shared setWindow:self.window visible:NO]; self.window.hidden=YES; }
+    if(!_floating) { [MWKeyboardFocus.shared releaseForWindow:self.window]; [MWWorkspaceCoordinator.shared setWindow:self.window visible:NO]; self.window.hidden=YES; }
     [MWFloatingHost.shared refreshAfterBackgroundTransition];
 }
 - (void)sceneWillEnterForeground:(UIScene *)scene {

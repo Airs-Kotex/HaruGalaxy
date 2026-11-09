@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.5 — Keyboard focus and glass controls
+
+- Add runtime-checked keyboard ownership for the host and hosted App scenes. Touching or activating a window selects its process/scene; minimizing, closing, locking or switching input releases ownership.
+- Register hosted PID bindings where the current UIKit keyboard arbiter exposes them and keep exact scene identity/PID matching.
+- Add a scoped visibility-environment bridge for owned scenes based on the upstream keyboard-focus investigation; unrelated process/environment targets pass through unchanged.
+- Give the edge entry, window title bars and panel a translucent glass surface with dynamic light/dark rims and Reduce Transparency/contrast fallbacks. Guest content stays separate from the effect.
+- Expand diagnostics with focus ownership, keyboard arbiter capability, environment registration/application and keyboard visibility stages.
+
+The package is built for device validation. Keyboard grants and visual output remain system/device dependent.
+
 ## 0.3.4 — Search input
 
 - Embed the search bar directly in the app picker and focus its text field after presentation.

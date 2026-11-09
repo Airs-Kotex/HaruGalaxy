@@ -66,5 +66,15 @@ class DiagnosticsReaderTests(unittest.TestCase):
         self.assertIn("not foreground visibility",result["interpretation"])
         self.assertEqual(result["recent_events"][-1]["fields"],{"suspended":False})
 
+    def test_keyboard_pipeline_distinguishes_registration_request_and_visibility(self):
+        names=["keyboard.environment_registered","keyboard.environment_applied",
+               "keyboard.focus_requested","keyboard.focus_completed","keyboard.focus_unavailable"]
+        records="\n".join(json.dumps({"time":i,"sequence":i,"event":event,"fields":{}}) for i,event in enumerate(names))
+        result=reader.summarize({"schema":1,"logs":{"events":records}})["keyboard_pipeline"]
+        self.assertEqual(result["counts"]["keyboard.focus_requested"],1)
+        self.assertNotIn("keyboard.visibility",result["counts"])
+        self.assertEqual([row["event"] for row in result["recent_events"]],names)
+        self.assertIn("do not prove a focus grant",result["interpretation"])
+
 
 if __name__=="__main__": unittest.main()

@@ -13,7 +13,9 @@
 }
 - (instancetype)initWithWindow:(MWWindowView *)window panel:(MWWindowPanel *)panel {
     if((self=[super initWithFrame:CGRectZero])) {
-        self.backgroundColor=UIColor.tertiarySystemBackgroundColor; self.layer.cornerRadius=12;
+        self.backgroundColor=MWGlassRowColor(); self.layer.cornerRadius=16;
+        self.layer.cornerCurve=kCACornerCurveContinuous;
+        self.layer.borderWidth=0.5; self.layer.borderColor=MWGlassBorderColor(self.traitCollection,NO).CGColor;
         _main=[UIButton buttonWithType:UIButtonTypeSystem];
         _main.titleLabel.numberOfLines=2; _main.titleLabel.font=[UIFont systemFontOfSize:14 weight:UIFontWeightSemibold];
         _main.contentHorizontalAlignment=UIControlContentHorizontalAlignmentLeft; _main.contentEdgeInsets=UIEdgeInsetsMake(8,12,8,12);
@@ -28,6 +30,8 @@
         _actions.axis=UILayoutConstraintAxisHorizontal; _actions.distribution=UIStackViewDistributionFillEqually;
         [self addSubview:_actions];
         [self updateWindow:window];
+        [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(refreshRowAppearance) name:UIAccessibilityReduceTransparencyStatusDidChangeNotification object:nil];
+        [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(refreshRowAppearance) name:UIAccessibilityDarkerSystemColorsStatusDidChangeNotification object:nil];
     }
     return self;
 }
@@ -53,6 +57,14 @@
     [super layoutSubviews]; _main.frame=CGRectMake(0,0,self.bounds.size.width,54);
     _actions.frame=CGRectMake(0,54,self.bounds.size.width,44);
 }
+- (void)traitCollectionDidChange:(UITraitCollection *)previous {
+    [super traitCollectionDidChange:previous]; [self refreshRowAppearance];
+}
+- (void)refreshRowAppearance {
+    self.backgroundColor=MWGlassRowColor();
+    self.layer.borderColor=MWGlassBorderColor(self.traitCollection,NO).CGColor;
+}
+- (void)dealloc { [[NSNotificationCenter defaultCenter] removeObserver:self]; }
 @end
 
 @implementation MWWindowPanel {
@@ -66,9 +78,8 @@
 }
 @synthesize createdRowCount=_createdRowCount;
 - (instancetype)init {
-    if((self=[super initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemChromeMaterial]])) {
-        self.layer.cornerRadius=20; self.layer.cornerCurve=kCACornerCurveContinuous; self.clipsToBounds=YES;
-        _title=[UILabel new]; _title.text=@"窗口面板"; _title.font=[UIFont systemFontOfSize:18 weight:UIFontWeightBold]; [self.contentView addSubview:_title];
+    if((self=[super initWithCornerRadius:24])) {
+        _title=[UILabel new]; _title.text=@"窗口面板"; _title.font=[UIFont systemFontOfSize:18 weight:UIFontWeightSemibold]; [self.contentView addSubview:_title];
         _hint=[UILabel new]; _hint.text=@"收纳后不占底部 · 轻点窗口恢复"; _hint.font=[UIFont systemFontOfSize:11]; _hint.textColor=UIColor.secondaryLabelColor; [self.contentView addSubview:_hint];
         _open=[UIButton buttonWithType:UIButtonTypeSystem]; [_open setTitle:@"＋ 打开应用" forState:UIControlStateNormal];
         [_open addTarget:self action:@selector(openApplication) forControlEvents:UIControlEventTouchUpInside]; [self.contentView addSubview:_open];

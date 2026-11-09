@@ -3,6 +3,7 @@
 #import "MWPreferences.h"
 #import "MWGuestContentView.h"
 #import "MWCornerHandle.h"
+#import "MWGlassSurface.h"
 #import "../Diagnostics/MWDiagnostics.h"
 
 static MWRect MWFromCGRect(CGRect r) { return (MWRect){r.origin.x,r.origin.y,r.size.width,r.size.height}; }
@@ -20,7 +21,7 @@ static CGRect MWToCGRect(MWRect r) { return CGRectMake(r.x,r.y,r.width,r.height)
 @end
 @implementation MWWindowView {
     UIView *_surface, *_content;
-    UIVisualEffectView *_bar;
+    MWGlassSurface *_bar;
     UILabel *_title, *_message;
     UIButton *_minimize, *_maximize, *_retry;
     MWCornerHandle *_resize, *_freeResize;
@@ -56,13 +57,13 @@ static CGRect MWToCGRect(MWRect r) { return CGRectMake(r.x,r.y,r.width,r.height)
         self.backgroundColor=UIColor.clearColor;
         self.layer.shadowColor=UIColor.blackColor.CGColor; self.layer.shadowOpacity=0.2;
         self.layer.shadowRadius=18; self.layer.shadowOffset=CGSizeMake(0,8);
-        _surface=[UIView new]; _surface.backgroundColor=UIColor.secondarySystemBackgroundColor;
+        _surface=[UIView new]; _surface.backgroundColor=UIColor.clearColor;
         _surface.layer.cornerRadius=18; _surface.layer.cornerCurve=kCACornerCurveContinuous;
         _surface.clipsToBounds=YES; _surface.layer.borderWidth=1;
         [self addSubview:_surface];
-        _content=[UIView new]; _content.clipsToBounds=YES; [_surface addSubview:_content];
+        _content=[UIView new]; _content.backgroundColor=UIColor.secondarySystemBackgroundColor; _content.clipsToBounds=YES; [_surface addSubview:_content];
         _guestHost=[MWGuestContentView new]; [_content addSubview:_guestHost];
-        _bar=[[UIVisualEffectView alloc] initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemChromeMaterial]];
+        _bar=[[MWGlassSurface alloc] initWithCornerRadius:0];
         [_surface addSubview:_bar];
         _title=[UILabel new]; _title.text=application.name;
         _title.font=[UIFont systemFontOfSize:14 weight:UIFontWeightSemibold];
@@ -185,6 +186,8 @@ static CGRect MWToCGRect(MWRect r) { return CGRectMake(r.x,r.y,r.width,r.height)
         [view logContentGeometry:@"attached"];
         [view updateStatus:nil];
         if(view.stateHandler) view.stateHandler();
+        if(view.active && !view->_hostHidden && !view.hidden && !view.window.rootViewController.presentedViewController)
+            [view.session requestKeyboardFocusInWindow:view.window];
     }];
 }
 - (void)failed:(NSError *)error {
@@ -212,16 +215,16 @@ static CGRect MWToCGRect(MWRect r) { return CGRectMake(r.x,r.y,r.width,r.height)
     _resize.hidden=_freeResize.hidden=_model.maximized || _model.state!=MWWindowVisible;
 }
 - (void)setActive:(BOOL)active {
+    if(!active) [_session releaseKeyboardFocus];
     if(_active==active && _surface.layer.borderColor) return;
     _active=active;
-    UIColor *color=active ? UIColor.systemTealColor : UIColor.separatorColor;
-    _surface.layer.borderColor=[color resolvedColorWithTraitCollection:self.traitCollection].CGColor;
-    self.layer.shadowOpacity=active ? 0.23 : 0.12;
+    _surface.layer.borderColor=MWGlassBorderColor(self.traitCollection,active).CGColor;
+    _bar.emphasized=active;
+    self.layer.shadowOpacity=active ? 0.19 : 0.1;
 }
 - (void)traitCollectionDidChange:(UITraitCollection *)previous {
     [super traitCollectionDidChange:previous];
-    UIColor *color=_active ? UIColor.systemTealColor : UIColor.separatorColor;
-    _surface.layer.borderColor=[color resolvedColorWithTraitCollection:self.traitCollection].CGColor;
+    _surface.layer.borderColor=MWGlassBorderColor(self.traitCollection,_active).CGColor;
 }
 - (BOOL)gestureRecognizer:(UIGestureRecognizer *)recognizer shouldReceiveTouch:(UITouch *)touch {
     if(recognizer.view==_resize || recognizer.view==_freeResize) return YES;
@@ -323,6 +326,11 @@ static CGRect MWToCGRect(MWRect r) { return CGRectMake(r.x,r.y,r.width,r.height)
     [self setNeedsLayout]; [self layoutIfNeeded];
 }
 - (void)focus { if(self.activateHandler) self.activateHandler(); }
+- (void)prepareKeyboardFocus {
+    if(_hostHidden || self.hidden || _model.state!=MWWindowVisible) return;
+    [self focus];
+    [_session requestKeyboardFocusInWindow:self.window];
+}
 - (void)toggleMaximize {
     [self cancelInteractions];
     BOOL wasMaximized=_model.maximized;

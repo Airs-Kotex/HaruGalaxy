@@ -1,13 +1,15 @@
 # HaruGalaxy · 初春星河
 
-[简体中文](README.md) · [Download 0.3.4](https://github.com/Airs-Kotex/HaruGalaxy/releases/tag/v0.3.4) · [Issues](https://github.com/Airs-Kotex/HaruGalaxy/issues)
+[简体中文](README.md) · [Download 0.3.5](https://github.com/Airs-Kotex/HaruGalaxy/releases/tag/v0.3.5) · [Issues](https://github.com/Airs-Kotex/HaruGalaxy/issues)
 
 A native multi-window workspace for TrollStore. HaruGalaxy hosts installed apps in movable windows with an edge panel, free or original-aspect resizing, half-screen snapping and local diagnostic exports.
+
+The edge entry, title bars and window panel now use translucent glass controls, with dark/light appearance, Reduce Transparency and contrast adaptations.
 
 ## Install
 
 1. Install [TrollStore](https://github.com/opa334/TrollStore) on a supported device.
-2. Download [HaruGalaxy-0.3.4.tipa](https://github.com/Airs-Kotex/HaruGalaxy/releases/download/v0.3.4/HaruGalaxy-0.3.4.tipa).
+2. Download [HaruGalaxy-0.3.5.tipa](https://github.com/Airs-Kotex/HaruGalaxy/releases/download/v0.3.5/HaruGalaxy-0.3.5.tipa).
 3. Open the file in TrollStore and install it over an existing 0.3.1 or later installation.
 4. Open HaruGalaxy and enable the floating workspace in Settings.
 
@@ -37,6 +39,10 @@ Each app has one window, with up to four sessions at a time. Move the edge entry
 Tap the search field to filter apps by name or bundle identifier. If the floating scene does not display a keyboard, HaruGalaxy opens its normal app interface for input. You can also tap **“在主应用中搜索”** (“Search in the main app”). Selecting an app or cancelling restores the floating workspace and preserves existing sessions.
 
 If iOS rejects the foreground request, the floating workspace returns with a message. Search text is never written to diagnostic logs.
+
+Selecting a window also selects its App's keyboard focus. If tapping content does not switch input, tap its title bar before the text field. Minimizing, closing or locking releases the current keyboard-host registration. Actual keyboard availability depends on the system and hosted App.
+
+On iOS 14–17, the Liquid Glass-inspired appearance uses existing UIKit blur and custom edge layers. It does not provide iOS 26+'s native glass API. Guest content remains clear; Reduce Transparency switches controls to opaque backgrounds.
 
 ## Compatibility
 

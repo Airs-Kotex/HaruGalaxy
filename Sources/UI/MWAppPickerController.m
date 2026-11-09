@@ -2,6 +2,7 @@
 #import "MWAppPickerController.h"
 #import "MWPreferences.h"
 #import "../Diagnostics/MWDiagnostics.h"
+#import "../Platform/MWKeyboardFocus.h"
 
 @interface MWAppPickerController () <UISearchBarDelegate, UIAdaptivePresentationControllerDelegate>
 @end
@@ -86,12 +87,13 @@
         window.windowLevel=UIWindowLevelNormal+1;
     }
     [window makeKeyWindow];
+    [MWKeyboardFocus.shared focusHostWindow:window reason:@"application_search"];
 }
 - (void)requestSearchFocus {
     if(_finished || !self.viewIfLoaded.window) return;
     _searchExpected=YES; [self prepareSearchWindow];
     BOOL accepted=[_searchBar.searchTextField becomeFirstResponder];
-    MWLog(@"search.focus_request",@{@"accepted":@(accepted),@"keyWindow":@(self.view.window.isKeyWindow),
+    MWLog(@"search.focus_request",@{@"accepted":@(accepted),@"keyboard":[MWKeyboardFocus.shared snapshot],@"keyWindow":@(self.view.window.isKeyWindow),
         @"sceneState":@(self.view.window.windowScene.activationState),@"windowLevel":@(self.view.window.windowLevel),
         @"floating":@(self.searchFallbackHandler!=nil)});
     [self scheduleKeyboardCheck];

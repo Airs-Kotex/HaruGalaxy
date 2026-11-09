@@ -9,6 +9,8 @@
 - (void)startWithSize:(CGSize)size completion:(void (^)(NSError *error))completion;
 - (void)updateSize:(CGSize)size orientation:(UIInterfaceOrientation)orientation;
 - (void)setVisible:(BOOL)visible;
+- (void)requestKeyboardFocusInWindow:(UIWindow *)window;
+- (void)releaseKeyboardFocus;
 - (void)close;
 @end
 

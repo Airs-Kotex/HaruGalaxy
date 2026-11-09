@@ -24,5 +24,6 @@
 - (void)toggleMaximize;
 - (void)setInitialResizeMode:(MWResizeMode)mode;
 - (void)cancelInteractions;
+- (void)prepareKeyboardFocus;
 @end
 

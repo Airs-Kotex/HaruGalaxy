@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 #import "MWEdgeHandle.h"
 #import "MWPreferences.h"
+#import "MWGlassSurface.h"
 #import "../Core/MWWindowModel.h"
 #import "../Core/MWEdgeInteraction.h"
 #import "../Diagnostics/MWDiagnostics.h"
 
 @implementation MWEdgeHandle {
-    UIView *_tab;
+    MWGlassSurface *_tab;
     UIImageView *_symbol;
     UILabel *_badge;
     CGRect _viewport;
@@ -25,17 +26,15 @@
         NSUserDefaults *defaults=NSUserDefaults.standardUserDefaults;
         _right=![defaults boolForKey:@"edgeHandleLeft"];
         _position=[defaults objectForKey:@"edgeHandlePosition"] ? [defaults doubleForKey:@"edgeHandlePosition"] : 0.35;
-        _tab=[UIView new]; _tab.userInteractionEnabled=NO;
-        _tab.backgroundColor=[UIColor colorWithRed:0.04 green:0.48 blue:0.52 alpha:0.9];
-        _tab.layer.cornerRadius=8; _tab.layer.cornerCurve=kCACornerCurveContinuous;
+        _tab=[[MWGlassSurface alloc] initWithCornerRadius:14]; _tab.userInteractionEnabled=NO;
         [self addSubview:_tab];
         _symbol=[[UIImageView alloc] initWithImage:[UIImage systemImageNamed:@"square.stack.3d.up.fill"]];
-        _symbol.tintColor=UIColor.whiteColor; _symbol.contentMode=UIViewContentModeScaleAspectFit;
-        _symbol.userInteractionEnabled=NO; [_tab addSubview:_symbol];
+        _symbol.tintColor=UIColor.labelColor; _symbol.contentMode=UIViewContentModeScaleAspectFit;
+        _symbol.userInteractionEnabled=NO; [_tab.contentView addSubview:_symbol];
         _badge=[UILabel new]; _badge.userInteractionEnabled=NO; _badge.textColor=UIColor.whiteColor;
         _badge.backgroundColor=UIColor.systemOrangeColor; _badge.textAlignment=NSTextAlignmentCenter;
         _badge.font=[UIFont systemFontOfSize:10 weight:UIFontWeightBold]; _badge.layer.cornerRadius=7; _badge.clipsToBounds=YES;
-        [_tab addSubview:_badge];
+        [_tab.contentView addSubview:_badge];
         // One tracking path decides tap, inward pull and hold-to-move. Small
         // finger drift must not make two competing recognizers both fail.
         self.multipleTouchEnabled=NO;
@@ -56,6 +55,7 @@
     _tab.layer.maskedCorners=_right ? kCALayerMinXMinYCorner|kCALayerMinXMaxYCorner : kCALayerMaxXMinYCorner|kCALayerMaxXMaxYCorner;
     _symbol.frame=CGRectMake(12,(height-20)/2,20,20); _symbol.alpha=_expanded ? 1 : 0;
     _badge.frame=CGRectMake(27,3,14,14); _badge.hidden=!_expanded || !_minimizedCount;
+    _tab.emphasized=_expanded;
 }
 - (void)setMinimizedCount:(NSUInteger)count {
     if(_minimizedCount==count && _badge.text) return;

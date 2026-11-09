@@ -6,6 +6,9 @@
 #import "MWBackgroundLease.h"
 #import "MWSceneUpdateGuard.h"
 #import "MWRootWindowAdapter.h"
+#import "MWKeyboardFocus.h"
+#import "MWSceneInputEnvironment.h"
+#import <unistd.h>
 #import "../Core/MWOverlayStartup.h"
 #import "../Diagnostics/MWDiagnostics.h"
 
@@ -28,6 +31,7 @@ NSString *const MWFloatingHostDidBecomeReadyNotification=@"MWFloatingHostDidBeco
     UIMutableApplicationSceneSettings *_guardSettings;
     BOOL _guardActive, _locked;
     MWRootWindowAdapter *_rootAdapter;
+    MWSceneInputEnvironment *_inputEnvironment;
     BOOL _stopping;
     BOOL _cleanupFailed;
     id _retainedFailedBinder, _retainedFailedScene;
@@ -81,6 +85,7 @@ NSString *const MWFloatingHostDidBecomeReadyNotification=@"MWFloatingHostDidBeco
         _enabled=YES;
         _scene=[[PrivClass(FBSceneManager) sharedInstance] createSceneWithDefinition:definition initialParameters:parameters];
         if(!_scene || !_binder) @throw [NSException exceptionWithName:@"MWFloatingScene" reason:@"未返回浮动场景" userInfo:nil];
+        _inputEnvironment=[[MWSceneInputEnvironment alloc] initWithScene:_scene identifier:_sceneIdentifier processIdentifier:getpid()];
         [_binder addScene:_scene];
         // Permit root inspection only after the binder has been asked to host.
         // A nil root during initialization does not establish incompatibility.
@@ -172,6 +177,7 @@ NSString *const MWFloatingHostDidBecomeReadyNotification=@"MWFloatingHostDidBeco
 }
 - (void)applyLocked:(BOOL)locked {
     _locked=locked;
+    [MWKeyboardFocus.shared setSuspended:locked];
     @synchronized(self) {
         // The client may have accepted a background/lock diff while protection
         // was inactive. Refresh the baseline before normalizing the next diff.
@@ -204,6 +210,7 @@ NSString *const MWFloatingHostDidBecomeReadyNotification=@"MWFloatingHostDidBeco
     _enabled=NO;
     @synchronized(self) { _guardActive=NO; _guardIdentifier=nil; _guardSettings=nil; }
     overlay.hidden=YES;
+    [MWKeyboardFocus.shared releaseForWindow:overlay];
     [[NSNotificationCenter defaultCenter] postNotificationName:MWFloatingHostWillStopNotification object:self];
     if(_hasLockToken) { notify_cancel(_lockToken); _hasLockToken=NO; }
     _floatingWindow=nil;
@@ -227,7 +234,9 @@ NSString *const MWFloatingHostDidBecomeReadyNotification=@"MWFloatingHostDidBeco
         @catch(NSException *exception) { MWLog(@"overlay.scene_destroy_failed",@{@"reason":exception.reason ?: @"unknown"}); }
     }
     [rootAdapter detach]; _rootAdapter=nil;
+    if(binderInvalidated) { [_inputEnvironment invalidate]; _inputEnvironment=nil; }
     _scene=nil; _binder=nil; _sceneIdentifier=nil; _locked=NO;
+    [MWKeyboardFocus.shared setSuspended:NO];
     _searchInputSuspended=NO;
     [_backgroundLease invalidate]; _backgroundLease=nil;
     _stopping=NO;
@@ -280,7 +289,7 @@ NSString *const MWFloatingHostDidBecomeReadyNotification=@"MWFloatingHostDidBeco
     _searchInputSuspended=suspended;
     MWLog(@"overlay.search_input",@{@"suspended":@(suspended)});
     if(self.ready) {
-        if(suspended) [self.floatingWindow resignKeyWindow];
+        if(suspended) { [MWKeyboardFocus.shared releaseForWindow:self.floatingWindow]; [self.floatingWindow resignKeyWindow]; }
         [self applyLocked:_locked];
         // Applying visibility does not itself transfer keyboard focus to the
         // overlay while the normal scene is being activated for input.
