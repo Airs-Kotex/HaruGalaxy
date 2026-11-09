@@ -76,5 +76,15 @@ class DiagnosticsReaderTests(unittest.TestCase):
         self.assertEqual([row["event"] for row in result["recent_events"]],names)
         self.assertIn("do not prove a focus grant",result["interpretation"])
 
+    def test_guest_request_and_preparation_do_not_imply_keyboard_visible(self):
+        events=[("keyboard.presentation_prepared",{"windowReturned":True}),
+                ("keyboard.guest_input_state",{"systemInputActive":True}),
+                ("keyboard.focus_observed",{"after":1.0,"state":{"visible":False}})]
+        text="\n".join(json.dumps({"time":i,"sequence":i,"event":event,"fields":fields}) for i,(event,fields) in enumerate(events))
+        data=reader.summarize({"schema":1,"logs":{"events":text}})["keyboard_pipeline"]
+        self.assertNotIn("keyboard.visibility",data["counts"])
+        self.assertFalse(data["recent_events"][-1]["fields"]["state"]["visible"])
+        self.assertIn("guest-reported request",data["interpretation"])
+
 
 if __name__=="__main__": unittest.main()

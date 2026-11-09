@@ -127,8 +127,8 @@ static CGRect MWToCGRect(MWRect r) { return CGRectMake(r.x,r.y,r.width,r.height)
     _spinner.center=CGPointMake(CGRectGetMidX(_content.bounds),CGRectGetMidY(_content.bounds)-32);
     _message.frame=CGRectMake(16,MAX(12,CGRectGetMidY(_content.bounds)-16),MAX(1,_content.bounds.size.width-32),72);
     _retry.frame=CGRectMake(20,MIN(_content.bounds.size.height-48,CGRectGetMaxY(_message.frame)),MAX(1,_content.bounds.size.width-40),44);
-    _resize.frame=CGRectMake(self.bounds.size.width-28,self.bounds.size.height-28,28,28);
-    _freeResize.frame=CGRectMake(self.bounds.size.width-28,0,28,28);
+    _resize.frame=CGRectMake(self.bounds.size.width-MWCornerTouchSize,self.bounds.size.height-MWCornerTouchSize,MWCornerTouchSize,MWCornerTouchSize);
+    _freeResize.frame=CGRectMake(self.bounds.size.width-MWCornerTouchSize,0,MWCornerTouchSize,MWCornerTouchSize);
     _resize.hidden=_freeResize.hidden=_model.maximized || _model.state!=MWWindowVisible;
     if(!CGSizeEqualToSize(_shadowSize,self.bounds.size) || _shadowMaximized!=_model.maximized) {
         _shadowSize=self.bounds.size; _shadowMaximized=_model.maximized;
@@ -173,6 +173,14 @@ static CGRect MWToCGRect(MWRect r) { return CGRectMake(r.x,r.y,r.width,r.height)
     [_session setVisible:!_hostHidden];
     __weak typeof(self) weakSelf=self;
     _session.failureHandler=^(NSError *error) { [weakSelf failed:error]; };
+    _session.inputRequestHandler=^{
+        MWWindowView *view=weakSelf;
+        // Guest notifications can be delayed or caused by autofocus. They may
+        // refresh only the already-selected visible window, never steal input
+        // from a different guest or the host's presented picker.
+        if(view && view.active && !view->_hostHidden && !view.hidden && !view.window.rootViewController.presentedViewController)
+            [view.session refreshKeyboardFocusInWindow:view.window];
+    };
     [_session updateSize:_logicalSize orientation:self.window.windowScene.interfaceOrientation];
     [_session startWithSize:_logicalSize completion:^(NSError *error) {
         MWWindowView *view=weakSelf;
@@ -228,6 +236,9 @@ static CGRect MWToCGRect(MWRect r) { return CGRectMake(r.x,r.y,r.width,r.height)
 }
 - (BOOL)gestureRecognizer:(UIGestureRecognizer *)recognizer shouldReceiveTouch:(UITouch *)touch {
     if(recognizer.view==_resize || recognizer.view==_freeResize) return YES;
+    // A pan beginning over title-bar buttons cancels the button's tap. Narrow
+    // windows must still have a usable drag area when controls fill the bar.
+    if(recognizer.view==_bar && [recognizer isKindOfClass:UIPanGestureRecognizer.class]) return YES;
     for(UIView *view=touch.view;view && view!=_bar;view=view.superview)
         if([view isKindOfClass:UIControl.class]) return NO;
     return YES;

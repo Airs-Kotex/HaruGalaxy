@@ -102,8 +102,10 @@ MWRect MWSystemCanvas(double width,double height,bool landscape) {
     return (MWRect){0,0,landscape ? fmax(w,h) : fmin(w,h),landscape ? fmin(w,h) : fmax(w,h)};
 }
 bool MWCornerHit(double x,double y,double width,double height,bool top) {
-    if(!isfinite(x)||!isfinite(y)||x<0||y<0||x>width||y>height) return false;
-    return x>=width-12 || (top ? y<=12 : y>=height-12);
+    if(!isfinite(x)||!isfinite(y)||!isfinite(width)||!isfinite(height)||width<=0||height<=0||
+       x<0||y<0||x>width||y>height) return false;
+    double dx=width-x,dy=top ? y : height-y,radius=fmin(width,height);
+    return dx*dx+dy*dy<=radius*radius;
 }
 MWRect MWUnpinFrame(MWRect frame,double extraTopInset) {
     double inset=clamp(finite_or(extraTopInset,0),0,fmax(0,frame.height-MWTitleHeight-1));
@@ -196,10 +198,55 @@ MWRect MWMaximizedAspectRect(MWRect viewport, double ratio) {
     return r;
 }
 MWRect MWEdgeHandleRect(MWRect viewport, bool right, double position) {
+    return MWEntryRect(viewport,right ? 1 : 0,position);
+}
+MWRect MWEntryRect(MWRect viewport,double xPosition,double yPosition) {
     MWRect v=safe_viewport(viewport);
     double height=fmin(MWEdgeTouchHeight,v.height),width=fmin(MWEdgeTouchWidth,v.width);
-    double normalized=clamp(finite_or(position,0.35),0,1);
-    return (MWRect){right ? v.x+v.width-width : v.x,v.y+normalized*(v.height-height),width,height};
+    return (MWRect){v.x+clamp(finite_or(xPosition,1),0,1)*(v.width-width),
+        v.y+clamp(finite_or(yPosition,0.35),0,1)*(v.height-height),width,height};
+}
+MWEntryPlacement MWEntryDrop(MWRect viewport,double x,double y) {
+    MWRect v=safe_viewport(viewport),r=MWEntryRect(v,0,0);
+    double travelX=v.width-r.width,travelY=v.height-r.height;
+    r.x=clamp(finite_or(x,v.x),v.x,v.x+travelX);
+    r.y=clamp(finite_or(y,v.y),v.y,v.y+travelY);
+    bool right=(r.x-v.x)>=travelX/2;
+    double edgeDistance=right ? v.x+travelX-r.x : r.x-v.x;
+    bool docked=edgeDistance<=fmin(18,travelX/4);
+    if(docked) r.x=right ? v.x+travelX : v.x;
+    return (MWEntryPlacement){r,travelX>0 ? (r.x-v.x)/travelX : 0,
+        travelY>0 ? (r.y-v.y)/travelY : 0,docked,right};
+}
+MWRect MWPanelPlacementRect(MWRect viewport,MWRect anchor,double desiredHeight) {
+    MWRect v=safe_viewport(viewport);
+    double margin=fmin(8,fmin(v.width,v.height)/4),gap=8;
+    MWRect area={v.x+margin,v.y+margin,v.width-2*margin,v.height-2*margin};
+    // Normal chrome is 130pt; the compact UI uses 102pt and retains a 98pt row.
+    double usableHeight=200,minimumWidth=fmin(220,area.width);
+    double width=fmin(304,area.width),height=fmin(fmax(228,finite_or(desiredHeight,220)),area.height);
+    double left=anchor.x-gap-area.x,right=area.x+area.width-(anchor.x+anchor.width+gap);
+    double x,y=clamp(anchor.y+anchor.height/2-height/2,area.y,area.y+area.height-height);
+    if(left>=width || right>=width) {
+        x=left>=right ? anchor.x-gap-width : anchor.x+anchor.width+gap;
+    } else {
+        double above=anchor.y-gap-area.y,below=area.y+area.height-(anchor.y+anchor.height+gap);
+        x=clamp(anchor.x+anchor.width/2-width/2,area.x,area.x+area.width-width);
+        // A free entry in the middle leaves no room for a full-width side
+        // panel. Use a shorter scrollable panel above/below when possible.
+        if(fmax(above,below)>=usableHeight) {
+            height=fmin(height,fmax(above,below));
+            y=above>=below ? anchor.y-gap-height : anchor.y+anchor.height+gap;
+        } else if(fmax(left,right)>=minimumWidth) {
+            // A compact landscape phone may fit neither full-width sides nor
+            // a useful vertical panel. Narrow the side instead of hiding rows.
+            width=fmin(width,fmax(left,right));
+            x=left>=right ? anchor.x-gap-width : anchor.x+anchor.width+gap;
+        }
+    }
+    x=clamp(x,area.x,area.x+area.width-width);
+    y=clamp(y,area.y,area.y+area.height-height);
+    return (MWRect){x,y,width,height};
 }
 MWContentTransform MWFitContent(double logicalWidth,double logicalHeight,double availableWidth,double availableHeight) {
     double lw=fmax(1,finite_or(logicalWidth,1)),lh=fmax(1,finite_or(logicalHeight,1));

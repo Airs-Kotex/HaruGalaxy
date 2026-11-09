@@ -1,13 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 #import "MWCornerHandle.h"
 #import "../Core/MWWindowModel.h"
+#import "../Diagnostics/MWDiagnostics.h"
 
 @implementation MWCornerHandle {
     BOOL _top;
+    BOOL _contact;
     CAShapeLayer *_arc;
 }
 - (instancetype)initAtTop:(BOOL)top {
-    if((self=[super initWithFrame:CGRectMake(0,0,28,28)])) {
+    if((self=[super initWithFrame:CGRectMake(0,0,MWCornerTouchSize,MWCornerTouchSize)])) {
         _top=top; self.opaque=NO; self.backgroundColor=UIColor.clearColor;
         _arc=[CAShapeLayer layer]; _arc.fillColor=UIColor.clearColor.CGColor;
         _arc.lineCap=kCALineCapRound; _arc.lineWidth=2.5; [self.layer addSublayer:_arc];
@@ -29,6 +31,20 @@
     [CATransaction begin]; [CATransaction setDisableActions:YES]; _arc.frame=self.bounds; _arc.path=path.CGPath; [CATransaction commit];
 }
 - (void)setDragging:(BOOL)dragging { _dragging=dragging; _arc.lineWidth=dragging ? 3.5 : 2.5; [self updateColor]; }
-- (void)updateColor { _arc.strokeColor=[[self.tintColor colorWithAlphaComponent:_dragging ? 1 : 0.8] resolvedColorWithTraitCollection:self.traitCollection].CGColor; }
+- (BOOL)beginTrackingWithTouch:(UITouch *)touch withEvent:(UIEvent *)event {
+    (void)touch; (void)event; _contact=YES; [self updateColor];
+    MWTrace(@"window.resize_contact",@{@"mode":_top ? @"free" : @"proportional"});
+    return YES;
+}
+- (void)endTrackingWithTouch:(UITouch *)touch withEvent:(UIEvent *)event {
+    [super endTrackingWithTouch:touch withEvent:event]; _contact=NO; [self updateColor];
+}
+- (void)cancelTrackingWithEvent:(UIEvent *)event {
+    _contact=NO; [super cancelTrackingWithEvent:event]; [self updateColor];
+}
+- (void)updateColor {
+    _arc.lineWidth=(_dragging || _contact) ? 3.5 : 2.5;
+    _arc.strokeColor=[[self.tintColor colorWithAlphaComponent:(_dragging || _contact) ? 1 : 0.8] resolvedColorWithTraitCollection:self.traitCollection].CGColor;
+}
 - (void)traitCollectionDidChange:(UITraitCollection *)previous { [super traitCollectionDidChange:previous]; [self updateColor]; }
 @end

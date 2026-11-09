@@ -63,7 +63,9 @@ def summarize(bundle):
         "interpretation": (
             "environment_registered means an owned PID/environment was recorded; environment_applied means "
             "a matching target call occurred. focus_requested/completed do not prove a focus grant or keyboard "
-            "presentation. Compare visibility notifications and selected owner; unavailable selectors and "
+            "presentation. presentation_prepared records a paired hosted-window preparation attempt; "
+            "guest_input_state.systemInputActive is the guest-reported request. focus_observed samples "
+            "the state after the request without asserting success. Compare visibility notifications and selected owner; unavailable selectors and "
             "exceptions identify runtime gaps. No input text or continuous touch coordinates are recorded.")}
     return {"environment": environment, "events": len(records), "sessions": sorted({str(row.get("session", "unknown")) for row in records}),
             "counts": dict(sorted(counts.items())), "malformed_lines": malformed,

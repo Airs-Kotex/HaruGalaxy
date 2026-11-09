@@ -129,6 +129,9 @@ static void original_canvas_and_reachable_snap(void) {
     assert(MWCornerHit(5,25,28,28,false));
     assert(!MWCornerHit(5,4,28,28,false));
     assert(!MWCornerHit(-1,10,28,28,false));
+    assert(MWCornerHit(20,20,44,44,false)); // Interior of the larger corner target.
+    assert(MWCornerHit(21,23,44,44,true));
+    assert(!MWCornerHit(0,0,44,44,false)); // Keep the far interior corner pass-through.
 }
 
 static void proportional_scaling(void) {
@@ -175,8 +178,45 @@ static void proportional_scaling(void) {
     }
 }
 
+static void free_entry_placement(void) {
+    MWRect v={0,59,430,839};
+    MWEntryPlacement p=MWEntryDrop(v,170,320);
+    equal_rect(p.frame,(MWRect){170,320,56,76});
+    assert(!p.docked);
+    equal_rect(MWEntryRect(v,p.xPosition,p.yPosition),p.frame);
+    p=MWEntryDrop(v,10,320); assert(p.docked && !p.right && p.frame.x==0);
+    p=MWEntryDrop(v,365,320); assert(p.docked && p.right && p.frame.x==374);
+    p=MWEntryDrop(v,20,320); assert(!p.docked && p.frame.x==20);
+    p=MWEntryDrop(v,-200,2000); assert(p.docked && p.frame.x==0 && p.frame.y==822);
+    p=MWEntryDrop((MWRect){0,0,32,50},20,100); equal_rect(p.frame,(MWRect){0,0,32,50});
+    p=MWEntryDrop(v,NAN,INFINITY);
+    assert(isfinite(p.xPosition) && isfinite(p.yPosition));
+    for(int x=-100;x<600;x+=7) for(int y=-100;y<1100;y+=19) {
+        p=MWEntryDrop(v,x,y);
+        assert(p.frame.x>=v.x && p.frame.y>=v.y && p.frame.x+p.frame.width<=430.001 && p.frame.y+p.frame.height<=898.001);
+        equal_rect(MWEntryRect(v,p.xPosition,p.yPosition),p.frame);
+        MWRect rotated=MWEntryRect((MWRect){40,0,840,390},p.xPosition,p.yPosition);
+        assert(rotated.x>=40 && rotated.x+rotated.width<=880.001 && rotated.y>=0 && rotated.y+rotated.height<=390.001);
+    }
+    MWRect panel=MWPanelPlacementRect(v,(MWRect){187,400,56,76},550);
+    assert(panel.y>=484 || panel.y+panel.height<=392);
+    assert(panel.x>=v.x && panel.x+panel.width<=v.x+v.width);
+    assert(panel.y>=v.y && panel.y+panel.height<=v.y+v.height);
+    panel=MWPanelPlacementRect(v,(MWRect){374,320,56,76},334);
+    assert(panel.x+panel.width<=366);
+    panel=MWPanelPlacementRect((MWRect){0,0,932,430},(MWRect){430,177,56,76},550);
+    assert(panel.x+panel.width<=422 || panel.x>=494);
+    panel=MWPanelPlacementRect((MWRect){0,0,667,375},(MWRect){305.5,149.5,56,76},550);
+    assert(panel.height>=228 && panel.width>=220);
+    assert(panel.x+panel.width<=297.5 || panel.x>=369.5);
+    assert(panel.y>=8 && panel.y+panel.height<=367.001);
+    panel=MWPanelPlacementRect((MWRect){0,20,320,548},(MWRect){132,256,56,76},550);
+    assert(panel.height>=200 && panel.width>=220);
+    assert(panel.y+panel.height<=248 || panel.y>=340);
+}
+
 int main(void) {
-    lifecycle(); bounds(); maximize_restore(); proportional_scaling(); free_resize_and_snap(); original_canvas_and_reachable_snap();
+    lifecycle(); bounds(); maximize_restore(); proportional_scaling(); free_resize_and_snap(); original_canvas_and_reachable_snap(); free_entry_placement();
     puts("PASS: lifecycle, free/proportional resize, full/half-screen, top inset continuity, rotation and edge handle");
     return 0;
 }

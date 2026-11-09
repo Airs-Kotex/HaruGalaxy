@@ -1,6 +1,6 @@
 # HaruGalaxy · 初春星河
 
-[简体中文](README.md) · [Download 0.3.5](https://github.com/Airs-Kotex/HaruGalaxy/releases/tag/v0.3.5) · [Issues](https://github.com/Airs-Kotex/HaruGalaxy/issues)
+[简体中文](README.md) · [Download 0.3.6](https://github.com/Airs-Kotex/HaruGalaxy/releases/tag/v0.3.6) · [Issues](https://github.com/Airs-Kotex/HaruGalaxy/issues)
 
 A native multi-window workspace for TrollStore. HaruGalaxy hosts installed apps in movable windows with an edge panel, free or original-aspect resizing, half-screen snapping and local diagnostic exports.
 
@@ -9,7 +9,7 @@ The edge entry, title bars and window panel now use translucent glass controls, 
 ## Install
 
 1. Install [TrollStore](https://github.com/opa334/TrollStore) on a supported device.
-2. Download [HaruGalaxy-0.3.5.tipa](https://github.com/Airs-Kotex/HaruGalaxy/releases/download/v0.3.5/HaruGalaxy-0.3.5.tipa).
+2. Download [HaruGalaxy-0.3.6.tipa](https://github.com/Airs-Kotex/HaruGalaxy/releases/download/v0.3.6/HaruGalaxy-0.3.6.tipa).
 3. Open the file in TrollStore and install it over an existing 0.3.1 or later installation.
 4. Open HaruGalaxy and enable the floating workspace in Settings.
 
@@ -20,9 +20,9 @@ Bundle identifier: `io.github.airskotex.harugalaxy`. Versions 0.3.0 and earlier 
 | Gesture | Behavior |
 | --- | --- |
 | Tap the edge tab | Toggle the window panel |
-| Pull inward and release | Open the panel; pull back to cancel |
 | Hold still and release | Toggle the panel |
-| Hold until the haptic, then drag | Move the entry to either side or a different height |
+| Drag the entry directly | Move freely and keep the release position |
+| Release near either side | Dock and retract to a small tab while idle |
 | Settings → “入口保持展开” | Keep the entry expanded |
 | Tap outside the panel | Close it without activating the app underneath |
 | Drag a title bar | Move the window |
@@ -32,7 +32,9 @@ Bundle identifier: `io.github.airskotex.harugalaxy`. Versions 0.3.0 and earlier 
 | Minimize | Store the window in the edge panel |
 | Maximize / double-tap the title | Fill the screen; restore through the edge panel |
 
-Each app has one window, with up to four sessions at a time. Move the edge entry if its touch target overlaps a frequently used app control.
+Each app has one window, with up to four sessions at a time. Entry position is saved across launches and adapted on rotation. An undocked entry stays expanded. Drag it away from frequently used app controls; the previous inward-pull opening gesture now moves the entry, while a tap opens its panel.
+
+The resize arcs keep their small visual mark but use 44-point rounded touch regions and brighten on contact. Title-bar buttons can also start a window drag: a stationary tap activates the button, movement pans the window.
 
 ## Search
 

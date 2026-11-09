@@ -8,6 +8,23 @@
 #import "../Diagnostics/MWDiagnostics.h"
 #import "MWKeyboardFocus.h"
 #import "MWSceneInputEnvironment.h"
+#import "../Core/MWRuntimeTypes.h"
+#import <objc/runtime.h>
+#import <objc/message.h>
+#include <string.h>
+
+static BOOL MWGuestMethod(id object,SEL selector,char result,const char *args) {
+    if(!object || ![object respondsToSelector:selector]) return NO;
+    Method method=class_getInstanceMethod(object_getClass(object),selector);
+    if(!method || method_getNumberOfArguments(method)!=strlen(args)+2) return NO;
+    char type[64]={0};method_getReturnType(method,type,sizeof(type));
+    if(!MWObjCTypeMatches(type,result)) return NO;
+    for(unsigned i=0;i<strlen(args);i++) {
+        method_getArgumentType(method,i+2,type,sizeof(type));
+        if(!MWObjCTypeMatches(type,args[i])) return NO;
+    }
+    return YES;
+}
 
 @implementation MWSceneSession {
     FBApplicationProcessLaunchTransaction *_transaction;
@@ -18,6 +35,7 @@
     dispatch_source_t _monitor;
     void (^_completion)(NSError *);
     BOOL _started, _closed, _visible;
+    BOOL _observingInput, _inputKnown, _inputActive;
     NSUInteger _generation;
     CGSize _size;
     UIInterfaceOrientation _orientation;
@@ -100,6 +118,7 @@
         parameters.clientSettings=client;
         _scene=[[PrivClass(FBSceneManager) sharedInstance] createSceneWithDefinition:definition initialParameters:parameters];
         if(_scene) _inputEnvironment=[[MWSceneInputEnvironment alloc] initWithScene:_scene identifier:self.sceneIdentifier processIdentifier:_process.pid];
+        [self observeGuestInput];
         _presenter=[_scene.uiPresentationManager createPresenterWithIdentifier:self.sceneIdentifier];
         if(!_scene || !_presenter) {
             [self fail:MWError(16,@"此应用未提供可显示的场景，可能不支持小窗。")]; return;
@@ -112,9 +131,49 @@
         _transaction=nil;
         void (^completion)(NSError *)=_completion; _completion=nil;
         if(completion) completion(nil);
+        [self readGuestInputState];
         if(!_closed) [self startMonitoring];
     } @catch(NSException *exception) {
         [self fail:MWError(17,[NSString stringWithFormat:@"建立小窗失败：%@",exception.reason])];
+    }
+}
+- (void)observeGuestInput {
+    SEL add=NSSelectorFromString(@"addObserver:"),remove=NSSelectorFromString(@"removeObserver:");
+    if(!MWGuestMethod(_scene,add,'v',"@") || !MWGuestMethod(_scene,remove,'v',"@")) {
+        MWLog(@"keyboard.guest_observer_unavailable",@{@"scene":self.sceneIdentifier}); return;
+    }
+    @try {
+        _observingInput=YES;
+        ((void(*)(id,SEL,id))objc_msgSend)(_scene,add,self);
+    } @catch(NSException *exception) {
+        MWLog(@"keyboard.guest_observer_failed",@{@"reason":exception.reason ?: @"unknown"});
+    }
+}
+- (void)scene:(id)scene didUpdateClientSettingsWithDiff:(id)diff oldClientSettings:(id)old transitionContext:(id)context {
+    (void)diff; (void)old; (void)context;
+    __weak typeof(self) weakSelf=self;
+    dispatch_async(dispatch_get_main_queue(),^{
+        MWSceneSession *session=weakSelf;
+        if(session && !session->_closed && session->_scene==scene) [session readGuestInputState];
+    });
+}
+- (void)readGuestInputState {
+    if(_closed || !_scene) return;
+    @try {
+        SEL settings=NSSelectorFromString(@"clientSettings"),active=NSSelectorFromString(@"systemInputActive");
+        if(!MWGuestMethod(_scene,settings,'@',"")) return;
+        id client=((id(*)(id,SEL))objc_msgSend)(_scene,settings);
+        if(!MWGuestMethod(client,active,'B',"") && !MWGuestMethod(client,active,'c',"")) {
+            if(!_inputKnown) MWLog(@"keyboard.guest_state_unavailable",@{@"scene":self.sceneIdentifier});
+            _inputKnown=YES; return;
+        }
+        BOOL wantsInput=((BOOL(*)(id,SEL))objc_msgSend)(client,active);
+        if(_inputKnown && _inputActive==wantsInput) return;
+        _inputKnown=YES; _inputActive=wantsInput;
+        MWLog(@"keyboard.guest_input_state",@{@"scene":self.sceneIdentifier,@"pid":@(_process.pid),@"systemInputActive":@(wantsInput)});
+        if(wantsInput && _visible && self.inputRequestHandler) self.inputRequestHandler();
+    } @catch(NSException *exception) {
+        MWLog(@"keyboard.guest_state_unavailable",@{@"scene":self.sceneIdentifier,@"reason":exception.reason ?: @"unknown"});
     }
 }
 
@@ -128,6 +187,7 @@
         pid_t pid=strongSelf->_process.pid;
         if(pid<=0 || (kill(pid,0)==-1 && errno==ESRCH))
             [strongSelf fail:MWError(18,@"应用已退出，可重新打开小窗。")];
+        else if(strongSelf->_visible) [strongSelf readGuestInputState];
     });
     dispatch_resume(_monitor);
 }
@@ -164,6 +224,10 @@
     if(!_closed && _visible && _scene && _presenter.presentationView.window==window)
         [MWKeyboardFocus.shared focusGuest:self.sceneIdentifier inWindow:window];
 }
+- (void)refreshKeyboardFocusInWindow:(UIWindow *)window {
+    if(!_closed && _visible && _scene && _presenter.presentationView.window==window)
+        [MWKeyboardFocus.shared refreshGuest:self.sceneIdentifier inWindow:window];
+}
 - (void)releaseKeyboardFocus { [MWKeyboardFocus.shared releaseGuest:self.sceneIdentifier]; }
 
 - (void)fail:(NSError *)error {
@@ -178,12 +242,18 @@
 - (void)close {
     if(_closed) return;
     MWLog(@"guest.close",@{@"bundle":self.bundleIdentifier,@"scene":self.sceneIdentifier});
-    _closed=YES; ++_generation; _completion=nil; self.failureHandler=nil;
+    _closed=YES; ++_generation; _completion=nil; self.failureHandler=nil; self.inputRequestHandler=nil;
     [self tearDown];
 }
 
 - (void)tearDown {
     [MWKeyboardFocus.shared unregisterGuest:self.sceneIdentifier];
+    if(_observingInput) {
+        @try {
+            ((void(*)(id,SEL,id))objc_msgSend)(_scene,NSSelectorFromString(@"removeObserver:"),self);
+        } @catch(NSException *exception) { MWLog(@"keyboard.guest_observer_cleanup_failed",@{@"scene":self.sceneIdentifier}); }
+        _observingInput=NO;
+    }
     if(_monitor) { dispatch_source_cancel(_monitor); _monitor=nil; }
     @try { [_transaction setCompletionBlock:nil]; } @catch(NSException *exception) { (void)exception; }
     _transaction=nil;

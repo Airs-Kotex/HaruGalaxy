@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.6 — Free movement and resize access
+
+- Allow direct entry dragging in all directions; keep the release position and dock only near a side. Save normalized x/y and preserve existing edge positions on upgrade.
+- Let title-bar pans begin over its buttons, preserving stationary button taps.
+- Expand corner resize targets from 28 to 44 points with rounded hit regions and immediate contact highlighting; retain the small visible arcs.
+- Prepare and finish the guest keyboard's hosted presentation as a pair, with cleanup-failure retention. Add guest input-request observation and delayed focus-state diagnostics.
+
+Host search input is confirmed by the user's 0.3.5 feedback. Guest keyboard behavior remains under investigation; the new diagnostics distinguish input requests, hosted presentation and visible keyboard state.
+
 ## 0.3.5 — Keyboard focus and glass controls
 
 - Add runtime-checked keyboard ownership for the host and hosted App scenes. Touching or activating a window selects its process/scene; minimizing, closing, locking or switching input releases ownership.

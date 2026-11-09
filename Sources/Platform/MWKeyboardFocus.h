@@ -7,6 +7,7 @@
 - (void)unregisterGuest:(NSString *)identifier;
 - (void)releaseGuest:(NSString *)identifier;
 - (void)focusGuest:(NSString *)identifier inWindow:(UIWindow *)window;
+- (void)refreshGuest:(NSString *)identifier inWindow:(UIWindow *)window;
 - (void)focusHostWindow:(UIWindow *)window reason:(NSString *)reason;
 - (void)setSuspended:(BOOL)suspended;
 - (void)releaseForWindow:(UIWindow *)window;

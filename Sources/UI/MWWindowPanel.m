@@ -113,20 +113,20 @@
     _empty.hidden=rows.count!=0; [self setNeedsLayout];
 }
 - (void)placeNearAnchor:(CGRect)anchor inBounds:(CGRect)bounds {
-    CGFloat width=MIN(304,MAX(1,bounds.size.width-16)),height=MIN(MAX(220,118+_rows.count*108),MAX(1,bounds.size.height-16));
-    BOOL right=CGRectGetMidX(anchor)>CGRectGetMidX(bounds);
-    CGFloat x=right ? CGRectGetMinX(anchor)-width-8 : CGRectGetMaxX(anchor)+8;
-    x=MAX(bounds.origin.x+8,MIN(x,CGRectGetMaxX(bounds)-width-8));
-    CGFloat y=MAX(bounds.origin.y+8,MIN(CGRectGetMidY(anchor)-height/2,CGRectGetMaxY(bounds)-height-8));
-    CGRect next=CGRectMake(x,y,width,height);
+    MWRect rect=MWPanelPlacementRect((MWRect){bounds.origin.x,bounds.origin.y,bounds.size.width,bounds.size.height},
+        (MWRect){anchor.origin.x,anchor.origin.y,anchor.size.width,anchor.size.height},MAX(220,118+_rows.count*108));
+    CGRect next=CGRectMake(rect.x,rect.y,rect.width,rect.height);
     if(!CGRectEqualToRect(next,self.frame)) self.frame=next;
 }
 - (void)layoutSubviews {
     [super layoutSubviews]; CGFloat width=self.bounds.size.width;
-    _title.frame=CGRectMake(16,14,width-72,26); _settings.frame=CGRectMake(width-56,8,44,44);
+    BOOL compact=self.bounds.size.height<228;
+    _title.frame=CGRectMake(16,compact ? 8 : 14,width-72,26);
+    _settings.frame=CGRectMake(width-56,compact ? 0 : 8,44,44);
+    _hint.hidden=compact;
     _hint.frame=CGRectMake(16,43,width-32,18);
-    _open.frame=CGRectMake(12,68,width-24,44);
-    _scroll.frame=CGRectMake(12,118,width-24,MAX(1,self.bounds.size.height-130));
+    _open.frame=CGRectMake(12,compact ? 42 : 68,width-24,44);
+    _scroll.frame=CGRectMake(12,compact ? 90 : 118,width-24,MAX(1,self.bounds.size.height-(compact ? 102 : 130)));
     CGFloat y=0;
     for(MWPanelRow *row in _rows) { row.frame=CGRectMake(0,y,_scroll.bounds.size.width,98); y+=108; }
     _scroll.contentSize=CGSizeMake(_scroll.bounds.size.width,y);

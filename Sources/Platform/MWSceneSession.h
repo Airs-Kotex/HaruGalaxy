@@ -5,11 +5,13 @@
 @property(nonatomic,copy,readonly) NSString *sceneIdentifier;
 @property(nonatomic,strong,readonly) UIView *contentView;
 @property(nonatomic,copy) void (^failureHandler)(NSError *error);
+@property(nonatomic,copy) void (^inputRequestHandler)(void);
 - (instancetype)initWithBundleIdentifier:(NSString *)bundleIdentifier;
 - (void)startWithSize:(CGSize)size completion:(void (^)(NSError *error))completion;
 - (void)updateSize:(CGSize)size orientation:(UIInterfaceOrientation)orientation;
 - (void)setVisible:(BOOL)visible;
 - (void)requestKeyboardFocusInWindow:(UIWindow *)window;
+- (void)refreshKeyboardFocusInWindow:(UIWindow *)window;
 - (void)releaseKeyboardFocus;
 - (void)close;
 @end

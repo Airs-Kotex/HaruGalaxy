@@ -11,10 +11,10 @@
     UIImageView *_symbol;
     UILabel *_badge;
     CGRect _viewport;
-    BOOL _right, _expanded, _dragging, _touchActive;
-    double _position;
-    BOOL _originalRight;
-    double _originalPosition;
+    BOOL _right, _expanded, _dragging, _touchActive, _docked;
+    double _position, _positionX;
+    BOOL _originalRight, _originalDocked;
+    double _originalPosition, _originalPositionX;
     CGPoint _dragOrigin, _dragTouch;
     NSUInteger _idleGeneration, _touchGeneration;
     MWEdgeInteraction _interaction;
@@ -26,6 +26,16 @@
         NSUserDefaults *defaults=NSUserDefaults.standardUserDefaults;
         _right=![defaults boolForKey:@"edgeHandleLeft"];
         _position=[defaults objectForKey:@"edgeHandlePosition"] ? [defaults doubleForKey:@"edgeHandlePosition"] : 0.35;
+        _positionX=_right ? 1 : 0; _docked=YES;
+        NSDictionary *saved=[defaults dictionaryForKey:@"entryPlacement"];
+        if([saved[@"x"] isKindOfClass:NSNumber.class] && [saved[@"y"] isKindOfClass:NSNumber.class] &&
+           [saved[@"docked"] isKindOfClass:NSNumber.class] &&
+           isfinite([saved[@"x"] doubleValue]) && isfinite([saved[@"y"] doubleValue])) {
+            _positionX=MAX(0,MIN(1,[saved[@"x"] doubleValue]));
+            _position=MAX(0,MIN(1,[saved[@"y"] doubleValue]));
+            _docked=[saved[@"docked"] boolValue]; _right=_positionX>=0.5;
+            if(_docked) _positionX=_right ? 1 : 0;
+        }
         _tab=[[MWGlassSurface alloc] initWithCornerRadius:14]; _tab.userInteractionEnabled=NO;
         [self addSubview:_tab];
         _symbol=[[UIImageView alloc] initWithImage:[UIImage systemImageNamed:@"square.stack.3d.up.fill"]];
@@ -35,14 +45,13 @@
         _badge.backgroundColor=UIColor.systemOrangeColor; _badge.textAlignment=NSTextAlignmentCenter;
         _badge.font=[UIFont systemFontOfSize:10 weight:UIFontWeightBold]; _badge.layer.cornerRadius=7; _badge.clipsToBounds=YES;
         [_tab.contentView addSubview:_badge];
-        // One tracking path decides tap, inward pull and hold-to-move. Small
-        // finger drift must not make two competing recognizers both fail.
+        // One path distinguishes a tap from immediate movement in any direction.
         self.multipleTouchEnabled=NO;
         self.accessibilityIdentifier=@"harugalaxy.edge.entry";
         _feedback=[[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
         self.isAccessibilityElement=YES; self.accessibilityTraits=UIAccessibilityTraitButton;
         self.accessibilityLabel=@"窗口面板";
-        self.accessibilityHint=@"轻点或向内短划打开面板；长按振动后拖动移动入口，原地松手也可打开";
+        self.accessibilityHint=@"轻点打开面板；按住直接拖动，松手停留，靠近左右边缘会吸附收起";
         [self applyPreferences];
     }
     return self;
@@ -51,8 +60,10 @@
     [super layoutSubviews];
     CGFloat width=MIN(self.bounds.size.width,_expanded ? 44 : 12);
     CGFloat height=MIN(60,self.bounds.size.height);
-    _tab.frame=CGRectMake(_right ? self.bounds.size.width-width : 0,(self.bounds.size.height-height)/2,width,height);
-    _tab.layer.maskedCorners=_right ? kCALayerMinXMinYCorner|kCALayerMinXMaxYCorner : kCALayerMaxXMinYCorner|kCALayerMaxXMaxYCorner;
+    _tab.frame=CGRectMake(_docked ? (_right ? self.bounds.size.width-width : 0) : (self.bounds.size.width-width)/2,
+        (self.bounds.size.height-height)/2,width,height);
+    _tab.layer.maskedCorners=_docked ? (_right ? kCALayerMinXMinYCorner|kCALayerMinXMaxYCorner : kCALayerMaxXMinYCorner|kCALayerMaxXMaxYCorner) :
+        kCALayerMinXMinYCorner|kCALayerMinXMaxYCorner|kCALayerMaxXMinYCorner|kCALayerMaxXMaxYCorner;
     _symbol.frame=CGRectMake(12,(height-20)/2,20,20); _symbol.alpha=_expanded ? 1 : 0;
     _badge.frame=CGRectMake(27,3,14,14); _badge.hidden=!_expanded || !_minimizedCount;
     _tab.emphasized=_expanded;
@@ -75,12 +86,12 @@
     if(!CGRectEqualToRect(_viewport,viewport) && _touchActive) [self cancelInteraction];
     _viewport=viewport;
     if(_dragging) return;
-    MWRect rect=MWEdgeHandleRect((MWRect){viewport.origin.x,viewport.origin.y,viewport.size.width,viewport.size.height},_right,_position);
+    MWRect rect=MWEntryRect((MWRect){viewport.origin.x,viewport.origin.y,viewport.size.width,viewport.size.height},_positionX,_position);
     CGRect frame=CGRectMake(rect.x,rect.y,rect.width,rect.height);
     if(!CGRectEqualToRect(frame,self.frame)) self.frame=frame;
 }
 - (void)setExpanded:(BOOL)expanded {
-    expanded=expanded || MWPreferences.shared.edgeAlwaysExpanded;
+    expanded=expanded || !_docked || MWPreferences.shared.edgeAlwaysExpanded;
     _idleGeneration++;
     if(_expanded!=expanded) {
         [self layoutIfNeeded]; _expanded=expanded;
@@ -90,7 +101,7 @@
             options:UIViewAnimationOptionAllowUserInteraction|UIViewAnimationOptionBeginFromCurrentState|UIViewAnimationOptionCurveEaseOut
             animations:^{[self layoutIfNeeded];} completion:nil];
     }
-    if(expanded && !_touchActive && !_dragging && !_panelOpen && !MWPreferences.shared.edgeAlwaysExpanded) {
+    if(expanded && _docked && !_touchActive && !_dragging && !_panelOpen && !MWPreferences.shared.edgeAlwaysExpanded) {
         NSUInteger generation=_idleGeneration; __weak typeof(self) weakSelf=self;
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW,3*NSEC_PER_SEC),dispatch_get_main_queue(),^{
             MWEdgeHandle *handle=weakSelf;
@@ -115,9 +126,10 @@
         return NO;
     }
     _touchActive=YES; _originalRight=_right; _originalPosition=_position;
+    _originalDocked=_docked; _originalPositionX=_positionX;
     _dragOrigin=self.center; _dragTouch=[touch locationInView:self.superview];
     _touchStartedAt=CACurrentMediaTime();
-    MWEdgeTouchBegin(&_interaction,_dragTouch.x,_dragTouch.y,_touchStartedAt,_right,!_panelOpen);
+    MWEdgeTouchBegin(&_interaction,_dragTouch.x,_dragTouch.y,_touchStartedAt);
     NSUInteger generation=++_touchGeneration;
     [_feedback prepare]; [self setExpanded:YES];
     MWTrace(@"edge.touch_begin",@{@"right":@(_right),@"panelOpen":@(_panelOpen),
@@ -135,8 +147,8 @@
 - (void)applyAction:(unsigned)action atPoint:(CGPoint)point {
     if(action&MWEdgeActionArmed) [_feedback impactOccurred];
     if(action&MWEdgeActionMoveBegin) {
-        _dragging=YES;
-        _dragTouch=CGPointMake(_interaction.heldX,_interaction.heldY);
+        _dragging=YES; _docked=NO; [self setNeedsLayout];
+        _dragTouch=CGPointMake(_interaction.startX,_interaction.startY);
         if(self.movementBeganHandler) self.movementBeganHandler();
         MWLog(@"edge.move_begin",@{});
     }
@@ -147,20 +159,25 @@
     }
     if(action&(MWEdgeActionMoveEnd|MWEdgeActionMoveCancel)) {
         BOOL cancelled=(action&MWEdgeActionMoveCancel)!=0;
-        BOOL previousRight=_right;
-        _right=cancelled ? _originalRight : self.center.x>=CGRectGetMidX(_viewport);
-        _position=cancelled ? _originalPosition : (self.frame.origin.y-_viewport.origin.y)/MAX(1,_viewport.size.height-self.bounds.size.height);
+        MWEntryPlacement placement=MWEntryDrop((MWRect){_viewport.origin.x,_viewport.origin.y,_viewport.size.width,_viewport.size.height},
+            self.frame.origin.x,self.frame.origin.y);
+        _right=cancelled ? _originalRight : placement.right;
+        _docked=cancelled ? _originalDocked : placement.docked;
+        _positionX=cancelled ? _originalPositionX : placement.xPosition;
+        _position=cancelled ? _originalPosition : placement.yPosition;
         _dragging=NO;
         if(!cancelled) {
             [NSUserDefaults.standardUserDefaults setBool:!_right forKey:@"edgeHandleLeft"];
             [NSUserDefaults.standardUserDefaults setDouble:_position forKey:@"edgeHandlePosition"];
+            [NSUserDefaults.standardUserDefaults setObject:@{@"x":@(_positionX),@"y":@(_position),@"docked":@(_docked)} forKey:@"entryPlacement"];
         }
-        if(previousRight!=_right) [self setNeedsLayout];
+        [self setNeedsLayout];
         [UIView animateWithDuration:MWPreferences.shared.reduceMotion ? 0 : 0.16 delay:0
             options:UIViewAnimationOptionAllowUserInteraction|UIViewAnimationOptionBeginFromCurrentState|UIViewAnimationOptionCurveEaseOut
             animations:^{[self applyViewport:self->_viewport]; [self layoutIfNeeded];} completion:nil];
         if(self.positionChangedHandler) self.positionChangedHandler();
-        MWLog(@"edge.move_end",@{@"right":@(_right),@"position":@(_position),@"cancelled":@(cancelled)});
+        MWLog(@"edge.move_end",@{@"right":@(_right),@"docked":@(_docked),@"xPosition":@(_positionX),
+            @"position":@(_position),@"cancelled":@(cancelled)});
     }
 }
 - (BOOL)continueTrackingWithTouch:(UITouch *)touch withEvent:(UIEvent *)event {
@@ -181,7 +198,6 @@
     _touchActive=NO; _touchGeneration++;
     [self applyAction:action atPoint:point];
     if(action&MWEdgeActionTap) [self activatePanel:@"tap_or_stationary_hold"];
-    else if((action&MWEdgeActionPullOpen) && !_panelOpen) [self activatePanel:@"inward_pull"];
     else MWTrace(@"edge.touch_end",@{@"action":@(action),@"duration":@(CACurrentMediaTime()-_touchStartedAt)});
     [self setExpanded:_panelOpen || _expanded];
 }

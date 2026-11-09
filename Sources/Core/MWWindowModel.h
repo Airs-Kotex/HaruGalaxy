@@ -7,6 +7,7 @@ typedef struct { double x, y, width, height; } MWRect;
 #define MWTitleHeight 48.0
 #define MWEdgeTouchWidth 56.0
 #define MWEdgeTouchHeight 76.0
+#define MWCornerTouchSize 44.0
 typedef enum { MWWindowLoading, MWWindowVisible, MWWindowMinimized, MWWindowFailed, MWWindowClosed } MWWindowState;
 typedef enum { MWEventReady, MWEventFailed, MWEventRetry, MWEventMinimize, MWEventRestore, MWEventClose } MWWindowEvent;
 typedef enum { MWResizeFree, MWResizeProportional } MWResizeMode;
@@ -40,6 +41,10 @@ MWSnapTarget MWReorientedSnapTarget(MWRect viewport, MWSnapTarget target);
 bool MWWindowSnap(MWWindowModel *model, MWSnapTarget target, MWRect viewport);
 MWRect MWMaximizedAspectRect(MWRect viewport, double ratio);
 MWRect MWEdgeHandleRect(MWRect viewport, bool right, double position);
+MWRect MWEntryRect(MWRect viewport,double xPosition,double yPosition);
+typedef struct { MWRect frame; double xPosition,yPosition; bool docked,right; } MWEntryPlacement;
+MWEntryPlacement MWEntryDrop(MWRect viewport,double x,double y);
+MWRect MWPanelPlacementRect(MWRect viewport,MWRect anchor,double desiredHeight);
 typedef struct { double scale, x, y; } MWContentTransform;
 MWContentTransform MWFitContent(double logicalWidth, double logicalHeight, double availableWidth, double availableHeight);
 #endif

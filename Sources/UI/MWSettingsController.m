@@ -25,7 +25,7 @@
     if(section==1) {
         NSString *status=!MWFloatingHost.shared.enabled ? @"未启用" : (!MWFloatingHost.shared.ready ? @"正在等待浮窗根视图与窗口连接" :
             (MWFloatingHost.shared.backgroundExecutionValid ? @"系统已批准当前请求" : @"请求未获批准或已失效，请导出诊断"));
-        return [NSString stringWithFormat:@"收起的入口可轻点或向内短划唤出，原地长按后松手也能打开。长按振动后拖动才移动位置。若不想收起，可开启“入口保持展开”。最小化窗口收进面板。\n后台执行状态：%@。",status];
+        return [NSString stringWithFormat:@"轻点入口打开面板，按住直接拖动到任意位置。松手靠近左右边缘才吸附收起；位于屏幕中间时保持展开。也可开启“入口保持展开”。最小化窗口收进面板。\n后台执行状态：%@。",status];
     }
     if(section==2) return @"详细日志默认开启，保留约 8 MiB。遇到问题先点“标记刚发生的问题”，再导出 JSON。日志包含机型、系统、相关应用标识与窗口事件，保存在本机，由你决定分享给谁。不会录制画面或输入内容。";
     return [NSString stringWithFormat:@"%@ · TrollStore\n原生应用小窗、边缘收纳、自由与原始比例缩放。系统与应用兼容性见项目说明。",NSBundle.mainBundle.infoDictionary[@"CFBundleShortVersionString"]];

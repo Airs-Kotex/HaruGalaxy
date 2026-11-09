@@ -46,6 +46,10 @@ static id MWKeyboardBool(id object,NSString *name) {
     MWKeyboardFocusState _state;
     uint64_t _nextOwner;
     id _manager, _boundClient;
+    id _preparedClient;
+    UIWindowScene *_preparedScene;
+    UIWindow *_preparedKeyboardWindow;
+    BOOL _preparationNeedsCleanup;
     pid_t _boundPID;
     NSString *_boundCaller;
     BOOL _bindingNeedsCleanup;
@@ -121,12 +125,56 @@ static id MWKeyboardBool(id object,NSString *name) {
         return NO;
     }
 }
-- (BOOL)bindGuest:(MWKeyboardGuest *)guest identifier:(NSString *)identifier {
-    NSString *caller=guest ? [@"harugalaxy.keyboard." stringByAppendingString:identifier] : nil;
-    if(guest && !_bindingNeedsCleanup && _boundPID==guest.pid && [_boundCaller isEqual:caller]) return YES;
+- (BOOL)clearHostedPresentation {
+    if(!_preparedClient) return YES;
+    @try {
+        SEL finish=NSSelectorFromString(@"finishWithHostedWindow");
+        if(!MWKeyboardMethod(_preparedClient,finish,'v',"")) {
+            _preparationNeedsCleanup=YES;
+            MWLog(@"keyboard.presentation_cleanup_failed",@{@"reason":@"finish API unavailable",@"retained":@YES});
+            return NO;
+        }
+        ((void(*)(id,SEL))objc_msgSend)(_preparedClient,finish);
+        _preparedClient=nil; _preparedScene=nil; _preparedKeyboardWindow=nil; _preparationNeedsCleanup=NO;
+        MWLog(@"keyboard.presentation_finished",@{});
+        return YES;
+    } @catch(NSException *exception) {
+        _preparationNeedsCleanup=YES;
+        MWLog(@"keyboard.presentation_cleanup_failed",@{@"reason":exception.reason ?: @"unknown",@"retained":@YES});
+        return NO;
+    }
+}
+- (BOOL)clearInputHosting {
+    // Keep the presentation alive if its PID binding could not be removed.
     if(![self clearHostedBinding]) return NO;
-    if(!guest) return YES;
+    return [self clearHostedPresentation];
+}
+- (BOOL)prepareHostedPresentation:(id)client scene:(UIWindowScene *)scene {
+    if(_preparedClient==client && _preparedScene==scene && !_preparationNeedsCleanup) return YES;
+    if(![self clearHostedPresentation]) return NO;
+    SEL prepare=NSSelectorFromString(@"prepareForHostedWindowWithScene:");
+    SEL finish=NSSelectorFromString(@"finishWithHostedWindow");
+    if(!scene || !MWKeyboardMethod(client,prepare,'@',"@") || !MWKeyboardMethod(client,finish,'v',"")) {
+        MWLog(@"keyboard.presentation_unavailable",@{@"reason":@"paired hosting API unavailable"});
+        return YES; // Preserve the existing focus-only path on other systems.
+    }
+    _preparedClient=client; _preparedScene=scene; _preparationNeedsCleanup=YES;
+    id window=((id(*)(id,SEL,id))objc_msgSend)(client,prepare,scene);
+    _preparationNeedsCleanup=NO;
+    if([window isKindOfClass:UIWindow.class]) _preparedKeyboardWindow=window;
+    MWLog(@"keyboard.presentation_prepared",@{@"windowReturned":@(window!=nil),
+        @"windowClass":window ? NSStringFromClass([window class]) : @"none",
+        @"sceneState":@(scene.activationState)});
+    return YES;
+}
+- (BOOL)bindGuest:(MWKeyboardGuest *)guest identifier:(NSString *)identifier window:(UIWindow *)window {
+    NSString *caller=guest ? [@"harugalaxy.keyboard." stringByAppendingString:identifier] : nil;
+    if(guest && !_bindingNeedsCleanup && !_preparationNeedsCleanup && _boundPID==guest.pid &&
+       [_boundCaller isEqual:caller] && (!_preparedScene || _preparedScene==window.windowScene)) return YES;
+    if(![self clearHostedBinding]) return NO;
+    if(!guest) return [self clearHostedPresentation];
     id client=[self client];
+    if(![self prepareHostedPresentation:client scene:window.windowScene]) return NO;
     SEL add=NSSelectorFromString(@"addWindowHostingPID:callerID:"),remove=NSSelectorFromString(@"removeWindowHostingPID:callerID:");
     if(!MWKeyboardMethod(client,add,'v',"i@") || !MWKeyboardMethod(client,remove,'v',"i@")) {
         MWTrace(@"keyboard.hosting_unavailable",@{@"scene":identifier}); return YES;
@@ -145,7 +193,7 @@ static id MWKeyboardBool(id object,NSString *name) {
     @try {
         id manager=[self manager]; if(!manager) return;
         [window makeKeyWindow];
-        if(![self bindGuest:guest identifier:identifier]) {
+        if(![self bindGuest:guest identifier:identifier window:window]) {
             MWLog(@"keyboard.focus_blocked",@{@"reason":@"previous hosting cleanup pending",@"owner":@(owner)});
             return;
         }
@@ -165,8 +213,18 @@ static id MWKeyboardBool(id object,NSString *name) {
             NSSelectorFromString(@"userSelectedProcessIdentifier:withSceneIdentity:onCompletion:"),pid,token,[completion copy]);
         MWLog(@"keyboard.focus_requested",@{@"pid":@(pid),@"owner":@(owner),@"reason":reason,@"generation":@(generation),
             @"windowClass":NSStringFromClass(window.class),@"sceneState":@(window.windowScene.activationState),@"state":[self snapshot]});
+        if(guest) {
+            for(NSNumber *delay in @[@0.35,@1.0]) {
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(delay.doubleValue*NSEC_PER_SEC)),dispatch_get_main_queue(),^{
+                    MWKeyboardFocus *focus=weakSelf;
+                    if(focus && MWKeyboardFocusCurrent(&focus->_state,owner,generation))
+                        MWLog(@"keyboard.focus_observed",@{@"pid":@(pid),@"owner":@(owner),
+                            @"after":delay,@"state":[focus snapshot]});
+                });
+            }
+        }
     } @catch(NSException *exception) {
-        MWKeyboardFocusRelease(&_state,owner); [self clearHostedBinding];
+        MWKeyboardFocusRelease(&_state,owner); [self clearInputHosting];
         MWLog(@"keyboard.focus_failed",@{@"reason":exception.reason ?: @"unknown",@"pid":@(pid)});
     }
 }
@@ -174,6 +232,14 @@ static id MWKeyboardBool(id object,NSString *name) {
     NSAssert(NSThread.isMainThread,@"Keyboard ownership is main-thread only");
     MWKeyboardGuest *guest=_guests[identifier];
     if(guest) [self selectPID:guest.pid token:guest.sceneToken owner:guest.owner window:window reason:@"guest_touch" guest:guest identifier:identifier];
+}
+- (void)refreshGuest:(NSString *)identifier inWindow:(UIWindow *)window {
+    NSAssert(NSThread.isMainThread,@"Keyboard ownership is main-thread only");
+    MWKeyboardGuest *guest=_guests[identifier];
+    // An app may report delayed/autofocused input after the panel or host
+    // picker took focus. Observations may refresh, never choose a new owner.
+    if(guest && _window==window && MWKeyboardFocusCurrent(&_state,guest.owner,_state.generation))
+        [self selectPID:guest.pid token:guest.sceneToken owner:guest.owner window:window reason:@"guest_input_state" guest:guest identifier:identifier];
 }
 - (void)focusHostWindow:(UIWindow *)window reason:(NSString *)reason {
     NSAssert(NSThread.isMainThread,@"Keyboard ownership is main-thread only");
@@ -187,7 +253,7 @@ static id MWKeyboardBool(id object,NSString *name) {
 }
 - (void)releaseGuest:(NSString *)identifier {
     MWKeyboardGuest *guest=_guests[identifier];
-    if(guest && MWKeyboardFocusRelease(&_state,guest.owner)) { [self clearHostedBinding]; _window=nil; }
+    if(guest && MWKeyboardFocusRelease(&_state,guest.owner)) { [self clearInputHosting]; _window=nil; }
 }
 - (void)unregisterGuest:(NSString *)identifier {
     if(!identifier.length) return;
@@ -195,21 +261,28 @@ static id MWKeyboardBool(id object,NSString *name) {
 }
 - (void)releaseForWindow:(UIWindow *)window {
     if(_window!=window || !window) return;
-    MWKeyboardFocusRelease(&_state,_state.owner); [self clearHostedBinding]; _window=nil;
+    MWKeyboardFocusRelease(&_state,_state.owner); [self clearInputHosting]; _window=nil;
 }
 - (void)setSuspended:(BOOL)suspended {
     MWKeyboardFocusSuspend(&_state,suspended);
-    if(suspended) { [self clearHostedBinding]; _window=nil; }
+    if(suspended) { [self clearInputHosting]; _window=nil; }
     MWTrace(@"keyboard.suspended",@{@"suspended":@(suspended)});
 }
 - (NSDictionary *)snapshot {
     @try {
         id client=[self client];
+        id remote=MWKeyboardObject(NSClassFromString(@"_UIRemoteKeyboards"),@"sharedRemoteKeyboards");
+        id state=MWKeyboardObject(client,@"currentClientState") ?: MWKeyboardObject(remote,@"currentState");
+        id source=MWKeyboardObject(state,@"sourceSceneIdentityString");
         return @{@"selected":@(_state.selected),@"owner":@(_state.owner),@"suspended":@(_state.suspended),
             @"client":client ? NSStringFromClass([client class]) : @"unavailable",
             @"allowed":MWKeyboardBool(client,@"allowedToShowKeyboard"),
             @"active":MWKeyboardBool(client,@"keyboardActive"),@"visible":MWKeyboardBool(client,@"keyboardVisible"),
-            @"hosted":@(_boundCaller!=nil),@"cleanupPending":@(_bindingNeedsCleanup),@"registeredGuests":@(_guests.count)};
+            @"hosted":@(_boundCaller!=nil),@"cleanupPending":@(_bindingNeedsCleanup || _preparationNeedsCleanup),
+            @"presentationPrepared":@(_preparedClient!=nil),@"keyboardWindowPresent":@(_preparedKeyboardWindow!=nil),
+            @"keyboardWindowHidden":@(_preparedKeyboardWindow.hidden),
+            @"sourceScene":[source isKindOfClass:NSString.class] ? source : @"unavailable",
+            @"registeredGuests":@(_guests.count)};
     } @catch(NSException *exception) { return @{@"snapshotUnavailable":@YES}; }
 }
 - (void)keyboardEvent:(NSNotification *)notification {
