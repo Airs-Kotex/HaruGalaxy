@@ -39,6 +39,7 @@
         _workspace=[MWWorkspaceController new];
         [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(returnToApplication:) name:MWFloatingHostWillStopNotification object:nil];
         [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(floatingVisibility:) name:MWFloatingHostVisibilityNotification object:nil];
+        [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(floatingReady:) name:MWFloatingHostDidBecomeReadyNotification object:nil];
     }
     return self;
 }
@@ -79,6 +80,10 @@
 }
 - (void)floatingVisibility:(NSNotification *)notification {
     [self setWindow:notification.object visible:[notification.userInfo[@"visible"] boolValue]];
+}
+- (void)floatingReady:(NSNotification *)notification {
+    UIWindow *window=notification.object;
+    if(MWFloatingHost.shared.ready && window==MWFloatingHost.shared.floatingWindow) [self attachFloatingWindow:window];
 }
 @end
 

@@ -51,22 +51,38 @@ static BOOL MWInstallRootAdapter(void) {
     __weak UIView *_root;
     __weak UIWindow *_rootWindow;
 }
-- (BOOL)attachToRootView:(UIView *)root error:(NSError **)error {
+- (BOOL)prepareWithError:(NSError **)error {
+    if(MWInstallRootAdapter()) return YES;
+    if(error) *error=MWError(51,@"当前系统的浮窗根窗口接口不兼容，已保留应用内工作台。");
+    return NO;
+}
+- (MWRootAttachmentResult)attachToRootView:(id)candidate error:(NSError **)error {
+    // Nil is a lifecycle state, not an unsupported-platform conclusion.
+    if(!candidate) return MWRootAttachmentPending;
+    UIView *root=candidate;
     if(![root isKindOfClass:UIView.class]) {
-        if(error) *error=MWError(50,@"系统没有提供可管理的浮窗根视图。"); return NO;
+        if(error) *error=MWError(50,@"系统提供的浮窗根对象不是视图，已返回应用内工作台。");
+        return MWRootAttachmentUnsupported;
     }
     UIWindow *window=[root isKindOfClass:UIWindow.class] ? (UIWindow *)root : root.window;
+    if(!window) return MWRootAttachmentPending;
     Class rootClass=NSClassFromString(@"UIRootSceneWindow");
     if(!rootClass || ![window isKindOfClass:rootClass] || !MWInstallRootAdapter()) {
         MWLog(@"overlay.root_rejected",@{@"viewClass":NSStringFromClass(root.class),@"windowClass":window ? NSStringFromClass(window.class) : @"none"});
-        if(error) *error=MWError(51,@"当前系统的浮窗根窗口不兼容，已保留应用内工作台。"); return NO;
+        if(error) *error=MWError(51,@"当前系统的浮窗根窗口不兼容，已保留应用内工作台。"); return MWRootAttachmentUnsupported;
     }
+    if(_root==root && _rootWindow==window) { [self refresh]; return MWRootAttachmentReady; }
+    // A later probe may reach a replacement root. Remove our marker from the
+    // prior window rather than leaving its layout/hit testing attached to the
+    // new overlay. Never change an association installed by another owner.
+    if(_rootWindow && _rootWindow!=window && objc_getAssociatedObject(_rootWindow,&MWRootAdapterKey)==self)
+        objc_setAssociatedObject(_rootWindow,&MWRootAdapterKey,nil,OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     _root=root; _rootWindow=window;
     objc_setAssociatedObject(window,&MWRootAdapterKey,self,OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     MWLog(@"overlay.root_before",@{@"viewClass":NSStringFromClass(root.class),@"windowClass":NSStringFromClass(window.class),
         @"opaque":@(window.opaque),@"layerOpaque":@(window.layer.opaque),@"layerBackgroundAlpha":@(window.layer.backgroundColor ? CGColorGetAlpha(window.layer.backgroundColor) : 0)});
     [self refresh];
-    return YES;
+    return MWRootAttachmentReady;
 }
 - (void)refresh {
     _root.opaque=NO; _root.backgroundColor=UIColor.clearColor;
@@ -78,8 +94,7 @@ static BOOL MWInstallRootAdapter(void) {
     _overlayWindow=window;
     window.opaque=NO; window.layer.opaque=NO;
     [self refresh];
-    MWLog(@"overlay.root_attached",@{@"overlayClass":window ? NSStringFromClass(window.class) : @"none",
-        @"rootOpaque":@(_rootWindow.opaque),@"rootBackgroundAlpha":@(_rootWindow.layer.backgroundColor ? CGColorGetAlpha(_rootWindow.layer.backgroundColor) : 0)});
+    MWLog(@"overlay.window_staged",@{@"overlayClass":window ? NSStringFromClass(window.class) : @"none",@"rootAttached":@(_rootWindow!=nil)});
 }
 - (void)detach {
     // Keep the marked root clear until its owner has invalidated it.

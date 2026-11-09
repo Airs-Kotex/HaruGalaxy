@@ -40,12 +40,21 @@
     self.window.opaque=NO; self.window.layer.opaque=NO;
     self.window.overrideUserInterfaceStyle=MWPreferences.shared.appearance;
     self.window.frame=windowScene.coordinateSpace.bounds;
-    if(_floating) [MWWorkspaceCoordinator.shared attachFloatingWindow:self.window];
-    else [MWWorkspaceCoordinator.shared attachApplicationWindow:self.window];
-    if(_floating) self.window.windowLevel=UIWindowLevelStatusBar+100;
-    [self.window makeKeyAndVisible];
     if(_floating) {
+        // Publish only a transparent, noninteractive scene layer while the
+        // binder creates its root window. Do not transfer the workspace or
+        // take key status until the host confirms both objects are ready.
+        UIViewController *staging=[UIViewController new];
+        staging.view.backgroundColor=UIColor.clearColor; staging.view.opaque=NO;
+        staging.view.layer.opaque=NO; staging.view.userInteractionEnabled=NO;
+        self.window.rootViewController=staging;
+        self.window.userInteractionEnabled=NO;
+        self.window.windowLevel=UIWindowLevelStatusBar+100;
+        self.window.hidden=NO;
         MWFloatingHost.shared.floatingWindow=self.window;
+    } else {
+        [MWWorkspaceCoordinator.shared attachApplicationWindow:self.window];
+        [self.window makeKeyAndVisible];
     }
 }
 - (void)sceneDidDisconnect:(UIScene *)scene {

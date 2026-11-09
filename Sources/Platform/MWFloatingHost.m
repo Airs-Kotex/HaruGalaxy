@@ -6,6 +6,7 @@
 #import "MWBackgroundLease.h"
 #import "MWSceneUpdateGuard.h"
 #import "MWRootWindowAdapter.h"
+#import "../Core/MWOverlayStartup.h"
 #import "../Diagnostics/MWDiagnostics.h"
 
 @interface FBSSceneSettingsDiff (MWConstruction)
@@ -15,6 +16,7 @@
 NSString *const MWFloatingHostWillStopNotification=@"MWFloatingHostWillStop";
 NSString *const MWFloatingHostFailedNotification=@"MWFloatingHostFailed";
 NSString *const MWFloatingHostVisibilityNotification=@"MWFloatingHostVisibility";
+NSString *const MWFloatingHostDidBecomeReadyNotification=@"MWFloatingHostDidBecomeReady";
 
 @implementation MWFloatingHost {
     UIRootWindowScenePresentationBinder *_binder;
@@ -29,6 +31,7 @@ NSString *const MWFloatingHostVisibilityNotification=@"MWFloatingHostVisibility"
     BOOL _stopping;
     BOOL _cleanupFailed;
     id _retainedFailedBinder, _retainedFailedScene;
+    MWOverlayStartup _startup;
 }
 + (instancetype)shared {
     static MWFloatingHost *host; static dispatch_once_t once;
@@ -39,6 +42,7 @@ NSString *const MWFloatingHostVisibilityNotification=@"MWFloatingHostVisibility"
     return self.enabled && identifier.length && [identifier isEqual:self.sceneIdentifier];
 }
 - (BOOL)setEnabled:(BOOL)enabled fromScene:(UIWindowScene *)source error:(NSError **)error {
+    NSAssert(NSThread.isMainThread,@"Floating host startup is main-thread owned");
     MWLog(@"overlay.request",@{@"enabled":@(enabled),@"sourceSession":source.session.persistentIdentifier ?: @"none"});
     if(enabled==_enabled) return YES;
     if(_stopping) { if(error) *error=MWError(33,@"浮动工作区正在关闭，请稍后再试。"); return NO; }
@@ -51,20 +55,17 @@ NSString *const MWFloatingHostVisibilityNotification=@"MWFloatingHostVisibility"
         if(error) *error=MWError(30,@"当前系统无法建立浮动工作区。"); return NO;
     }
     @try {
+        _rootAdapter=[MWRootWindowAdapter new];
+        if(![_rootAdapter prepareWithError:error]) { _rootAdapter=nil; return NO; }
         MWInstallSceneUpdateGuard();
         _backgroundLease=[MWBackgroundLease new];
         NSError *leaseError=nil;
         if(![_backgroundLease acquireWithError:&leaseError]) {
             MWLog(@"overlay.background_failed",MWErrorFields(leaseError));
-            if(error) *error=leaseError; _backgroundLease=nil; return NO;
+            if(error) *error=leaseError; _backgroundLease=nil; _rootAdapter=nil; return NO;
         }
         _sceneIdentifier=[@"io.github.uiharuxpro4milkyway.overlay." stringByAppendingString:NSUUID.UUID.UUIDString];
         _binder=[[binderClass alloc] initWithPriority:0 displayConfiguration:source._effectiveSettings.displayConfiguration];
-        _rootAdapter=[MWRootWindowAdapter new];
-        NSError *rootError=nil;
-        if(![_rootAdapter attachToRootView:[_binder _rootView] error:&rootError]) {
-            [self stop]; if(error) *error=rootError; return NO;
-        }
         FBSMutableSceneDefinition *definition=[PrivClass(FBSMutableSceneDefinition) definition];
         definition.identity=[PrivClass(FBSSceneIdentity) identityForIdentifier:_sceneIdentifier];
         definition.clientIdentity=[PrivClass(FBSSceneClientIdentity) localIdentity];
@@ -75,20 +76,17 @@ NSString *const MWFloatingHostVisibilityNotification=@"MWFloatingHostVisibility"
         settings.deactivationReasons=0; settings.foreground=YES; settings.interruptionPolicy=0;
         @synchronized(self) { _guardIdentifier=[_sceneIdentifier copy]; _guardSettings=[settings copy]; _guardActive=YES; }
         parameters.settings=settings; parameters.clientSettings=source._effectiveUIClientSettings;
+        uint64_t generation=MWOverlayStartupBegin(&_startup,NSProcessInfo.processInfo.systemUptime,2.0);
         _enabled=YES;
         _scene=[[PrivClass(FBSceneManager) sharedInstance] createSceneWithDefinition:definition initialParameters:parameters];
         if(!_scene || !_binder) @throw [NSException exceptionWithName:@"MWFloatingScene" reason:@"未返回浮动场景" userInfo:nil];
         [_binder addScene:_scene];
+        // Permit root inspection only after the binder has been asked to host.
+        // A nil root during initialization does not establish incompatibility.
+        MWOverlayStartupSceneAdded(&_startup,generation);
         MWLog(@"overlay.scene_created",@{@"scene":_sceneIdentifier});
         [self observeLock];
-        NSString *identifier=[_sceneIdentifier copy];
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW,5*NSEC_PER_SEC),dispatch_get_main_queue(),^{
-            if([self ownsSceneIdentifier:identifier] && !self.floatingWindow) {
-                MWLog(@"overlay.connect_timeout",@{@"scene":identifier});
-                [self stop];
-                [[NSNotificationCenter defaultCenter] postNotificationName:MWFloatingHostFailedNotification object:MWError(31,@"系统未连接浮动工作区，已返回应用内模式。")];
-            }
-        });
+        [self attachRootAdapterAttempt:0 generation:generation];
         return YES;
     } @catch(NSException *exception) {
         MWLog(@"overlay.exception",@{@"reason":exception.reason ?: @"unknown"});
@@ -96,6 +94,50 @@ NSString *const MWFloatingHostVisibilityNotification=@"MWFloatingHostVisibility"
         if(error) *error=MWError(32,[NSString stringWithFormat:@"开启浮窗失败：%@",exception.reason]);
         return NO;
     }
+}
+- (void)attachRootAdapterAttempt:(NSUInteger)attempt generation:(uint64_t)generation {
+    if(!_enabled || !MWOverlayStartupCanProbe(&_startup,generation) || !_binder || !_rootAdapter) return;
+    NSError *rootError=nil;
+    id root=nil;
+    MWRootAttachmentResult result=MWRootAttachmentUnsupported;
+    @try {
+        root=[_binder _rootView];
+        result=[_rootAdapter attachToRootView:root error:&rootError];
+    } @catch(NSException *exception) {
+        rootError=MWError(52,[NSString stringWithFormat:@"读取浮窗根视图失败：%@",exception.reason ?: @"未知异常"]);
+    }
+    MWOverlayRootResult observation=result==MWRootAttachmentReady ? MWOverlayRootReady :
+        (result==MWRootAttachmentPending ? MWOverlayRootPending : MWOverlayRootRejected);
+    MWOverlayStartupAction action=MWOverlayStartupObserve(&_startup,generation,NSProcessInfo.processInfo.systemUptime,observation);
+    MWTrace(@"overlay.root_probe",@{@"attempt":@(attempt),@"generation":@(generation),@"result":@(result),
+        @"viewClass":root ? NSStringFromClass([root class]) : @"none",@"windowConnected":@(_startup.windowConnected)});
+    if(action==MWOverlayStartupComplete) {
+        UIWindow *window=_floatingWindow;
+        if(!window) { [self stop]; [[NSNotificationCenter defaultCenter] postNotificationName:MWFloatingHostFailedNotification object:MWError(31,@"浮动窗口已断开，已返回应用内工作台。")]; return; }
+        _rootAdapter.overlayWindow=window;
+        MWLog(@"overlay.root_ready",@{@"attempt":@(attempt),@"viewClass":root ? NSStringFromClass([root class]) : @"none",@"generation":@(generation)});
+        [[NSNotificationCenter defaultCenter] postNotificationName:MWFloatingHostDidBecomeReadyNotification object:window];
+        if(!self.ready || _startup.generation!=generation || _floatingWindow!=window) return;
+        // The workspace is transferred exactly once, after both native objects
+        // exist. Lock state is applied again before enabling user interaction.
+        window.userInteractionEnabled=YES;
+        window.hidden=_locked;
+        if(!_locked) [window makeKeyAndVisible];
+        [self applyLocked:_locked];
+        return;
+    }
+    if(action==MWOverlayStartupWait) {
+        __weak typeof(self) weakSelf=self;
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(0.05*NSEC_PER_SEC)),dispatch_get_main_queue(),^{
+            [weakSelf attachRootAdapterAttempt:attempt+1 generation:generation];
+        });
+        return;
+    }
+    if(action==MWOverlayStartupIgnore) return;
+    MWLog(@"overlay.root_rejected",@{@"attempt":@(attempt),@"error":MWErrorFields(rootError),@"viewClass":root ? NSStringFromClass([root class]) : @"none"});
+    NSError *error=rootError ?: MWError(53,@"浮窗场景已创建，但根视图或窗口在 2 秒内未连接，已返回应用内工作台。请导出诊断日志。");
+    [self stop];
+    [[NSNotificationCenter defaultCenter] postNotificationName:MWFloatingHostFailedNotification object:error];
 }
 - (void)observeLock {
     __weak typeof(self) weakSelf=self;
@@ -112,8 +154,13 @@ NSString *const MWFloatingHostVisibilityNotification=@"MWFloatingHostVisibility"
     }
 }
 - (void)setFloatingWindow:(UIWindow *)floatingWindow {
+    if(![self ownsSceneIdentifier:floatingWindow.windowScene.session.persistentIdentifier]) {
+        floatingWindow.hidden=YES;
+        MWLog(@"overlay.window_stale",@{@"session":floatingWindow.windowScene.session.persistentIdentifier ?: @"none"}); return;
+    }
     _floatingWindow=floatingWindow;
     _rootAdapter.overlayWindow=floatingWindow;
+    MWOverlayStartupWindowConnected(&_startup,_startup.generation);
     MWLog(@"overlay.window_attached",@{@"session":floatingWindow.windowScene.session.persistentIdentifier ?: @"none",@"backgroundValid":@(self.backgroundExecutionValid)});
     if(_hasLockToken) {
         uint64_t locked=0;
@@ -133,6 +180,7 @@ NSString *const MWFloatingHostVisibilityNotification=@"MWFloatingHostVisibility"
     }
     MWLog(@"overlay.lock",@{@"locked":@(locked)});
     self.floatingWindow.hidden=locked;
+    if(!self.ready) return;
     if(self.floatingWindow) [[NSNotificationCenter defaultCenter] postNotificationName:MWFloatingHostVisibilityNotification object:self.floatingWindow userInfo:@{@"visible":@(!locked)}];
     if(!locked) [self refreshAfterBackgroundTransition];
 }
@@ -143,6 +191,7 @@ NSString *const MWFloatingHostVisibilityNotification=@"MWFloatingHostVisibility"
 - (void)stop {
     if(_stopping) return;
     _stopping=YES;
+    MWOverlayStartupCancel(&_startup);
     FBScene *scene=_scene;
     UIRootWindowScenePresentationBinder *binder=_binder;
     NSString *identifier=[_sceneIdentifier copy];
@@ -182,6 +231,7 @@ NSString *const MWFloatingHostVisibilityNotification=@"MWFloatingHostVisibility"
     [MWDiagnostics.shared flush];
 }
 - (BOOL)backgroundExecutionValid { return _backgroundLease.valid; }
+- (BOOL)isReady { return _enabled && _startup.phase==MWOverlayStartupReady; }
 - (id)protectedDiff:(id)diff forIdentifier:(NSString *)identifier {
     @synchronized(self) {
         if(![_guardIdentifier isEqual:identifier] || !diff) return diff;
@@ -210,7 +260,7 @@ NSString *const MWFloatingHostVisibilityNotification=@"MWFloatingHostVisibility"
     }
 }
 - (void)refreshAfterBackgroundTransition {
-    if(!_enabled || _locked) return;
+    if(!self.ready || _locked) return;
     MWLog(@"overlay.host_background",@{@"backgroundValid":@(self.backgroundExecutionValid),@"attached":@(_floatingWindow!=nil)});
     @try {
         [_scene updateSettingsWithBlock:^(UIMutableApplicationSceneSettings *settings) {

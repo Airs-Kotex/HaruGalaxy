@@ -3,9 +3,11 @@
 FOUNDATION_EXPORT NSString *const MWFloatingHostWillStopNotification;
 FOUNDATION_EXPORT NSString *const MWFloatingHostFailedNotification;
 FOUNDATION_EXPORT NSString *const MWFloatingHostVisibilityNotification;
+FOUNDATION_EXPORT NSString *const MWFloatingHostDidBecomeReadyNotification;
 
 @interface MWFloatingHost : NSObject
 @property(nonatomic,readonly,getter=isEnabled) BOOL enabled;
+@property(nonatomic,readonly,getter=isReady) BOOL ready;
 @property(nonatomic,copy,readonly) NSString *sceneIdentifier;
 @property(nonatomic,weak) UIWindow *floatingWindow;
 + (instancetype)shared;

@@ -22,7 +22,11 @@
 - (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
     (void)tableView;
     if(section==0) return @"开启减少动画后，窗口切换将直接完成。也会遵循系统的减少动态效果设置。";
-    if(section==1) return [NSString stringWithFormat:@"边缘入口闲置时收成小凸起，点按或向内拖动展开。内容按比例缩放，标题栏保持大小。\n后台执行状态：%@。",MWFloatingHost.shared.enabled ? (MWFloatingHost.shared.backgroundExecutionValid ? @"系统已批准当前请求" : @"请求未获批准或已失效，请导出诊断") : @"未启用"];
+    if(section==1) {
+        NSString *status=!MWFloatingHost.shared.enabled ? @"未启用" : (!MWFloatingHost.shared.ready ? @"正在等待浮窗根视图与窗口连接" :
+            (MWFloatingHost.shared.backgroundExecutionValid ? @"系统已批准当前请求" : @"请求未获批准或已失效，请导出诊断"));
+        return [NSString stringWithFormat:@"边缘入口闲置时收成小凸起，点按或向内拖动展开。内容按比例缩放，标题栏保持大小。\n后台执行状态：%@。",status];
+    }
     if(section==2) return @"详细日志默认开启，保留约 8 MiB。遇到问题先点“标记刚发生的问题”，再导出 JSON。日志包含机型、系统、相关应用标识与窗口事件，保存在本机，由你决定分享给谁。不会录制画面或输入内容。";
     return [NSString stringWithFormat:@"%@ Alpha · TrollStore\n面向 iOS 14–17.0 的受支持 TrollStore 系统逐项检测能力；各版本的小窗、触摸和后台行为需实机确认。",NSBundle.mainBundle.infoDictionary[@"CFBundleShortVersionString"]];
 }
