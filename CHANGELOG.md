@@ -1,6 +1,10 @@
 # Changelog
 
-## 0.3.11 — Parking, deliberate resize and display compatibility
+## 0.3.11 — Withdrawn
+
+Withdrawn at the user’s request after feedback about missing parking controls and unresolved half-screen resizing. The release and its assets were removed; 0.3.10 remains available.
+
+The following records the withdrawn implementation:
 
 ### Fixed
 
