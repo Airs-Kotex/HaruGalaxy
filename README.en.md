@@ -1,6 +1,6 @@
 # HaruGalaxy · 初春星河
 
-[简体中文](README.md) · [Download 0.3.9](https://github.com/Airs-Kotex/HaruGalaxy/releases/tag/v0.3.9) · [Issues](https://github.com/Airs-Kotex/HaruGalaxy/issues)
+[简体中文](README.md) · [Download 0.3.10](https://github.com/Airs-Kotex/HaruGalaxy/releases/tag/v0.3.10) · [Issues](https://github.com/Airs-Kotex/HaruGalaxy/issues)
 
 A native multi-window workspace for TrollStore. HaruGalaxy hosts installed apps in movable windows with an edge panel, free or original-aspect resizing, half-screen snapping and local diagnostic exports.
 
@@ -9,7 +9,7 @@ The edge entry, title bars and window panel now use translucent glass controls, 
 ## Install
 
 1. Install [TrollStore](https://github.com/opa334/TrollStore) on a supported device.
-2. Download [HaruGalaxy-0.3.9.tipa](https://github.com/Airs-Kotex/HaruGalaxy/releases/download/v0.3.9/HaruGalaxy-0.3.9.tipa).
+2. Download [HaruGalaxy-0.3.10.tipa](https://github.com/Airs-Kotex/HaruGalaxy/releases/download/v0.3.10/HaruGalaxy-0.3.10.tipa).
 3. Open the file in TrollStore and install it over an existing 0.3.1 or later installation.
 4. Open HaruGalaxy and enable the floating workspace in Settings.
 
@@ -37,6 +37,8 @@ Each app has one window, with up to four sessions at a time. Entry position is s
 
 The title bar is 28 points high and the bottom edge is 8 points, for 36 points of combined chrome. The entire bottom edge starts proportional resizing; guest content ends above it. A small central line marks the edge and highlights on contact. The top-right arc handles free resizing. Title-bar buttons can also start a drag: a stationary tap activates the button, movement pans the window.
 
+When guest content reaches a system edge exclusion, the workspace passes the overlapping safe-area insets to the app, converted into its logical coordinates when scaled. Apps must honor these insets in their own layout. The footer remains8 points.
+
 ## Search
 
 Tap the search field to filter apps by name or bundle identifier. If the floating scene does not display a keyboard, HaruGalaxy opens its normal app interface for input. You can also tap **“在主应用中搜索”** (“Search in the main app”). Selecting an app or cancelling restores the floating workspace and preserves existing sessions.
@@ -45,7 +47,7 @@ If iOS rejects the foreground request, the floating workspace returns with a mes
 
 ## Keyboard and switching to the ordinary app
 
-Direct keyboard presentation inside hosted apps remains unresolved. Version 0.3.9 removes the ineffective copy input board and preserves normal-app search. To provide keyboard diagnostics, choose **Settings → “采集键盘诊断（20秒）”**, tap a guest text field during the next 20 seconds, then export the diagnostic bundle.
+Direct keyboard presentation inside hosted apps remains unresolved. The copy input board was removed; normal-app search is preserved. Version0.3.10 skips partial hosted-keyboard preparation when the paired PID APIs are absent. To diagnose keyboard or bottom-control issues, choose **Settings → “采集键盘诊断（20秒）”**, tap the affected guest control during the next20 seconds, then export the diagnostic bundle.
 
 To switch to the ordinary app, use **↗** on that app's panel row. Capability checks run before ending the hosted window. When the newer deactivation method is absent, an older scene-settings update path is used; if neither is available, the window stays open. Successful release is followed by an ordinary launch request, with other windows collected into the panel. The target is not automatically recreated, and forms/cursor positions may differ.
 
@@ -77,7 +79,7 @@ Open the window panel → Settings → Diagnostics → mark the issue → export
 
 Logs stay on the device, rotate at approximately 8 MiB, and are exported only by the user. They record scene, window and input stages without recording the screen or typed text. Inspect and redact application identifiers before sharing publicly.
 
-The timed keyboard capture samples at most once per second: guest input requests, focus ownership, method signatures and window visibility/levels. Sampling does not change focus or read keycodes or clipboard contents.
+The timed capture samples at most once per second: input requests, focus ownership, method signatures, window visibility/levels, safe insets and bottom hit queries. Queries do not inject touches; delivered touch logs contain region categories, not coordinates or text. Sampling does not change focus or read keycodes or clipboard contents.
 
 ```sh
 python3 scripts/inspect_diagnostics.py /path/to/HaruGalaxy-Diagnostics-example.json

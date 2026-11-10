@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.3.10 — Guest edge controls and keyboard capability gating
+
+### Fixed
+
+- Replace always-zero guest safe areas with actual overlap against the host window's safe rectangle. Convert insets into guest coordinates for proportional scaling, and update on movement, rotation, full-screen and resize.
+- Stop preparing a hosted keyboard window before checking paired PID registration/removal methods. Device0.3.9 logs confirmed those methods are absent on iOS16.2 while preparation still ran. Unsupported systems retain focus selection without partial hosted presentation.
+
+### Added
+
+- Passive bottom hit queries, content/rail intersection checks and requested/reported safe-area fields in timed diagnostics.
+- Bounded host-delivered touch-region records during capture, excluding text and raw tap coordinates.
+- Capability snapshots for guests that appear after capture has started.
+
+### Preserved and limitations
+
+- Keep the28-point title and8-point resize edge, plus the0.3.9 ordinary-app handoff fallback. New logs confirm that fallback acknowledged background/release and its launch request was accepted.
+- The supplied log does not prove that the resize edge caused the missed buttons. Direct guest keyboard input and actual device hit delivery remain unverified for this build; keyboard-visible reports alone are not proof of usable input.
+
 ## 0.3.9 — Thin resize edge and keyboard diagnostics
 
 ### Fixed

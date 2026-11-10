@@ -9,6 +9,16 @@ static MWRect safe_viewport(MWRect v) {
     v.width=fmax(1,finite_or(v.width,1)); v.height=fmax(1,finite_or(v.height,1));
     return v;
 }
+MWInsets MWGuestSafeInsets(MWRect r,MWRect s,double w,double h) {
+    if(!isfinite(r.x)||!isfinite(r.y)||!isfinite(r.width)||!isfinite(r.height)||
+       !isfinite(s.x)||!isfinite(s.y)||!isfinite(s.width)||!isfinite(s.height)||
+       !isfinite(w)||!isfinite(h)||r.width<=0||r.height<=0||s.width<0||s.height<0||w<=0||h<=0)
+        return (MWInsets){0,0,0,0};
+    double top=clamp(s.y-r.y,0,r.height),left=clamp(s.x-r.x,0,r.width);
+    double bottom=clamp(r.y+r.height-s.y-s.height,0,r.height-top);
+    double right=clamp(r.x+r.width-s.x-s.width,0,r.width-left);
+    return (MWInsets){top*h/r.height,left*w/r.width,bottom*h/r.height,right*w/r.width};
+}
 
 MWRect MWConstrainRect(MWRect r, MWRect viewport) {
     MWRect v=safe_viewport(viewport);

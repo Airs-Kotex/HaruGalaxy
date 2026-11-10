@@ -236,9 +236,31 @@ static void isolated_resize_rail(void) {
     MWRect tiny=MWWindowContentRect((MWRect){0,0,20,30},59,false);
     assert(tiny.height>=0 && tiny.y+tiny.height<=30);
 }
+static void guest_safe_insets(void) {
+    MWRect safe={0,59,430,839}; // Device-style safe rect, no production hardcoding.
+    MWInsets i=MWGuestSafeInsets((MWRect){0,0,430,932},safe,430,932);
+    assert(i.top==59 && i.bottom==34 && i.left==0 && i.right==0);
+    // 28pt header/8pt rail: guest extends26pt into the Home zone.
+    i=MWGuestSafeInsets((MWRect){0,28,430,896},safe,430,896);
+    assert(i.top==31 && i.bottom==26);
+    // Proportional scene gets the inset in guest points, not screen points.
+    double scale=896.0/932;
+    i=MWGuestSafeInsets((MWRect){0,28,430*scale,896},safe,430,932);
+    assert(fabs(i.bottom-26/scale)<0.00001);
+    i=MWGuestSafeInsets((MWRect){20,100,300,500},safe,430,932);
+    assert(i.top==0 && i.bottom==0 && i.left==0 && i.right==0);
+    i=MWGuestSafeInsets((MWRect){0,0,932,430},(MWRect){59,0,814,409},932,430);
+    assert(i.left==59 && i.right==59 && i.bottom==21 && i.top==0);
+    i=MWGuestSafeInsets((MWRect){0,920,430,8},safe,430,100);
+    assert(i.bottom==100 && i.top==0); // Fully within excluded strip, bounded.
+    i=MWGuestSafeInsets((MWRect){0,0,0,0},safe,430,932);
+    assert(i.top==0 && i.bottom==0);
+    i=MWGuestSafeInsets((MWRect){NAN,0,430,932},safe,430,932);
+    assert(i.top==0 && i.bottom==0);
+}
 
 int main(void) {
-    lifecycle(); bounds(); maximize_restore(); proportional_scaling(); free_resize_and_snap(); original_canvas_and_reachable_snap(); free_entry_placement(); isolated_resize_rail();
+    lifecycle(); bounds(); maximize_restore(); proportional_scaling(); free_resize_and_snap(); original_canvas_and_reachable_snap(); free_entry_placement(); isolated_resize_rail(); guest_safe_insets();
     puts("PASS: lifecycle, free/proportional resize, full/half-screen, top inset continuity, rotation and edge handle");
     return 0;
 }

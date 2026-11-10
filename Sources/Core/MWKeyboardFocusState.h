@@ -12,3 +12,4 @@ uint64_t MWKeyboardFocusSelect(MWKeyboardFocusState *state,uint64_t owner);
 bool MWKeyboardFocusCurrent(const MWKeyboardFocusState *state,uint64_t owner,uint64_t generation);
 bool MWKeyboardFocusRelease(MWKeyboardFocusState *state,uint64_t owner);
 void MWKeyboardFocusSuspend(MWKeyboardFocusState *state,bool suspended);
+bool MWKeyboardCanPrepareHosting(bool addPID,bool removePID,bool prepare,bool finish);

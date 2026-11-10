@@ -51,6 +51,8 @@ static id MWSceneForeground(UIApplicationSceneSettings *settings) {
     MWNativeHandoff _nativeHandoff;
     void (^_nativeCompletion)(NSError *);
     BOOL _cleanupFailed;
+    UIEdgeInsets _safeInsets;
+    BOOL _diagnosticCapabilitiesRecorded;
 }
 
 - (instancetype)initWithBundleIdentifier:(NSString *)bundleIdentifier {
@@ -122,7 +124,7 @@ static id MWSceneForeground(UIApplicationSceneSettings *settings) {
         settings.canShowAlerts=YES;
         settings.persistenceIdentifier=self.sceneIdentifier;
         settings.peripheryInsets=UIEdgeInsetsZero;
-        settings.safeAreaInsetsPortrait=UIEdgeInsetsZero;
+        [self applySafeInsets:settings];
         settings.statusBarDisabled=YES;
         parameters.settings=settings;
         UIMutableApplicationSceneClientSettings *client=[PrivClass(UIMutableApplicationSceneClientSettings) new];
@@ -191,17 +193,29 @@ static id MWSceneForeground(UIApplicationSceneSettings *settings) {
 - (NSDictionary *)inputDiagnosticSnapshotWithCapabilities:(BOOL)capabilities {
     id client=MWRuntimeObjectValue(_scene,@"clientSettings");
     id settings=MWRuntimeObjectValue(_scene,@"settings");
+    NSString *safeSelector=@"safeAreaInsetsPortrait";
+    if(_orientation==UIInterfaceOrientationLandscapeLeft) safeSelector=@"safeAreaInsetsLandscapeLeft";
+    else if(_orientation==UIInterfaceOrientationLandscapeRight) safeSelector=@"safeAreaInsetsLandscapeRight";
+    else if(_orientation==UIInterfaceOrientationPortraitUpsideDown) safeSelector=@"safeAreaInsetsPortraitUpsideDown";
     NSMutableDictionary *snapshot=[@{@"bundle":self.bundleIdentifier,@"scene":self.sceneIdentifier,
         @"pid":@(_process.pid),@"closed":@(_closed),@"visibleRequested":@(_visible),@"observingInput":@(_observingInput),
         @"inputKnown":@(_inputKnown),@"lastInputActive":@(_inputActive),
         @"systemInputActive":MWRuntimeBoolValue(client,@"systemInputActive"),
         @"foreground":MWSceneForeground(settings),@"sceneActive":MWRuntimeBoolValue(_scene,@"isActive"),
         @"presenterActive":MWRuntimeBoolValue(_presenter,@"isActive"),@"presenterHosting":MWRuntimeBoolValue(_presenter,@"isHosting"),
+        @"safeAreaRequested":@[@(_safeInsets.top),@(_safeInsets.left),@(_safeInsets.bottom),@(_safeInsets.right)],
+        @"safeAreaReported":MWRuntimeInsetsValue(settings,safeSelector),@"orientation":@(_orientation),
         @"inputEnvironment":_inputEnvironment ? [_inputEnvironment diagnosticSnapshot] : @{@"registered":@NO}} mutableCopy];
-    if(capabilities) snapshot[@"methods"]=@{
+    if(capabilities || (!_diagnosticCapabilitiesRecorded && _scene)) {
+        _diagnosticCapabilitiesRecorded=(_scene!=nil);
+        id uiClient=MWRuntimeObjectValue(_scene,@"uiClientSettings");
+        snapshot[@"uiSystemInputActive"]=MWRuntimeBoolValue(uiClient,@"systemInputActive");
+        snapshot[@"methods"]=@{
         @"inputActive":MWRuntimeMethodSnapshot(client,@"systemInputActive"),@"sceneToken":MWRuntimeMethodSnapshot(_scene,@"identityToken"),
+        @"uiInputActive":MWRuntimeMethodSnapshot(uiClient,@"systemInputActive"),
         @"deactivate":MWRuntimeMethodSnapshot(_scene,@"deactivate:"),
         @"settingsUpdate":MWRuntimeMethodSnapshot(_scene,@"updateSettings:withTransitionContext:completion:")};
+    }
     return snapshot;
 }
 
@@ -220,16 +234,33 @@ static id MWSceneForeground(UIApplicationSceneSettings *settings) {
     dispatch_resume(_monitor);
 }
 
-- (void)updateSize:(CGSize)size orientation:(UIInterfaceOrientation)orientation {
+- (void)applySafeInsets:(UIMutableApplicationSceneSettings *)settings {
+    // Each field is expressed in that orientation's scene coordinates.
+    // Reset unused orientations so an old offscreen edge cannot survive rotation.
+    settings.safeAreaInsetsPortrait=UIEdgeInsetsZero;
+    settings.safeAreaInsetsPortraitUpsideDown=UIEdgeInsetsZero;
+    settings.safeAreaInsetsLandscapeLeft=UIEdgeInsetsZero;
+    settings.safeAreaInsetsLandscapeRight=UIEdgeInsetsZero;
+    switch(_orientation) {
+        case UIInterfaceOrientationLandscapeLeft: settings.safeAreaInsetsLandscapeLeft=_safeInsets; break;
+        case UIInterfaceOrientationLandscapeRight: settings.safeAreaInsetsLandscapeRight=_safeInsets; break;
+        case UIInterfaceOrientationPortraitUpsideDown: settings.safeAreaInsetsPortraitUpsideDown=_safeInsets; break;
+        default: settings.safeAreaInsetsPortrait=_safeInsets; break;
+    }
+}
+- (void)updateSize:(CGSize)size orientation:(UIInterfaceOrientation)orientation safeAreaInsets:(UIEdgeInsets)insets {
     if(_closed || _nativeCompletion || !isfinite(size.width) || !isfinite(size.height) || size.width<1 || size.height<1) return;
     _size=size;
+    _safeInsets=insets;
     if(orientation!=UIInterfaceOrientationUnknown) _orientation=orientation;
     if(!_scene) return;
-    MWTrace(@"guest.logical_geometry",@{@"bundle":self.bundleIdentifier,@"width":@(size.width),@"height":@(size.height),@"orientation":@(orientation)});
+    MWTrace(@"guest.logical_geometry",@{@"bundle":self.bundleIdentifier,@"width":@(size.width),@"height":@(size.height),@"orientation":@(orientation),
+        @"safeInsets":@[@(insets.top),@(insets.left),@(insets.bottom),@(insets.right)]});
     @try {
         UIInterfaceOrientation resolved=_orientation;
         [_scene updateSettingsWithBlock:^(UIMutableApplicationSceneSettings *settings) {
             settings.frame=(CGRect){CGPointZero,size}; settings.interfaceOrientation=resolved;
+            [self applySafeInsets:settings];
         }];
     } @catch(NSException *exception) {
         [self fail:MWError(19,[NSString stringWithFormat:@"更新小窗尺寸失败：%@",exception.reason])];

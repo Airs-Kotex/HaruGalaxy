@@ -79,6 +79,32 @@ def summarize(bundle):
             "touches without a host callback, so zero is not proof of no touch. Missing/unsupported getters "
             "remain unavailable, never false. Compare capability encodings, selected owner, environment mapping "
             "and keyboard window visibility/level. No text, keycodes or clipboard content is sampled.")}
+    touch_trace = [row for row in records if row["event"] in
+                   ("input.window_touch", "window.resize_contact", "window.resize_begin", "window.resize_finished")]
+    bottom_samples = []
+    for row in capture_events:
+        if row["event"] != "keyboard.diagnostic_sample":
+            continue
+        guests = row["fields"].get("guests", [])
+        if not isinstance(guests, list):
+            continue
+        for guest in guests:
+            if not isinstance(guest, dict) or "bottomHitProbes" not in guest:
+                continue
+            bottom_samples.append({"session": row.get("session"), "sequence": row["sequence"], "time": row["time"],
+                "bundle": guest.get("bundle"), "railVisible": guest.get("railVisible"),
+                "railOverlapsContent": guest.get("railOverlapsContent"),
+                "contentFrame": guest.get("contentFrame"), "railFrame": guest.get("railFrame"),
+                "bottomHitProbes": guest.get("bottomHitProbes")})
+    touch_stages = {
+        "counts": dict(sorted(Counter(row["event"] for row in touch_trace).items())),
+        "recent_events": touch_trace[-80:], "bottom_samples": bottom_samples[-24:],
+        "interpretation": (
+            "input.window_touch is a host-delivered touch start with a region, without tap coordinates or text. "
+            "bottomHitProbes are synthetic host-window queries, not injected or delivered touches; they cannot "
+            "prove guest or WindowServer routing. railOverlapsContent checks model rectangles. Absent delivery "
+            "does not prove a blocked tap. Compare selected-window safeInsets and guest safeAreaRequested; "
+            "zero safe area can expose controls to system edge gestures. Never mix separate sessions when attributing a symptom.")}
     board_trace = [row for row in records if row["event"].startswith("input_board.")]
     board_stages = {
         "counts": dict(sorted(Counter(row["event"] for row in board_trace).items())),
@@ -108,6 +134,7 @@ def summarize(bundle):
             "search_pipeline": search_stages,
             "keyboard_pipeline": keyboard_stages,
             "keyboard_capture": capture_stages,
+            "window_touch_pipeline": touch_stages,
             "input_board_pipeline": board_stages,
             "native_handoff_pipeline": native_stages,
             "interpretation": "A heartbeat gap is an observation, not proof of a crash. Assertion valid is not proof of rendering or input."}

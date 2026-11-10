@@ -8,7 +8,7 @@
 @property(nonatomic,copy) void (^inputRequestHandler)(void);
 - (instancetype)initWithBundleIdentifier:(NSString *)bundleIdentifier;
 - (void)startWithSize:(CGSize)size completion:(void (^)(NSError *error))completion;
-- (void)updateSize:(CGSize)size orientation:(UIInterfaceOrientation)orientation;
+- (void)updateSize:(CGSize)size orientation:(UIInterfaceOrientation)orientation safeAreaInsets:(UIEdgeInsets)insets;
 - (void)setVisible:(BOOL)visible;
 - (void)requestKeyboardFocusInWindow:(UIWindow *)window;
 - (void)refreshKeyboardFocusInWindow:(UIWindow *)window;

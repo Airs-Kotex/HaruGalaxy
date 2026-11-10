@@ -128,5 +128,18 @@ class DiagnosticsReaderTests(unittest.TestCase):
         self.assertIn("zero is not proof of no touch",result["interpretation"])
         self.assertEqual(reader.summarize({"schema":1,"logs":{}})["keyboard_capture"]["counts"],{})
 
+    def test_bottom_probes_do_not_imply_delivered_guest_touches(self):
+        samples=[{"time":i,"sequence":i,"session":"sample-session","event":"keyboard.diagnostic_sample",
+                  "fields":{"guests":[{"bundle":"example.app","railOverlapsContent":False,
+                      "bottomHitProbes":[{"region":"guest_surface","fromBottom":12,"xFraction":0.5}]}]}}
+                 for i in range(30)]
+        data=reader.summarize({"schema":1,"logs":{"events":"\n".join(json.dumps(r) for r in samples)}})["window_touch_pipeline"]
+        self.assertEqual(data["counts"],{})
+        self.assertEqual(len(data["bottom_samples"]),24)
+        self.assertEqual(data["bottom_samples"][0]["sequence"],6)
+        self.assertFalse(data["bottom_samples"][-1]["railOverlapsContent"])
+        self.assertIn("synthetic host-window queries",data["interpretation"])
+        self.assertEqual(reader.summarize({"schema":1,"logs":{}})["window_touch_pipeline"]["bottom_samples"],[])
+
 
 if __name__=="__main__": unittest.main()

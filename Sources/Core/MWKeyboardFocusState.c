@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "MWKeyboardFocusState.h"
+bool MWKeyboardCanPrepareHosting(bool addPID,bool removePID,bool prepare,bool finish) {
+    return addPID && removePID && prepare && finish;
+}
 uint64_t MWKeyboardFocusSelect(MWKeyboardFocusState *s,uint64_t owner) {
     if(!s || s->suspended) return 0;
     s->owner=owner; s->selected=true; return ++s->generation;

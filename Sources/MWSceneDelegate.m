@@ -19,10 +19,12 @@
         BOOL control=NO;
         for(UIView *view=touch.view;view && view!=self;view=view.superview) {
             if([view isKindOfClass:UIControl.class]) control=YES;
-            if(touch.phase==UITouchPhaseBegan && !control && [view isKindOfClass:MWWindowView.class]) {
+            if(touch.phase==UITouchPhaseBegan && [view isKindOfClass:MWWindowView.class]) {
+                [(MWWindowView *)view recordTouchStartInView:touch.view];
                 // The touch has already been hit-tested. Select the guest before
                 // forwarding it; never mutate the global hit-testing path.
-                [(MWWindowView *)view prepareKeyboardFocusForTouchInView:touch.view]; break;
+                if(!control) [(MWWindowView *)view prepareKeyboardFocusForTouchInView:touch.view];
+                break;
             }
             if([view isKindOfClass:MWEdgeHandle.class]) {
                 // Only the app-owned entry, never guest touches or keyboard input.

@@ -51,4 +51,6 @@ MWEntryPlacement MWEntryDrop(MWRect viewport,double x,double y);
 MWRect MWPanelPlacementRect(MWRect viewport,MWRect anchor,double desiredHeight);
 typedef struct { double scale, x, y; } MWContentTransform;
 MWContentTransform MWFitContent(double logicalWidth, double logicalHeight, double availableWidth, double availableHeight);
+typedef struct { double top,left,bottom,right; } MWInsets;
+MWInsets MWGuestSafeInsets(MWRect rendered,MWRect safeRect,double logicalWidth,double logicalHeight);
 #endif

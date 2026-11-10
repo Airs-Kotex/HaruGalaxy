@@ -170,6 +170,7 @@ NSDictionary *MWErrorFields(NSError *error) {
 }
 - (void)flushSoon { dispatch_async(_queue,^{MWLogStoreFlush(&self->_store);}); }
 - (BOOL)keyboardCaptureActive { return _keyboardCapture.active; }
+- (uint64_t)keyboardCaptureGeneration { return _keyboardCapture.generation; }
 - (void)requestKeyboardSample:(NSString *)reason includeCapabilities:(BOOL)includeCapabilities {
     [[NSNotificationCenter defaultCenter] postNotificationName:MWKeyboardDiagnosticSampleNotification object:self
         userInfo:@{@"reason":reason,@"capabilities":@(includeCapabilities),@"capture":@(_keyboardCapture.generation),

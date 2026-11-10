@@ -25,6 +25,7 @@
 - (void)setInitialResizeMode:(MWResizeMode)mode;
 - (void)cancelInteractions;
 - (void)prepareKeyboardFocusForTouchInView:(UIView *)view;
+- (void)recordTouchStartInView:(UIView *)view;
 - (void)releaseForOriginalApplication:(void (^)(NSError *error))completion;
 - (NSDictionary *)inputDiagnosticSnapshotWithCapabilities:(BOOL)capabilities;
 @end

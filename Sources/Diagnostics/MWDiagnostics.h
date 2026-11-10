@@ -15,6 +15,7 @@ FOUNDATION_EXPORT NSString *const MWKeyboardDiagnosticSampleNotification;
 - (void)markProblem;
 - (void)startKeyboardCapture;
 @property(nonatomic,readonly) BOOL keyboardCaptureActive;
+@property(nonatomic,readonly) uint64_t keyboardCaptureGeneration;
 - (NSDictionary *)environmentSnapshot;
 - (void)exportWithCompletion:(void (^)(NSURL *file, NSError *error))completion;
 - (void)clearWithCompletion:(void (^)(NSError *error))completion;

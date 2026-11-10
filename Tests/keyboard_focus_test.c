@@ -4,6 +4,9 @@
 #include <stdio.h>
 
 int main(void) {
+    assert(!MWKeyboardCanPrepareHosting(false,false,true,true)); // Observed iOS16.2 capability set.
+    for(unsigned mask=0;mask<16;mask++)
+        assert(MWKeyboardCanPrepareHosting(mask&1,mask&2,mask&4,mask&8)==(mask==15));
     MWKeyboardFocusState s={0};
     uint64_t first=MWKeyboardFocusSelect(&s,1);
     assert(first && MWKeyboardFocusCurrent(&s,1,first));

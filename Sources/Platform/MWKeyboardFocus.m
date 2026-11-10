@@ -38,6 +38,7 @@ static id MWKeyboardBool(id object,NSString *name) {
 @property(nonatomic) pid_t pid;
 @property(nonatomic) uint64_t owner;
 @property(nonatomic,strong) id sceneToken;
+@property(nonatomic) BOOL reportedUnsupportedHosting;
 @end
 @implementation MWKeyboardGuest
 @end
@@ -175,11 +176,24 @@ static id MWKeyboardBool(id object,NSString *name) {
     if(![self clearHostedBinding]) return NO;
     if(!guest) return [self clearHostedPresentation];
     id client=[self client];
-    if(![self prepareHostedPresentation:client scene:window.windowScene]) return NO;
     SEL add=NSSelectorFromString(@"addWindowHostingPID:callerID:"),remove=NSSelectorFromString(@"removeWindowHostingPID:callerID:");
-    if(!MWKeyboardMethod(client,add,'v',"i@") || !MWKeyboardMethod(client,remove,'v',"i@")) {
-        MWTrace(@"keyboard.hosting_unavailable",@{@"scene":identifier}); return YES;
+    BOOL supported=MWKeyboardCanPrepareHosting(MWKeyboardMethod(client,add,'v',"i@"),MWKeyboardMethod(client,remove,'v',"i@"),
+        MWKeyboardMethod(client,NSSelectorFromString(@"prepareForHostedWindowWithScene:"),'@',"@"),
+        MWKeyboardMethod(client,NSSelectorFromString(@"finishWithHostedWindow"),'v',""));
+    if(!supported) {
+        // iOS16.2 returned a hosted window while add/remove PID were absent.
+        // Do not enter partial presentation mode; normal system presentation
+        // retains ownership on this capability set.
+        if(![self clearHostedPresentation]) return NO;
+        if(!guest.reportedUnsupportedHosting) {
+            guest.reportedUnsupportedHosting=YES;
+            MWLog(@"keyboard.hosting_skipped",@{@"scene":identifier,@"reason":@"incomplete_paired_API",@"focusOnly":@YES,
+                @"addPID":MWRuntimeMethodSnapshot(client,NSStringFromSelector(add)),
+                @"removePID":MWRuntimeMethodSnapshot(client,NSStringFromSelector(remove))});
+        }
+        return YES;
     }
+    if(![self prepareHostedPresentation:client scene:window.windowScene]) return NO;
     _boundClient=client; _boundCaller=caller; _boundPID=guest.pid; _bindingNeedsCleanup=YES;
     ((void(*)(id,SEL,int,id))objc_msgSend)(client,add,guest.pid,caller);
     _bindingNeedsCleanup=NO;

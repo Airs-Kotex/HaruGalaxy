@@ -8,6 +8,7 @@
 
 static MWRect MWFromCGRect(CGRect r) { return (MWRect){r.origin.x,r.origin.y,r.size.width,r.size.height}; }
 static CGRect MWToCGRect(MWRect r) { return CGRectMake(r.x,r.y,r.width,r.height); }
+static NSArray *MWRectFields(CGRect r) { return @[@(r.origin.x),@(r.origin.y),@(r.size.width),@(r.size.height)]; }
 
 @interface MWGeometryDisplayTarget : NSObject
 @property(nonatomic,weak) MWWindowView *owner;
@@ -46,6 +47,9 @@ static CGRect MWToCGRect(MWRect r) { return CGRectMake(r.x,r.y,r.width,r.height)
     NSUInteger _resizeSceneUpdates;
     CFTimeInterval _resizeStartedAt;
     NSUInteger _deliveredTouchStarts;
+    UIEdgeInsets _lastSafeInsets;
+    uint64_t _touchCapture;
+    NSUInteger _touchRecords;
 }
 @synthesize model=_model;
 
@@ -140,9 +144,23 @@ static CGRect MWToCGRect(MWRect r) { return CGRectMake(r.x,r.y,r.width,r.height)
         self.layer.shadowPath=[UIBezierPath bezierPathWithRoundedRect:self.bounds cornerRadius:_model.maximized ? 0 : 18].CGPath;
     }
     UIInterfaceOrientation orientation=self.window.windowScene.interfaceOrientation;
-    if(!CGSizeEqualToSize(_lastSize,_logicalSize) || _lastOrientation!=orientation) {
-        if(_resizing) [self scheduleSceneGeometry]; else [self submitSceneGeometry];
+    if(!CGSizeEqualToSize(_lastSize,_logicalSize) || _lastOrientation!=orientation ||
+       !UIEdgeInsetsEqualToEdgeInsets(_lastSafeInsets,[self guestSafeInsets])) {
+        if(_resizing || _dragging) [self scheduleSceneGeometry]; else [self submitSceneGeometry];
     }
+}
+- (CGRect)renderedGuestRectInWindow {
+    MWContentTransform t=MWFitContent(_logicalSize.width,_logicalSize.height,_guestHost.bounds.size.width,_guestHost.bounds.size.height);
+    return [_guestHost convertRect:CGRectMake(t.x,t.y,_logicalSize.width*t.scale,_logicalSize.height*t.scale) toView:self.window];
+}
+- (UIEdgeInsets)guestSafeInsets {
+    if(!self.window) return UIEdgeInsetsZero;
+    CGRect safe=UIEdgeInsetsInsetRect(self.window.bounds,self.window.safeAreaInsets);
+    MWInsets insets=MWGuestSafeInsets(MWFromCGRect([self renderedGuestRectInWindow]),MWFromCGRect(safe),_logicalSize.width,_logicalSize.height);
+    return UIEdgeInsetsMake(insets.top,insets.left,insets.bottom,insets.right);
+}
+- (void)safeAreaInsetsDidChange {
+    [super safeAreaInsetsDidChange]; [self setNeedsLayout];
 }
 - (UIView *)hitTest:(CGPoint)point withEvent:(UIEvent *)event {
     if(self.hidden || self.alpha<=0.01 || !self.userInteractionEnabled || ![self pointInside:point withEvent:event]) return nil;
@@ -177,10 +195,11 @@ static CGRect MWToCGRect(MWRect r) { return CGRectMake(r.x,r.y,r.width,r.height)
 }
 - (void)submitSceneGeometry {
     UIInterfaceOrientation orientation=self.window.windowScene.interfaceOrientation;
-    if(CGSizeEqualToSize(_lastSize,_logicalSize) && _lastOrientation==orientation) return;
-    _lastSize=_logicalSize; _lastOrientation=orientation;
+    UIEdgeInsets insets=[self guestSafeInsets];
+    if(CGSizeEqualToSize(_lastSize,_logicalSize) && _lastOrientation==orientation && UIEdgeInsetsEqualToEdgeInsets(_lastSafeInsets,insets)) return;
+    _lastSize=_logicalSize; _lastOrientation=orientation; _lastSafeInsets=insets;
     if(_resizing) _resizeSceneUpdates++;
-    [_session updateSize:_logicalSize orientation:_lastOrientation];
+    [_session updateSize:_logicalSize orientation:_lastOrientation safeAreaInsets:insets];
 }
 - (void)commitSceneGeometry {
     _geometryGeneration++; _geometryUpdatePending=NO; _geometryDisplayLink.paused=YES;
@@ -200,7 +219,7 @@ static CGRect MWToCGRect(MWRect r) { return CGRectMake(r.x,r.y,r.width,r.height)
         if(view && view.active && !view->_hostHidden && !view.hidden && !view.window.rootViewController.presentedViewController)
             [view.session refreshKeyboardFocusInWindow:view.window];
     };
-    [_session updateSize:_logicalSize orientation:self.window.windowScene.interfaceOrientation];
+    [_session updateSize:_logicalSize orientation:self.window.windowScene.interfaceOrientation safeAreaInsets:[self guestSafeInsets]];
     [_session startWithSize:_logicalSize completion:^(NSError *error) {
         MWWindowView *view=weakSelf;
         if(!view || view->_model.state==MWWindowClosed) return;
@@ -281,6 +300,7 @@ static CGRect MWToCGRect(MWRect r) { return CGRectMake(r.x,r.y,r.width,r.height)
     if(gesture.state==UIGestureRecognizerStateChanged || gesture.state==UIGestureRecognizerStateBegan) {
         _model.frame=MWMoveRect(MWFromCGRect(_gestureFrame),delta.x,delta.y,MWFromCGRect(_viewport));
         self.frame=MWToCGRect(_model.frame);
+        [self setNeedsLayout]; // Moving can cross a system safe-area boundary.
         [self updateSnapCandidate:_model.resizeMode==MWResizeFree ? MWSnapTargetForDrag(MWFromCGRect(_viewport),MWFromCGRect(_gestureFrame),MWFromCGRect(frame)) : MWSnapNone];
     }
     if(gesture.state==UIGestureRecognizerStateEnded || gesture.state==UIGestureRecognizerStateCancelled || gesture.state==UIGestureRecognizerStateFailed) {
@@ -359,15 +379,55 @@ static CGRect MWToCGRect(MWRect r) { return CGRectMake(r.x,r.y,r.width,r.height)
 }
 - (void)focus { if(self.activateHandler) self.activateHandler(); }
 - (void)prepareKeyboardFocusForTouchInView:(UIView *)view {
-    if(_guestView && [view isDescendantOfView:_guestHost]) _deliveredTouchStarts++;
+    (void)view;
     if(_hostHidden || self.hidden || _model.state!=MWWindowVisible) return;
     [self focus];
     [_session requestKeyboardFocusInWindow:self.window];
+}
+- (NSString *)touchRegionForView:(UIView *)view {
+    if(!view) return @"none";
+    if([view isDescendantOfView:_resize]) return @"resize_rail";
+    if([view isDescendantOfView:_freeResize]) return @"free_resize";
+    if([view isDescendantOfView:_bar]) return @"title";
+    if(_guestView && [view isDescendantOfView:_guestHost]) return @"guest_surface";
+    if([view isDescendantOfView:_content]) return @"content_chrome";
+    if([view isDescendantOfView:self]) return @"window_chrome";
+    return @"outside_window";
+}
+- (void)recordTouchStartInView:(UIView *)view {
+    NSString *region=[self touchRegionForView:view];
+    if([region isEqual:@"guest_surface"]) _deliveredTouchStarts++;
+    MWDiagnostics *diagnostics=MWDiagnostics.shared;
+    if(!diagnostics.keyboardCaptureActive) return;
+    if(_touchCapture!=diagnostics.keyboardCaptureGeneration) { _touchCapture=diagnostics.keyboardCaptureGeneration; _touchRecords=0; }
+    if(_touchRecords>=40) return;
+    _touchRecords++;
+    MWLog(@"input.window_touch",@{@"bundle":self.application.bundleIdentifier,@"capture":@(_touchCapture),@"region":region,
+        @"hitClass":view ? NSStringFromClass(view.class) : @"none",@"ordinal":@(_touchRecords)});
+}
+- (NSArray *)bottomHitProbes {
+    if(!self.window || self.hidden || _hostHidden) return @[];
+    NSMutableArray *probes=[NSMutableArray array];
+    CGRect content=[self renderedGuestRectInWindow];
+    // Synthetic host-window queries, never injected touches. Query only the
+    // visible guest footer; do not walk or read guest text/control contents.
+    for(NSNumber *fraction in @[@0.2,@0.5,@0.8]) for(NSNumber *distance in @[@12,@32]) {
+        CGPoint point=CGPointMake(content.origin.x+content.size.width*fraction.doubleValue,
+            CGRectGetMaxY(content)-MIN(distance.doubleValue,content.size.height/2));
+        UIView *hit=[self.window hitTest:point withEvent:nil];
+        [probes addObject:@{@"xFraction":fraction,@"fromBottom":distance,@"region":[self touchRegionForView:hit],
+            @"hitClass":hit ? NSStringFromClass(hit.class) : @"none"}];
+    }
+    return probes;
 }
 - (NSDictionary *)inputDiagnosticSnapshotWithCapabilities:(BOOL)capabilities {
     return @{@"bundle":self.application.bundleIdentifier,@"state":@(_model.state),@"selected":@(self.active),
         @"attached":@(self.window!=nil),@"hidden":@(self.hidden),@"hostHidden":@(_hostHidden),
         @"deliveredTouchStarts":@(_deliveredTouchStarts),@"geometry":[_guestHost geometrySnapshot],
+        @"contentFrame":MWRectFields(_content.frame),@"railFrame":MWRectFields(_resize.frame),
+        @"railVisible":@(!_resize.hidden),@"railOverlapsContent":@(!_resize.hidden && CGRectIntersectsRect(_resize.frame,_content.frame)),
+        @"renderedInWindow":MWRectFields([self renderedGuestRectInWindow]),
+        @"bottomHitProbes":[self bottomHitProbes],@"probeScope":@"host_window_query_not_remote_delivery",
         @"session":_session ? [_session inputDiagnosticSnapshotWithCapabilities:capabilities] : @{}};
 }
 - (void)toggleMaximize {
