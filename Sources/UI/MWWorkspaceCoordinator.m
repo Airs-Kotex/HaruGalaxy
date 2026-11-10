@@ -2,7 +2,6 @@
 #import "MWWorkspaceCoordinator.h"
 #import "MWWorkspaceController.h"
 #import "MWAppPickerController.h"
-#import "MWInputBoardController.h"
 #import "../Diagnostics/MWDiagnostics.h"
 #import "../Platform/MWFloatingHost.h"
 #import "../Platform/MWApplicationActivation.h"
@@ -38,8 +37,7 @@
     UINavigationController *_inputNavigation;
     NSString *_inputQuery;
     void (^_inputSelection)(MWApplication *);
-    BOOL _inputBoardMode, _inputSuspendedOverlay;
-    void (^_inputBoardCompletion)(BOOL);
+    BOOL _inputSuspendedOverlay;
     MWSearchHandoff _inputState;
     BOOL _inputPending;
 }
@@ -115,16 +113,7 @@
 }
 - (void)presentApplicationSearchWithQuery:(NSString *)query selection:(void (^)(MWApplication *))selection {
     if(_inputPending || !_floatingWindow || !MWFloatingHost.shared.ready || MWFloatingHost.shared.isLocked) return;
-    _inputBoardMode=NO;
     _inputQuery=[query copy]; _inputSelection=[selection copy];
-    [self beginNormalInput];
-}
-- (void)presentInputBoardWithCompletion:(void (^)(BOOL))completion {
-    if(_inputPending || MWFloatingHost.shared.isLocked) return;
-    if(_floatingWindow && !MWFloatingHost.shared.ready) return;
-    if(!_floatingWindow && !_applicationWindow) return;
-    _inputBoardMode=YES;
-    _inputBoardCompletion=[completion copy];
     [self beginNormalInput];
 }
 - (void)beginNormalInput {
@@ -134,7 +123,7 @@
     _inputSuspendedOverlay=_floatingWindow && MWFloatingHost.shared.ready;
     if(_inputSuspendedOverlay) [MWFloatingHost.shared setSearchInputSuspended:YES];
     [_workspace setHostVisible:NO];
-    MWLog(@"search.handoff_begin",@{@"inputBoard":@(_inputBoardMode),@"mainWindow":@(window!=nil),@"mainSceneState":@(window ? window.windowScene.activationState : UISceneActivationStateUnattached)});
+    MWLog(@"search.handoff_begin",@{@"mainWindow":@(window!=nil),@"mainSceneState":@(window ? window.windowScene.activationState : UISceneActivationStateUnattached)});
     if(!MWSearchHandoffCurrent(&_inputState,generation)) return;
     if(window && window.windowScene.activationState==UISceneActivationStateForegroundActive) {
         [self tryPresentApplicationSearch];
@@ -206,20 +195,6 @@
     if(action!=MWSearchPresent) return;
     [_applicationWindow makeKeyAndVisible];
     __weak typeof(self) weakSelf=self;
-    if(_inputBoardMode) {
-        MWInputBoardController *board=[MWInputBoardController new];
-        __weak MWInputBoardController *weakBoard=board;
-        board.completionHandler=^(BOOL copied) {
-            MWWorkspaceCoordinator *coordinator=weakSelf;
-            if(!coordinator || !coordinator->_inputPending || !MWSearchHandoffCurrent(&coordinator->_inputState,generation) ||
-               coordinator->_inputNavigation.viewControllers.firstObject!=weakBoard) return;
-            void (^completion)(BOOL)=coordinator->_inputBoardCompletion;
-            [coordinator finishApplicationSearch:nil];
-            if(completion) completion(copied);
-        };
-        [self presentNormalInputController:board presenter:presenter generation:generation];
-        return;
-    }
     MWAppPickerController *picker=[MWAppPickerController new]; picker.initialQuery=_inputQuery; picker.automaticallyFocusSearch=YES;
     __weak MWAppPickerController *weakPicker=picker;
     picker.selectionHandler=^(MWApplication *application){
@@ -238,9 +213,6 @@
     if([controller isKindOfClass:MWAppPickerController.class]) {
         MWAppPickerController *picker=(MWAppPickerController *)controller;
         [picker invalidateSearch]; picker.selectionHandler=nil; picker.cancellationHandler=nil; picker.searchFallbackHandler=nil;
-    } else if([controller isKindOfClass:MWInputBoardController.class]) {
-        MWInputBoardController *board=(MWInputBoardController *)controller;
-        [board invalidateInput]; board.completionHandler=nil;
     }
 }
 - (void)presentNormalInputController:(UIViewController *)controller presenter:(UIViewController *)presenter generation:(uint64_t)generation {
@@ -270,7 +242,6 @@
     if(!_inputPending) return;
     _inputPending=NO; MWSearchHandoffFinish(&_inputState);
     void (^selection)(MWApplication *)=_inputSelection; _inputSelection=nil; _inputQuery=nil;
-    _inputBoardCompletion=nil; _inputBoardMode=NO;
     UINavigationController *navigation=_inputNavigation; _inputNavigation=nil;
     [self invalidateNormalInput:navigation.viewControllers.firstObject];
     if(navigation) [MWKeyboardFocus.shared releaseForWindow:_applicationWindow];

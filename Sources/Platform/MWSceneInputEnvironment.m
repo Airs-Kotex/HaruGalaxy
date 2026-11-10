@@ -73,22 +73,24 @@ static id MWInputObject(id object,NSString *name) {
 
 @implementation MWSceneInputEnvironment {
     NSString *_key;
+    NSString *_unavailableReason;
 }
 - (instancetype)initWithScene:(id)scene identifier:(NSString *)identifier processIdentifier:(pid_t)pid {
     if((self=[super init])) {
         NSAssert(NSThread.isMainThread,@"Input environment registration is main-thread owned");
         @try {
             if(!identifier.length || pid<=0 || !MWInstallInputEnvironment()) {
+                _unavailableReason=@"runtime_api_or_identity";
                 MWLog(@"keyboard.environment_unavailable",@{@"reason":@"runtime API unavailable"}); return self;
             }
             id token=MWInputObject(scene,@"identityToken");
             Class tokenClass=NSClassFromString(@"FBSSceneIdentityToken");
-            if(!tokenClass || ![token isKindOfClass:tokenClass]) return self;
+            if(!tokenClass || ![token isKindOfClass:tokenClass]) { _unavailableReason=@"token_class"; return self; }
             id actual=MWInputObject(token,@"identifier"),representation=MWInputObject(token,@"stringRepresentation");
             if(![actual isKindOfClass:NSString.class] || ![actual isEqual:identifier] ||
-               ![representation isKindOfClass:NSString.class]) return self;
+               ![representation isKindOfClass:NSString.class]) { _unavailableReason=@"token_identity"; return self; }
             NSString *environment=MWEnvironmentForIdentityString(representation);
-            if(![environment isKindOfClass:NSString.class] || !environment.length) return self;
+            if(![environment isKindOfClass:NSString.class] || !environment.length) { _unavailableReason=@"empty_environment"; return self; }
             _key=NSUUID.UUID.UUIDString;
             MWInputEnvironmentEntry *entry=[MWInputEnvironmentEntry new];
             entry.pid=pid; entry.original=environment;
@@ -97,10 +99,18 @@ static id MWInputObject(id object,NSString *name) {
             MWLog(@"keyboard.environment_registered",@{@"scene":identifier,@"pid":@(pid)});
         } @catch(NSException *exception) {
             [self invalidate];
+            _unavailableReason=@"exception";
             MWLog(@"keyboard.environment_unavailable",@{@"reason":exception.reason ?: @"exception"});
         }
     }
     return self;
+}
+- (NSDictionary *)diagnosticSnapshot {
+    @synchronized(MWInputEnvironments) {
+        MWInputEnvironmentEntry *entry=_key ? MWInputEnvironments[_key] : nil;
+        return @{@"registered":@(entry!=nil),@"applied":@(entry.reported),
+            @"pid":@(entry.pid),@"unavailableReason":_unavailableReason ?: @"none"};
+    }
 }
 - (void)invalidate {
     if(!_key) return;

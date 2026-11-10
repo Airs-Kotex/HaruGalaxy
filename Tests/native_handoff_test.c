@@ -3,6 +3,11 @@
 #include <stdio.h>
 
 int main(void) {
+    assert(MWNativeHandoffChoose(false,true,true)==MWNativeRouteSettings);
+    assert(MWNativeHandoffChoose(true,true,true)==MWNativeRouteDeactivate);
+    assert(MWNativeHandoffChoose(true,false,true)==MWNativeRouteDeactivate);
+    assert(MWNativeHandoffChoose(false,false,true)==MWNativeRouteUnavailable);
+    assert(MWNativeHandoffChoose(true,true,false)==MWNativeRouteUnavailable);
     MWNativeHandoff state={0};
     uint64_t first=MWNativeHandoffBegin(&state,10);
     assert(MWNativeHandoffObserve(&state,first,10)==MWNativeWait);

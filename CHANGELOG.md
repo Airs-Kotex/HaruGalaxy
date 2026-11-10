@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.3.9 — Thin resize edge and keyboard diagnostics
+
+### Fixed
+
+- Stop treating `FBScene deactivate:` as mandatory. Use a runtime-checked background-settings update with completion when the older runtime lacks it.
+- Check handoff capability before removing/closing the target window. If neither route is available, keep the window and report the unsupported methods.
+
+### Changed
+
+- Reduce the footer from18 to8 points; keep the28-point title bar and original-aspect dragging across the entire bottom edge.
+- Replace the lower arc/background with a small central line and lighter contact surface.
+
+### Added
+
+- A20-second keyboard capture in Settings, with bounded once-per-second snapshots and stale-timer protection.
+- Diagnostics for exact runtime method encodings, guest input requests, selected owner, keyboard window visibility/levels, environment mapping and host-delivered touch counts.
+- Capability snapshots on problem marking/export, plus handoff-route selection and background acknowledgement events.
+
+### Removed
+
+- The copy input board and its panel/coordinator paths. Normal-app search stays available.
+
+Direct guest keyboard input remains unresolved. This release gathers the missing device evidence and does not claim that a focus request or a keyboard-state report proves usable input.
+
 ## 0.3.8 — Compact controls and scene handoff
 
 ### Fixed

@@ -45,6 +45,7 @@ static CGRect MWToCGRect(MWRect r) { return CGRectMake(r.x,r.y,r.width,r.height)
     CADisplayLink *_geometryDisplayLink;
     NSUInteger _resizeSceneUpdates;
     CFTimeInterval _resizeStartedAt;
+    NSUInteger _deliveredTouchStarts;
 }
 @synthesize model=_model;
 
@@ -357,10 +358,17 @@ static CGRect MWToCGRect(MWRect r) { return CGRectMake(r.x,r.y,r.width,r.height)
     [self setNeedsLayout]; [self layoutIfNeeded];
 }
 - (void)focus { if(self.activateHandler) self.activateHandler(); }
-- (void)prepareKeyboardFocus {
+- (void)prepareKeyboardFocusForTouchInView:(UIView *)view {
+    if(_guestView && [view isDescendantOfView:_guestHost]) _deliveredTouchStarts++;
     if(_hostHidden || self.hidden || _model.state!=MWWindowVisible) return;
     [self focus];
     [_session requestKeyboardFocusInWindow:self.window];
+}
+- (NSDictionary *)inputDiagnosticSnapshotWithCapabilities:(BOOL)capabilities {
+    return @{@"bundle":self.application.bundleIdentifier,@"state":@(_model.state),@"selected":@(self.active),
+        @"attached":@(self.window!=nil),@"hidden":@(self.hidden),@"hostHidden":@(_hostHidden),
+        @"deliveredTouchStarts":@(_deliveredTouchStarts),@"geometry":[_guestHost geometrySnapshot],
+        @"session":_session ? [_session inputDiagnosticSnapshotWithCapabilities:capabilities] : @{}};
 }
 - (void)toggleMaximize {
     [self cancelInteractions];
@@ -439,6 +447,8 @@ static CGRect MWToCGRect(MWRect r) { return CGRectMake(r.x,r.y,r.width,r.height)
     _guestHost.guestView=nil; [_guestView removeFromSuperview]; _guestView=nil; [_session close]; [self removeFromSuperview];
 }
 - (void)releaseForOriginalApplication:(void (^)(NSError *))completion {
+    NSError *issue=[_session originalApplicationHandoffIssue];
+    if(issue) { completion(issue); return; }
     [self cancelInteractions];
     if(!MWWindowApply(&_model,MWEventClose)) { completion([NSError errorWithDomain:@"HaruGalaxy" code:63 userInfo:@{NSLocalizedDescriptionKey:@"该窗口已结束。"}]); return; }
     _snapGeneration++; _geometryGeneration++;

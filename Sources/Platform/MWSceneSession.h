@@ -15,5 +15,7 @@
 - (void)releaseKeyboardFocus;
 - (void)close;
 - (void)closeForOriginalApplication:(void (^)(NSError *error))completion;
+- (NSError *)originalApplicationHandoffIssue;
+- (NSDictionary *)inputDiagnosticSnapshotWithCapabilities:(BOOL)capabilities;
 @end
 

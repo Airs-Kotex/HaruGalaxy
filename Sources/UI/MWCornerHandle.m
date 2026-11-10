@@ -15,7 +15,7 @@
         _arc.lineCap=kCALineCapRound; _arc.lineWidth=2.5; [self.layer addSublayer:_arc];
         self.tintColor=top ? UIColor.systemOrangeColor : UIColor.systemTealColor;
         self.isAccessibilityElement=YES; self.accessibilityTraits=UIAccessibilityTraitButton;
-        self.accessibilityLabel=top ? @"右上弧线：自由缩放" : @"底部细条：系统原始比例缩放";
+        self.accessibilityLabel=top ? @"右上弧线：自由缩放" : @"底部细边：系统原始比例缩放";
         [self updateColor];
     }
     return self;
@@ -27,10 +27,13 @@
 }
 - (void)layoutSubviews {
     [super layoutSubviews];
-    CGPoint center=CGPointMake(self.bounds.size.width-11,_top ? 11 : self.bounds.size.height-11);
-    UIBezierPath *path=[UIBezierPath bezierPathWithArcCenter:center radius:7 startAngle:_top ? -M_PI_2 : 0 endAngle:_top ? 0 : M_PI_2 clockwise:YES];
-    if(!_top) {
-        CGFloat middle=CGRectGetMidX(self.bounds),half=MIN(16,self.bounds.size.width/4);
+    UIBezierPath *path;
+    if(_top) {
+        path=[UIBezierPath bezierPathWithArcCenter:CGPointMake(self.bounds.size.width-11,11)
+            radius:7 startAngle:-M_PI_2 endAngle:0 clockwise:YES];
+    } else {
+        path=[UIBezierPath bezierPath];
+        CGFloat middle=CGRectGetMidX(self.bounds),half=MIN(12,self.bounds.size.width/4);
         [path moveToPoint:CGPointMake(middle-half,CGRectGetMidY(self.bounds))];
         [path addLineToPoint:CGPointMake(middle+half,CGRectGetMidY(self.bounds))];
     }
@@ -49,10 +52,10 @@
     _contact=NO; [super cancelTrackingWithEvent:event]; [self updateColor];
 }
 - (void)updateColor {
-    _arc.lineWidth=(_dragging || _contact) ? 3.5 : 2.5;
+    _arc.lineWidth=(_dragging || _contact) ? 2.5 : (_top ? 2.5 : 1.5);
     if(!_top) {
-        self.backgroundColor=[self.tintColor colorWithAlphaComponent:(_dragging || _contact) ? 0.22 : 0.09];
-        self.layer.cornerRadius=6;
+        self.backgroundColor=[self.tintColor colorWithAlphaComponent:(_dragging || _contact) ? 0.18 : 0.025];
+        self.layer.cornerRadius=4;
     }
     _arc.strokeColor=[[self.tintColor colorWithAlphaComponent:(_dragging || _contact) ? 1 : 0.8] resolvedColorWithTraitCollection:self.traitCollection].CGColor;
 }

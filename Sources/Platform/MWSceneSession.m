@@ -8,6 +8,7 @@
 #import "../Diagnostics/MWDiagnostics.h"
 #import "MWKeyboardFocus.h"
 #import "MWSceneInputEnvironment.h"
+#import "MWRuntimeDiagnostics.h"
 #import "../Core/MWRuntimeTypes.h"
 #import "../Core/MWNativeHandoff.h"
 #import <objc/runtime.h>
@@ -25,6 +26,13 @@ static BOOL MWGuestMethod(id object,SEL selector,char result,const char *args) {
         if(!MWObjCTypeMatches(type,args[i])) return NO;
     }
     return YES;
+}
+static id MWSceneForeground(UIApplicationSceneSettings *settings) {
+    SEL getter=@selector(isForeground); // Declared accessor, not the property name.
+    @try {
+        if(!MWGuestMethod(settings,getter,'B',"") && !MWGuestMethod(settings,getter,'c',"")) return @"unavailable";
+        return @([settings isForeground]);
+    } @catch(NSException *exception) { (void)exception; return @"exception"; }
 }
 
 @implementation MWSceneSession {
@@ -180,6 +188,22 @@ static BOOL MWGuestMethod(id object,SEL selector,char result,const char *args) {
         MWLog(@"keyboard.guest_state_unavailable",@{@"scene":self.sceneIdentifier,@"reason":exception.reason ?: @"unknown"});
     }
 }
+- (NSDictionary *)inputDiagnosticSnapshotWithCapabilities:(BOOL)capabilities {
+    id client=MWRuntimeObjectValue(_scene,@"clientSettings");
+    id settings=MWRuntimeObjectValue(_scene,@"settings");
+    NSMutableDictionary *snapshot=[@{@"bundle":self.bundleIdentifier,@"scene":self.sceneIdentifier,
+        @"pid":@(_process.pid),@"closed":@(_closed),@"visibleRequested":@(_visible),@"observingInput":@(_observingInput),
+        @"inputKnown":@(_inputKnown),@"lastInputActive":@(_inputActive),
+        @"systemInputActive":MWRuntimeBoolValue(client,@"systemInputActive"),
+        @"foreground":MWSceneForeground(settings),@"sceneActive":MWRuntimeBoolValue(_scene,@"isActive"),
+        @"presenterActive":MWRuntimeBoolValue(_presenter,@"isActive"),@"presenterHosting":MWRuntimeBoolValue(_presenter,@"isHosting"),
+        @"inputEnvironment":_inputEnvironment ? [_inputEnvironment diagnosticSnapshot] : @{@"registered":@NO}} mutableCopy];
+    if(capabilities) snapshot[@"methods"]=@{
+        @"inputActive":MWRuntimeMethodSnapshot(client,@"systemInputActive"),@"sceneToken":MWRuntimeMethodSnapshot(_scene,@"identityToken"),
+        @"deactivate":MWRuntimeMethodSnapshot(_scene,@"deactivate:"),
+        @"settingsUpdate":MWRuntimeMethodSnapshot(_scene,@"updateSettings:withTransitionContext:completion:")};
+    return snapshot;
+}
 
 - (void)startMonitoring {
     __weak typeof(self) weakSelf=self;
@@ -253,12 +277,46 @@ static BOOL MWGuestMethod(id object,SEL selector,char result,const char *args) {
     if(nativeCompletion) nativeCompletion(MWError(63,@"原应用切换已取消，未发送打开请求。"));
 }
 
+- (MWNativeRoute)nativeHandoffRoute {
+    id manager=[PrivClass(FBSceneManager) sharedInstance];
+    BOOL cleanup=MWGuestMethod(manager,NSSelectorFromString(@"destroyScene:withTransitionContext:"),'v',"@@") &&
+        MWGuestMethod(manager,NSSelectorFromString(@"sceneWithIdentifier:"),'@',"@") &&
+        (!_presenter || (MWGuestMethod(_presenter,@selector(deactivate),'v',"") &&
+            MWGuestMethod(_presenter,@selector(invalidate),'v',"")));
+    id settings=MWRuntimeObjectValue(_scene,@"settings");
+    id mutableSettings=MWGuestMethod(settings,@selector(mutableCopy),'@',"") ? [settings mutableCopy] : nil;
+    SEL foregroundSetter=NSSelectorFromString(@"setForeground:");
+    BOOL settingsRoute=MWGuestMethod(_scene,NSSelectorFromString(@"updateSettings:withTransitionContext:completion:"),'v',"@@@") &&
+        [MWSceneForeground(settings) isKindOfClass:NSNumber.class] &&
+        (MWGuestMethod(mutableSettings,foregroundSetter,'v',"B") || MWGuestMethod(mutableSettings,foregroundSetter,'v',"c"));
+    return MWNativeHandoffChoose(MWGuestMethod(_scene,NSSelectorFromString(@"deactivate:"),'v',"@"),settingsRoute,cleanup);
+}
+- (NSError *)originalApplicationHandoffIssue {
+    if(_nativeCompletion) return MWError(63,@"该窗口正在切换，请稍后再试。");
+    if(_cleanupFailed || [MWKeyboardFocus.shared hasPendingCleanup])
+        return MWError(66,@"小窗输入清理未完成，已保留当前窗口。请导出诊断并重启初春星河。");
+    if(_closed || !_scene) return nil;
+    @try {
+        MWNativeRoute route=[self nativeHandoffRoute];
+        MWLog(@"native_handoff.capabilities",@{@"scene":self.sceneIdentifier,@"route":@(route),
+            @"deactivate":MWRuntimeMethodSnapshot(_scene,@"deactivate:"),
+            @"settingsUpdate":MWRuntimeMethodSnapshot(_scene,@"updateSettings:withTransitionContext:completion:"),
+            @"foregroundGetter":MWRuntimeMethodSnapshot(MWRuntimeObjectValue(_scene,@"settings"),NSStringFromSelector(@selector(isForeground))),
+            @"sceneLookup":MWRuntimeMethodSnapshot([PrivClass(FBSceneManager) sharedInstance],@"sceneWithIdentifier:")});
+        return route==MWNativeRouteUnavailable ? MWError(64,@"当前系统没有可用的应用切换接口，已保留小窗。请导出诊断；也可先关闭小窗，再从主屏幕打开应用。") : nil;
+    } @catch(NSException *exception) {
+        MWLog(@"native_handoff.preflight_failed",@{@"scene":self.sceneIdentifier,@"exception":exception.name ?: @"unknown"});
+        return MWError(64,@"无法检查应用切换接口，已保留小窗。请导出诊断。");
+    }
+}
 - (void)closeForOriginalApplication:(void (^)(NSError *))completion {
-    if(_nativeCompletion) { completion(MWError(63,@"该窗口正在关闭。")); return; }
-    if(_closed) {
-        completion((_cleanupFailed || [MWKeyboardFocus.shared hasPendingCleanup]) ?
-            MWError(66,@"小窗输入清理未完成，未打开原应用。请导出诊断并重启初春星河。") : nil);
-        return;
+    NSError *issue=[self originalApplicationHandoffIssue];
+    if(issue) { completion(issue); return; }
+    if(_closed) { completion(nil); return; }
+    MWNativeRoute route=MWNativeRouteUnavailable;
+    @try { if(_scene) route=[self nativeHandoffRoute]; }
+    @catch(NSException *exception) {
+        completion(MWError(64,@"场景接口检查失败，未发送打开请求。")); return;
     }
     _nativeCompletion=[completion copy]; _visible=NO; _generation++;
     _completion=nil; self.failureHandler=nil; self.inputRequestHandler=nil;
@@ -268,27 +326,42 @@ static BOOL MWGuestMethod(id object,SEL selector,char result,const char *args) {
         MWNativeHandoffDeactivated(&_nativeHandoff,generation);
         [self pollNativeHandoff:generation]; return;
     }
-    SEL deactivate=NSSelectorFromString(@"deactivate:");
-    if(!MWGuestMethod(_scene,deactivate,'v',"@")) {
-        [self finishNativeHandoff:MWError(64,@"当前系统不支持安全交接，已结束小窗；请从主屏幕打开原应用。")]; return;
-    }
-    MWLog(@"native_handoff.deactivating",@{@"bundle":self.bundleIdentifier,@"scene":self.sceneIdentifier});
+    MWLog(@"native_handoff.deactivating",@{@"bundle":self.bundleIdentifier,@"scene":self.sceneIdentifier,@"route":@(route)});
     __weak typeof(self) weakSelf=self;
     @try {
-        SEL active=NSSelectorFromString(@"isActive");
-        if((MWGuestMethod(_scene,active,'B',"") || MWGuestMethod(_scene,active,'c',"")) &&
-           !((BOOL(*)(id,SEL))objc_msgSend)(_scene,active)) {
+        id active=MWRuntimeBoolValue(_scene,@"isActive");
+        id foreground=MWSceneForeground(MWRuntimeObjectValue(_scene,@"settings"));
+        if([foreground isKindOfClass:NSNumber.class] && ![foreground boolValue] &&
+           ([active isKindOfClass:NSNumber.class] && ![active boolValue])) {
             MWNativeHandoffDeactivated(&_nativeHandoff,generation);
             [self pollNativeHandoff:generation]; return;
         }
-        ((void(*)(id,SEL,id))objc_msgSend)(_scene,deactivate,[^{
+        dispatch_block_t acknowledged=^{
             dispatch_async(dispatch_get_main_queue(),^{
                 MWSceneSession *session=weakSelf;
-                if(session && session->_nativeCompletion && MWNativeHandoffDeactivated(&session->_nativeHandoff,generation))
-                    MWLog(@"native_handoff.deactivated",@{@"scene":session.sceneIdentifier});
+                if(!session || !session->_nativeCompletion || generation!=session->_nativeHandoff.generation) return;
+                id current=MWSceneForeground(MWRuntimeObjectValue(session->_scene,@"settings"));
+                BOOL accepted=route==MWNativeRouteDeactivate ||
+                    ([current isKindOfClass:NSNumber.class] && ![current boolValue]);
+                MWLog(@"native_handoff.background_acknowledged",@{@"scene":session.sceneIdentifier,@"route":@(route),
+                    @"foreground":current,@"accepted":@(accepted)});
+                if(accepted && MWNativeHandoffDeactivated(&session->_nativeHandoff,generation))
+                    MWLog(@"native_handoff.deactivated",@{@"scene":session.sceneIdentifier,@"route":@(route)});
             });
-        } copy]);
+        };
+        if(route==MWNativeRouteDeactivate) {
+            ((void(*)(id,SEL,id))objc_msgSend)(_scene,NSSelectorFromString(@"deactivate:"),[acknowledged copy]);
+        } else {
+            id settings=[MWRuntimeObjectValue(_scene,@"settings") mutableCopy];
+            SEL setter=NSSelectorFromString(@"setForeground:");
+            if(!MWGuestMethod(settings,setter,'v',"B") && !MWGuestMethod(settings,setter,'v',"c"))
+                @throw [NSException exceptionWithName:@"MWSceneSettingsABI" reason:@"foreground setter unavailable" userInfo:nil];
+            ((void(*)(id,SEL,BOOL))objc_msgSend)(settings,setter,NO);
+            ((void(*)(id,SEL,id,id,id))objc_msgSend)(_scene,
+                NSSelectorFromString(@"updateSettings:withTransitionContext:completion:"),settings,nil,[acknowledged copy]);
+        }
     } @catch(NSException *exception) {
+        MWLog(@"native_handoff.transition_failed",@{@"scene":self.sceneIdentifier,@"route":@(route),@"exception":exception.name ?: @"unknown"});
         [self finishNativeHandoff:MWError(64,@"场景交接失败，已结束小窗；请从主屏幕打开原应用。")]; return;
     }
     [self pollNativeHandoff:generation];

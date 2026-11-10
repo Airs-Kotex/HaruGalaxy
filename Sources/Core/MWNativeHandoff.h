@@ -6,6 +6,8 @@
 typedef enum { MWNativeIdle, MWNativeWaiting, MWNativeDeactivated, MWNativeReleasing, MWNativeFinished } MWNativePhase;
 typedef enum { MWNativeIgnore, MWNativeWait, MWNativeRelease, MWNativeOpen, MWNativeAbort } MWNativeAction;
 typedef struct { uint64_t generation; MWNativePhase phase; double deadline; } MWNativeHandoff;
+typedef enum { MWNativeRouteUnavailable, MWNativeRouteDeactivate, MWNativeRouteSettings } MWNativeRoute;
+MWNativeRoute MWNativeHandoffChoose(bool deactivateAvailable,bool settingsUpdateAvailable,bool cleanupAvailable);
 uint64_t MWNativeHandoffBegin(MWNativeHandoff *state,double now);
 bool MWNativeHandoffDeactivated(MWNativeHandoff *state,uint64_t generation);
 MWNativeAction MWNativeHandoffObserve(MWNativeHandoff *state,uint64_t generation,double now);

@@ -22,7 +22,7 @@
             if(touch.phase==UITouchPhaseBegan && !control && [view isKindOfClass:MWWindowView.class]) {
                 // The touch has already been hit-tested. Select the guest before
                 // forwarding it; never mutate the global hit-testing path.
-                [(MWWindowView *)view prepareKeyboardFocus]; break;
+                [(MWWindowView *)view prepareKeyboardFocusForTouchInView:touch.view]; break;
             }
             if([view isKindOfClass:MWEdgeHandle.class]) {
                 // Only the app-owned entry, never guest touches or keyboard input.

@@ -114,5 +114,19 @@ class DiagnosticsReaderTests(unittest.TestCase):
         self.assertIn("not that the ordinary app rendered",data["interpretation"])
         self.assertEqual(reader.summarize({"schema":1,"logs":{}})["native_handoff_pipeline"]["counts"],{})
 
+    def test_keyboard_capture_keeps_unknown_and_bounded_observations(self):
+        records=[]
+        for i in range(40):
+            fields={"context":{"capture":1,"sample":i},"focus":{"visible":"unavailable"},
+                    "guests":[{"deliveredTouchStarts":0,"session":{"systemInputActive":True}}]}
+            records.append(json.dumps({"time":i,"sequence":i,"event":"keyboard.diagnostic_sample","fields":fields}))
+        result=reader.summarize({"schema":1,"logs":{"events":"\n".join(records)}})["keyboard_capture"]
+        self.assertEqual(result["counts"]["keyboard.diagnostic_sample"],40)
+        self.assertEqual(len(result["recent_events"]),24)
+        self.assertEqual(result["recent_events"][0]["sequence"],16)
+        self.assertEqual(result["recent_events"][-1]["fields"]["focus"]["visible"],"unavailable")
+        self.assertIn("zero is not proof of no touch",result["interpretation"])
+        self.assertEqual(reader.summarize({"schema":1,"logs":{}})["keyboard_capture"]["counts"],{})
+
 
 if __name__=="__main__": unittest.main()

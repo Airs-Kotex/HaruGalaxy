@@ -6,4 +6,5 @@
 @interface MWSceneInputEnvironment : NSObject
 - (instancetype)initWithScene:(id)scene identifier:(NSString *)identifier processIdentifier:(pid_t)pid;
 - (void)invalidate;
+- (NSDictionary *)diagnosticSnapshot;
 @end

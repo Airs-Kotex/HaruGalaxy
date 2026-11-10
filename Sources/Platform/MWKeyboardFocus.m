@@ -5,6 +5,7 @@
 #import "../Core/MWKeyboardFocusState.h"
 #import "../Core/MWRuntimeTypes.h"
 #import "../Diagnostics/MWDiagnostics.h"
+#import "MWRuntimeDiagnostics.h"
 #import <objc/runtime.h>
 #import <objc/message.h>
 #import <unistd.h>
@@ -286,6 +287,33 @@ static id MWKeyboardBool(id object,NSString *name) {
     } @catch(NSException *exception) { return @{@"snapshotUnavailable":@YES}; }
 }
 - (BOOL)hasPendingCleanup { return _bindingNeedsCleanup || _preparationNeedsCleanup; }
+- (NSDictionary *)diagnosticSnapshotWithCapabilities:(BOOL)capabilities {
+    NSMutableDictionary *result=[[self snapshot] mutableCopy];
+    result[@"selectedWindow"]=MWDiagnosticWindow(_window);
+    result[@"preparedWindow"]=MWDiagnosticWindow(_preparedKeyboardWindow);
+    NSMutableArray *registered=[NSMutableArray array];
+    for(NSString *identifier in _guests) {
+        MWKeyboardGuest *guest=_guests[identifier];
+        [registered addObject:@{@"scene":identifier,@"owner":@(guest.owner),@"pid":@(guest.pid)}];
+    }
+    result[@"guests"]=registered;
+    if(capabilities) {
+        @try {
+            id manager=MWKeyboardObject(NSClassFromString(@"UIKeyboardArbiterManager"),@"sharedArbiterManager");
+            id remote=MWKeyboardObject(NSClassFromString(@"_UIRemoteKeyboards"),@"sharedRemoteKeyboards");
+            id client=[self client]; NSMutableDictionary *methods=[NSMutableDictionary dictionary];
+            for(NSString *selector in @[@"prepareForHostedWindowWithScene:",@"finishWithHostedWindow",
+                @"addWindowHostingPID:callerID:",@"removeWindowHostingPID:callerID:",
+                @"allowedToShowKeyboard",@"allowedToEnableKeyboardWindow",@"keyboardActive",@"keyboardVisible"])
+                methods[selector]=MWRuntimeMethodSnapshot(client,selector);
+            methods[@"manager.select"]=MWRuntimeMethodSnapshot(manager,@"userSelectedProcessIdentifier:withSceneIdentity:onCompletion:");
+            methods[@"remote.select"]=MWRuntimeMethodSnapshot(remote,@"userSelectedProcessIdentifier:withSceneIdentity:onCompletion:");
+            result[@"methods"]=methods;
+            result[@"allowedToEnableKeyboardWindow"]=MWRuntimeBoolValue(client,@"allowedToEnableKeyboardWindow");
+        } @catch(NSException *exception) { result[@"capabilityException"]=exception.name ?: @"unknown"; }
+    }
+    return result;
+}
 - (void)keyboardEvent:(NSNotification *)notification {
     MWLog(@"keyboard.visibility",@{@"notification":notification.name,@"state":[self snapshot]});
 }

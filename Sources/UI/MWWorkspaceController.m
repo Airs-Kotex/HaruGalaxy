@@ -11,6 +11,7 @@
 #import "../Platform/MWFloatingHost.h"
 #import "../Platform/MWKeyboardFocus.h"
 #import "../Platform/MWApplicationActivation.h"
+#import "../Platform/MWRuntimeDiagnostics.h"
 
 @interface MWCanvas : UIView
 @property(nonatomic) BOOL passThrough;
@@ -80,7 +81,6 @@
     _panel=[MWWindowPanel new]; _panel.hidden=YES; [self.view addSubview:_panel];
     _panel.openApplicationHandler=^{[weakSelf closePanel]; [weakSelf openPicker];};
     _panel.settingsHandler=^{[weakSelf closePanel]; [weakSelf openSettings];};
-    _panel.inputBoardHandler=^{[weakSelf openInputBoard];};
     _panel.openOriginalHandler=^(NSString *bundle){[weakSelf openOriginalBundle:bundle];};
     _panel.activateHandler=^(NSString *bundle){[weakSelf closePanel]; [weakSelf restoreBundle:bundle];};
     _panel.minimizeHandler=^(NSString *bundle){[weakSelf panelToggleMinimize:bundle];};
@@ -91,6 +91,7 @@
     [self.view addGestureRecognizer:focus];
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(applyPreferences) name:MWPreferencesDidChangeNotification object:nil];
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(floatingFailed:) name:MWFloatingHostFailedNotification object:nil];
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(captureKeyboardDiagnostics:) name:MWKeyboardDiagnosticSampleNotification object:nil];
     [self applyPreferences]; [self updateChrome];
 }
 - (UILabel *)label:(NSString *)text size:(CGFloat)size weight:(UIFontWeight)weight color:(UIColor *)color {
@@ -217,19 +218,11 @@
     nav.modalPresentationStyle=UIModalPresentationPageSheet;
     [self presentViewController:nav animated:!MWPreferences.shared.reduceMotion completion:nil];
 }
-- (void)openInputBoard {
-    [self closePanel];
-    if(self.presentedViewController || _nativeOpeningTarget) return;
-    __weak typeof(self) weakSelf=self;
-    [MWWorkspaceCoordinator.shared presentInputBoardWithCompletion:^(BOOL copied){
-        MWWorkspaceController *controller=weakSelf;
-        if(!controller || !copied) return;
-        [controller showMessage:@"已复制。请在目标应用的文本框长按，选择“粘贴”。"];
-    }];
-}
 - (void)openOriginalBundle:(NSString *)bundle {
     MWWindowView *target=_windows[bundle];
     if(!target || self.presentedViewController || _nativeOpeningTarget || _hostHidden || MWFloatingHost.shared.isLocked) return;
+    NSError *preflight=[target.session originalApplicationHandoffIssue];
+    if(preflight) { [self closePanel]; [self showMessage:preflight.localizedDescription]; return; }
     [self closePanel]; [self.view endEditing:YES];
     NSArray<NSString *> *order=[_order copy];
     NSMutableArray<MWWindowView *> *attached=[NSMutableArray array], *visible=[NSMutableArray array];
@@ -266,6 +259,13 @@
         BOOL accepted=!error && MWRequestApplicationForeground(bundle,&error);
         MWLog(@"native_handoff.open_requested",@{@"bundle":bundle,@"accepted":@(accepted),@"error":MWErrorFields(error)});
         if(!accepted) {
+            // A preflight can fail after another guest's input cleanup. If
+            // release never began, keep this exact target instead of losing it.
+            MWWindowView *retained=weakTarget;
+            if(retained && retained.model.state!=MWWindowClosed) {
+                controller->_windows[bundle]=retained;
+                [controller->_order addObject:bundle];
+            }
             // The target session has ended. Never silently recreate it while
             // the ordinary App may be connecting; only restore other surfaces.
             for(MWWindowView *window in attached) {
@@ -400,6 +400,24 @@
         if([view isKindOfClass:MWWindowView.class]) { [self activateBundle:((MWWindowView *)view).application.bundleIdentifier]; break; }
 }
 - (void)floatingFailed:(NSNotification *)notification { [self showMessage:[notification.object localizedDescription]]; }
+- (void)captureKeyboardDiagnostics:(NSNotification *)notification {
+    BOOL capabilities=[notification.userInfo[@"capabilities"] boolValue];
+    NSMutableArray *guests=[NSMutableArray array],*windows=[NSMutableArray array];
+    for(NSString *bundle in _order) {
+        MWWindowView *view=_windows[bundle];
+        if(view) [guests addObject:[view inputDiagnosticSnapshotWithCapabilities:capabilities]];
+    }
+    for(UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
+        if(![scene isKindOfClass:UIWindowScene.class]) continue;
+        for(UIWindow *window in ((UIWindowScene *)scene).windows) {
+            if(windows.count>=32) break;
+            [windows addObject:MWDiagnosticWindow(window)];
+        }
+    }
+    MWLog(@"keyboard.diagnostic_sample",@{@"context":notification.userInfo ?: @{},@"floating":@(_floating),@"hostHidden":@(_hostHidden),
+        @"panelVisible":@(!_panel.hidden),@"modalVisible":@(self.presentedViewController!=nil),
+        @"focus":[MWKeyboardFocus.shared diagnosticSnapshotWithCapabilities:capabilities],@"guests":guests,@"windows":windows});
+}
 - (void)showMessage:(NSString *)message {
     if(!message.length || self.presentedViewController) return;
     UIAlertController *alert=[UIAlertController alertControllerWithTitle:@"初春星河" message:message preferredStyle:UIAlertControllerStyleAlert];

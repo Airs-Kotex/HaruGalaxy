@@ -5,7 +5,7 @@
 
 typedef struct { double x, y, width, height; } MWRect;
 #define MWTitleHeight 28.0
-#define MWResizeRailHeight 18.0
+#define MWResizeRailHeight 8.0
 #define MWWindowChromeHeight (MWTitleHeight + MWResizeRailHeight)
 #define MWEdgeTouchWidth 56.0
 #define MWEdgeTouchHeight 76.0

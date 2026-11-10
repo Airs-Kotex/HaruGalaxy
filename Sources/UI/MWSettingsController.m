@@ -15,7 +15,7 @@
 }
 - (void)dismiss { [self dismissViewControllerAnimated:YES completion:nil]; }
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView { (void)tableView; return 4; }
-- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section { (void)tableView; return section<2 ? 2 : (section==2 ? 4 : 1); }
+- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section { (void)tableView; return section<2 ? 2 : (section==2 ? 5 : 1); }
 - (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
     (void)tableView; return @[@"外观",@"浮动工作区",@"真机诊断",@"关于"][section];
 }
@@ -27,7 +27,7 @@
             (MWFloatingHost.shared.backgroundExecutionValid ? @"系统已批准当前请求" : @"请求未获批准或已失效，请导出诊断"));
         return [NSString stringWithFormat:@"轻点入口打开面板，按住直接拖动到任意位置。松手靠近左右边缘才吸附收起；位于屏幕中间时保持展开。也可开启“入口保持展开”。最小化窗口收进面板。\n后台执行状态：%@。",status];
     }
-    if(section==2) return @"详细日志默认开启，保留约 8 MiB。遇到问题先点“标记刚发生的问题”，再导出 JSON。日志包含机型、系统、相关应用标识与窗口事件，保存在本机，由你决定分享给谁。不会录制画面或输入内容。";
+    if(section==2) return @"键盘无法出现时，点“采集键盘诊断”后在20秒内返回小窗点击文本框，再导出诊断包。采集包括输入请求、焦点状态、窗口显示状态和接口能力，不记录输入文字、按键或剪贴板。详细日志默认开启，本机滚动保留约8 MiB。";
     return [NSString stringWithFormat:@"%@ · TrollStore\n原生应用小窗、边缘收纳、自由与原始比例缩放。系统与应用兼容性见项目说明。",NSBundle.mainBundle.infoDictionary[@"CFBundleShortVersionString"]];
 }
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
@@ -50,13 +50,13 @@
         [toggle addTarget:self action:@selector(toggleChanged:) forControlEvents:UIControlEventValueChanged];
         cell.accessoryView=toggle;
     } else if(indexPath.section==2) {
-        cell.textLabel.text=@[@"详细诊断记录",@"标记刚发生的问题",@"导出诊断包",@"清空日志"][indexPath.row];
+        cell.textLabel.text=@[@"详细诊断记录",@"采集键盘诊断（20秒）",@"标记刚发生的问题",@"导出诊断包",@"清空日志"][indexPath.row];
         if(indexPath.row==0) {
             UISwitch *toggle=[UISwitch new]; toggle.on=MWDiagnostics.shared.detailed;
             [toggle addTarget:self action:@selector(logLevelChanged:) forControlEvents:UIControlEventValueChanged]; cell.accessoryView=toggle;
         } else {
             cell.selectionStyle=UITableViewCellSelectionStyleDefault;
-            cell.textLabel.textColor=indexPath.row==3 ? UIColor.systemRedColor : self.view.tintColor;
+            cell.textLabel.textColor=indexPath.row==4 ? UIColor.systemRedColor : self.view.tintColor;
         }
     } else {
         cell.textLabel.text=@"HaruGalaxy · 初春星河";
@@ -68,9 +68,13 @@
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
     if(indexPath.section!=2 || indexPath.row==0) return;
-    if(indexPath.row==1) { [MWDiagnostics.shared markProblem]; [self showDiagnosticMessage:@"已记录问题标记，请继续导出诊断包。"]; }
-    if(indexPath.row==3) [MWDiagnostics.shared clearWithCompletion:^(NSError *error){[self showDiagnosticMessage:error.localizedDescription ?: @"本机日志已清空。"];}];
-    if(indexPath.row==2 && !_exporting) {
+    if(indexPath.row==1) {
+        [self dismissViewControllerAnimated:YES completion:^{[MWDiagnostics.shared startKeyboardCapture];}];
+        return;
+    }
+    if(indexPath.row==2) { [MWDiagnostics.shared markProblem]; [self showDiagnosticMessage:@"已记录问题标记，请继续导出诊断包。"]; }
+    if(indexPath.row==4) [MWDiagnostics.shared clearWithCompletion:^(NSError *error){[self showDiagnosticMessage:error.localizedDescription ?: @"本机日志已清空。"];}];
+    if(indexPath.row==3 && !_exporting) {
         _exporting=YES;
         [MWDiagnostics.shared exportWithCompletion:^(NSURL *file,NSError *error) {
             self->_exporting=NO;

@@ -70,7 +70,7 @@
 
 @implementation MWWindowPanel {
     UILabel *_title, *_hint, *_empty;
-    UIButton *_open, *_settings, *_input;
+    UIButton *_open, *_settings;
     UIScrollView *_scroll;
     NSArray<MWPanelRow *> *_rows;
     NSDictionary<NSString *,MWPanelRow *> *_rowsByBundle;
@@ -84,11 +84,6 @@
         _hint=[UILabel new]; _hint.text=@"↗ 结束小窗并打开原应用"; _hint.font=[UIFont systemFontOfSize:11]; _hint.textColor=UIColor.secondaryLabelColor; [self.contentView addSubview:_hint];
         _open=[UIButton buttonWithType:UIButtonTypeSystem]; [_open setTitle:@"＋ 打开应用" forState:UIControlStateNormal];
         [_open addTarget:self action:@selector(openApplication) forControlEvents:UIControlEventTouchUpInside]; [self.contentView addSubview:_open];
-        _input=[UIButton buttonWithType:UIButtonTypeSystem];
-        [_input setImage:[UIImage systemImageNamed:@"keyboard"] forState:UIControlStateNormal];
-        [_input setTitle:@" 复制输入板" forState:UIControlStateNormal];
-        [_input addTarget:self action:@selector(inputBoard) forControlEvents:UIControlEventTouchUpInside];
-        [self.contentView addSubview:_input];
         _settings=[UIButton buttonWithType:UIButtonTypeSystem]; [_settings setImage:[UIImage systemImageNamed:@"slider.horizontal.3"] forState:UIControlStateNormal];
         _settings.accessibilityLabel=@"设置"; [_settings addTarget:self action:@selector(settings) forControlEvents:UIControlEventTouchUpInside]; [self.contentView addSubview:_settings];
         _scroll=[UIScrollView new]; [self.contentView addSubview:_scroll];
@@ -100,7 +95,6 @@
 }
 - (void)openApplication { if(self.openApplicationHandler) self.openApplicationHandler(); }
 - (void)settings { if(self.settingsHandler) self.settingsHandler(); }
-- (void)inputBoard { if(self.inputBoardHandler) self.inputBoardHandler(); }
 - (void)updateWindows:(NSArray<MWWindowView *> *)windows {
     NSMutableArray *snapshot=[NSMutableArray arrayWithCapacity:windows.count];
     for(MWWindowView *window in windows) [snapshot addObject:@[
@@ -132,8 +126,7 @@
     _settings.frame=CGRectMake(width-56,compact ? 0 : 8,44,44);
     _hint.hidden=compact;
     _hint.frame=CGRectMake(16,43,width-32,18);
-    _open.frame=CGRectMake(12,compact ? 42 : 68,(width-24)/2,44);
-    _input.frame=CGRectMake(CGRectGetMaxX(_open.frame),compact ? 42 : 68,(width-24)/2,44);
+    _open.frame=CGRectMake(12,compact ? 42 : 68,width-24,44);
     _scroll.frame=CGRectMake(12,compact ? 90 : 118,width-24,MAX(1,self.bounds.size.height-(compact ? 102 : 130)));
     CGFloat y=0;
     for(MWPanelRow *row in _rows) { row.frame=CGRectMake(0,y,_scroll.bounds.size.width,98); y+=108; }

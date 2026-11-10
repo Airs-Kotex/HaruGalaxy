@@ -3,6 +3,7 @@
 FOUNDATION_EXPORT void MWLog(NSString *event, NSDictionary *fields);
 FOUNDATION_EXPORT void MWTrace(NSString *event, NSDictionary *fields);
 FOUNDATION_EXPORT NSDictionary *MWErrorFields(NSError *error);
+FOUNDATION_EXPORT NSString *const MWKeyboardDiagnosticSampleNotification;
 
 @interface MWDiagnostics : NSObject
 + (instancetype)shared;
@@ -12,6 +13,8 @@ FOUNDATION_EXPORT NSDictionary *MWErrorFields(NSError *error);
 - (void)flush;
 - (void)flushSoon;
 - (void)markProblem;
+- (void)startKeyboardCapture;
+@property(nonatomic,readonly) BOOL keyboardCaptureActive;
 - (NSDictionary *)environmentSnapshot;
 - (void)exportWithCompletion:(void (^)(NSURL *file, NSError *error))completion;
 - (void)clearWithCompletion:(void (^)(NSError *error))completion;

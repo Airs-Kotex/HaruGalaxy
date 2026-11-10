@@ -1,6 +1,6 @@
 # HaruGalaxy · 初春星河
 
-[简体中文](README.md) · [Download 0.3.8](https://github.com/Airs-Kotex/HaruGalaxy/releases/tag/v0.3.8) · [Issues](https://github.com/Airs-Kotex/HaruGalaxy/issues)
+[简体中文](README.md) · [Download 0.3.9](https://github.com/Airs-Kotex/HaruGalaxy/releases/tag/v0.3.9) · [Issues](https://github.com/Airs-Kotex/HaruGalaxy/issues)
 
 A native multi-window workspace for TrollStore. HaruGalaxy hosts installed apps in movable windows with an edge panel, free or original-aspect resizing, half-screen snapping and local diagnostic exports.
 
@@ -9,7 +9,7 @@ The edge entry, title bars and window panel now use translucent glass controls, 
 ## Install
 
 1. Install [TrollStore](https://github.com/opa334/TrollStore) on a supported device.
-2. Download [HaruGalaxy-0.3.8.tipa](https://github.com/Airs-Kotex/HaruGalaxy/releases/download/v0.3.8/HaruGalaxy-0.3.8.tipa).
+2. Download [HaruGalaxy-0.3.9.tipa](https://github.com/Airs-Kotex/HaruGalaxy/releases/download/v0.3.9/HaruGalaxy-0.3.9.tipa).
 3. Open the file in TrollStore and install it over an existing 0.3.1 or later installation.
 4. Open HaruGalaxy and enable the floating workspace in Settings.
 
@@ -35,7 +35,7 @@ Bundle identifier: `io.github.airskotex.harugalaxy`. Versions 0.3.0 and earlier 
 
 Each app has one window, with up to four sessions at a time. Entry position is saved across launches and adapted on rotation. An undocked entry stays expanded. Drag it away from frequently used app controls; the previous inward-pull opening gesture now moves the entry, while a tap opens its panel.
 
-The title bar is now28 points high and the footer18 points, reducing combined chrome from92 to46 points. The entire bottom strip starts proportional resizing; guest content ends above it. The small top-right arc handles free resizing. Footer keyboard/open-app buttons and text are removed. Title-bar buttons can also start a drag: a stationary tap activates the button, movement pans the window.
+The title bar is 28 points high and the bottom edge is 8 points, for 36 points of combined chrome. The entire bottom edge starts proportional resizing; guest content ends above it. A small central line marks the edge and highlights on contact. The top-right arc handles free resizing. Title-bar buttons can also start a drag: a stationary tap activates the button, movement pans the window.
 
 ## Search
 
@@ -43,11 +43,11 @@ Tap the search field to filter apps by name or bundle identifier. If the floatin
 
 If iOS rejects the foreground request, the floating workspace returns with a message. Search text is never written to diagnostic logs.
 
-## Input board
+## Keyboard and switching to the ordinary app
 
-Direct keyboard presentation inside hosted apps remains unresolved. The edge panel's **“复制输入板”** is an optional copy/paste tool: enter text, tap **“复制并返回”**, then long-press the target text field and choose Paste. Copies remain on this device and expire after ten minutes; cancelling discards the draft.
+Direct keyboard presentation inside hosted apps remains unresolved. Version 0.3.9 removes the ineffective copy input board and preserves normal-app search. To provide keyboard diagnostics, choose **Settings → “采集键盘诊断（20秒）”**, tap a guest text field during the next 20 seconds, then export the diagnostic bundle.
 
-To switch to the ordinary app, use **↗** on that app's panel row. This ends its hosted window, waits for scene deactivation and local cleanup, then requests an ordinary launch. Other windows are collected into the panel. The target is not automatically recreated; use Open App to create another hosted window. Forms and cursor positions may differ. Timeouts show a message, and cancelled handoffs do not launch the app.
+To switch to the ordinary app, use **↗** on that app's panel row. Capability checks run before ending the hosted window. When the newer deactivation method is absent, an older scene-settings update path is used; if neither is available, the window stays open. Successful release is followed by an ordinary launch request, with other windows collected into the panel. The target is not automatically recreated, and forms/cursor positions may differ.
 
 On iOS 14–17, the Liquid Glass-inspired appearance uses existing UIKit blur and custom edge layers. It does not provide iOS 26+'s native glass API. Guest content remains clear; Reduce Transparency switches controls to opaque backgrounds.
 
@@ -76,6 +76,8 @@ Packages, checksums and build reports are written to `dist/`. Developer checks a
 Open the window panel → Settings → Diagnostics → mark the issue → export. Include the app version, device, exact iOS build and reproduction steps when reporting an [issue](https://github.com/Airs-Kotex/HaruGalaxy/issues).
 
 Logs stay on the device, rotate at approximately 8 MiB, and are exported only by the user. They record scene, window and input stages without recording the screen or typed text. Inspect and redact application identifiers before sharing publicly.
+
+The timed keyboard capture samples at most once per second: guest input requests, focus ownership, method signatures and window visibility/levels. Sampling does not change focus or read keycodes or clipboard contents.
 
 ```sh
 python3 scripts/inspect_diagnostics.py /path/to/HaruGalaxy-Diagnostics-example.json

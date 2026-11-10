@@ -216,7 +216,7 @@ static void free_entry_placement(void) {
 }
 
 static void isolated_resize_rail(void) {
-    assert(MWWindowChromeHeight<=46);
+    assert(MWWindowChromeHeight<=36 && MWResizeRailHeight<=8);
     for(int height=200;height<=950;height+=23) for(int width=220;width<=900;width+=61) {
         MWRect bounds={0,0,width,height};
         MWRect content=MWWindowContentRect(bounds,0,false);
@@ -226,7 +226,7 @@ static void isolated_resize_rail(void) {
         assert(rail.height==MWResizeRailHeight && rail.y+rail.height==height);
         assert(rail.width==width); // The entire thin strip starts proportional resize.
         assert(MWCornerTouchSize<=MWTitleHeight);
-        assert(content.height>=height-46);
+        assert(content.height>=height-36);
         equal_rect(MWWindowContentRect(bounds,0,true),bounds);
         assert(MWWindowRailRect(bounds,true).height==0);
     }

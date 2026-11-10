@@ -67,6 +67,18 @@ def summarize(bundle):
             "guest_input_state.systemInputActive is the guest-reported request. focus_observed samples "
             "the state after the request without asserting success. Compare visibility notifications and selected owner; unavailable selectors and "
             "exceptions identify runtime gaps. No input text or continuous touch coordinates are recorded.")}
+    capture_events = [row for row in keyboard_trace if row["event"] in
+                      ("keyboard.capture_begin", "keyboard.capture_end", "keyboard.diagnostic_sample")]
+    capture_stages = {
+        "counts": dict(sorted(Counter(row["event"] for row in capture_events).items())),
+        "recent_events": capture_events[-24:],
+        "interpretation": (
+            "Timed captures sample at most 21 times over 20 seconds; marker/export snapshots are separate. "
+            "systemInputActive is a guest request and focus.visible is a runtime report, not proof of usable input. "
+            "deliveredTouchStarts counts only host-delivered guest touch starts; WindowServer may route guest "
+            "touches without a host callback, so zero is not proof of no touch. Missing/unsupported getters "
+            "remain unavailable, never false. Compare capability encodings, selected owner, environment mapping "
+            "and keyboard window visibility/level. No text, keycodes or clipboard content is sampled.")}
     board_trace = [row for row in records if row["event"].startswith("input_board.")]
     board_stages = {
         "counts": dict(sorted(Counter(row["event"] for row in board_trace).items())),
@@ -81,7 +93,8 @@ def summarize(bundle):
         "counts": dict(sorted(Counter(row["event"] for row in native_trace).items())),
         "recent_events": native_trace[-80:],
         "interpretation": (
-            "deactivated is a scene deactivation callback; released.localReleaseConfirmed requires presenter "
+            "capabilities.route selects deactivation or settings-update fallback; an unsupported preflight preserves the window. "
+            "deactivated follows a deactivation callback or a background-settings callback with foreground=false; released.localReleaseConfirmed requires presenter "
             "cleanup, input cleanup and absence from the local scene manager. open_requested.accepted means "
             "LaunchServices accepted the request, not that the ordinary app rendered or has a usable keyboard. "
             "The target hosted session ends and is not automatically recreated. cancelled and timeouts must "
@@ -94,6 +107,7 @@ def summarize(bundle):
             "input_pipeline": stages,
             "search_pipeline": search_stages,
             "keyboard_pipeline": keyboard_stages,
+            "keyboard_capture": capture_stages,
             "input_board_pipeline": board_stages,
             "native_handoff_pipeline": native_stages,
             "interpretation": "A heartbeat gap is an observation, not proof of a crash. Assertion valid is not proof of rendering or input."}

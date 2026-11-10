@@ -10,6 +10,5 @@
 - (void)detachWindow:(UIWindow *)window;
 - (void)setWindow:(UIWindow *)window visible:(BOOL)visible;
 - (void)presentApplicationSearchWithQuery:(NSString *)query selection:(void (^)(MWApplication *application))selection;
-- (void)presentInputBoardWithCompletion:(void (^)(BOOL copied))completion;
 @end
 

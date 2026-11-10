@@ -4,7 +4,6 @@
 @interface MWWindowPanel : MWGlassSurface
 @property(nonatomic,copy) void (^openApplicationHandler)(void);
 @property(nonatomic,copy) void (^settingsHandler)(void);
-@property(nonatomic,copy) void (^inputBoardHandler)(void);
 @property(nonatomic,copy) void (^openOriginalHandler)(NSString *bundle);
 @property(nonatomic,copy) void (^activateHandler)(NSString *bundle);
 @property(nonatomic,copy) void (^minimizeHandler)(NSString *bundle);

@@ -13,4 +13,5 @@
 - (void)releaseForWindow:(UIWindow *)window;
 - (NSDictionary *)snapshot;
 - (BOOL)hasPendingCleanup;
+- (NSDictionary *)diagnosticSnapshotWithCapabilities:(BOOL)capabilities;
 @end

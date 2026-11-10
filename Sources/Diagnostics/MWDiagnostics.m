@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 #import "MWDiagnostics.h"
 #import "../Core/MWLogStore.h"
+#import "../Core/MWDiagnosticCapture.h"
 #import <UIKit/UIKit.h>
 #import <mach/mach.h>
 #import <sys/utsname.h>
@@ -10,6 +11,7 @@
 
 static const void *MWLogQueueKey=&MWLogQueueKey;
 static NSUncaughtExceptionHandler *MWPreviousExceptionHandler;
+NSString *const MWKeyboardDiagnosticSampleNotification=@"MWKeyboardDiagnosticSample";
 
 @interface MWDiagnostics ()
 - (void)writeEvent:(NSString *)event fields:(NSDictionary *)fields detailed:(BOOL)detailed;
@@ -37,6 +39,7 @@ NSDictionary *MWErrorFields(NSError *error) {
     BOOL _started;
     double _lastHeartbeat, _lastMainAck;
     NSString *_storageError;
+    MWDiagnosticCapture _keyboardCapture;
 }
 + (instancetype)shared {
     static MWDiagnostics *logger; static dispatch_once_t once;
@@ -166,8 +169,39 @@ NSDictionary *MWErrorFields(NSError *error) {
     else dispatch_sync(_queue,^{MWLogStoreFlush(&self->_store);});
 }
 - (void)flushSoon { dispatch_async(_queue,^{MWLogStoreFlush(&self->_store);}); }
-- (void)markProblem { MWLog(@"user.problem_marker",@{@"note":@"User marked the most recent issue"}); [self flushSoon]; }
+- (BOOL)keyboardCaptureActive { return _keyboardCapture.active; }
+- (void)requestKeyboardSample:(NSString *)reason includeCapabilities:(BOOL)includeCapabilities {
+    [[NSNotificationCenter defaultCenter] postNotificationName:MWKeyboardDiagnosticSampleNotification object:self
+        userInfo:@{@"reason":reason,@"capabilities":@(includeCapabilities),@"capture":@(_keyboardCapture.generation),
+                   @"sample":@(_keyboardCapture.samples)}];
+}
+- (void)startKeyboardCapture {
+    NSAssert(NSThread.isMainThread,@"Keyboard capture is main-thread owned");
+    uint64_t generation=MWDiagnosticCaptureBegin(&_keyboardCapture,NSProcessInfo.processInfo.systemUptime);
+    if(!generation) return;
+    MWLog(@"keyboard.capture_begin",@{@"capture":@(generation),@"seconds":@(MWDiagnosticCaptureSeconds),
+        @"maxSamples":@(MWDiagnosticCaptureMaxSamples),@"policy":@"state only; no input text or focus changes"});
+    [self sampleKeyboardCapture:generation];
+}
+- (void)sampleKeyboardCapture:(uint64_t)generation {
+    MWCaptureAction action=MWDiagnosticCapturePoll(&_keyboardCapture,generation,NSProcessInfo.processInfo.systemUptime);
+    if(action==MWCaptureIgnore) return;
+    if(action==MWCaptureFinish) {
+        MWLog(@"keyboard.capture_end",@{@"capture":@(generation),@"samples":@(_keyboardCapture.samples)});
+        [self flushSoon]; return;
+    }
+    if(action==MWCaptureSample) [self requestKeyboardSample:@"capture" includeCapabilities:_keyboardCapture.samples==1];
+    __weak typeof(self) weakSelf=self;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW,NSEC_PER_SEC),dispatch_get_main_queue(),^{
+        [weakSelf sampleKeyboardCapture:generation];
+    });
+}
+- (void)markProblem {
+    MWLog(@"user.problem_marker",@{@"note":@"User marked the most recent issue"});
+    [self requestKeyboardSample:@"problem_marker" includeCapabilities:YES]; [self flushSoon];
+}
 - (void)exportWithCompletion:(void (^)(NSURL *,NSError *))completion {
+    [self requestKeyboardSample:@"export" includeCapabilities:YES];
     NSDictionary *environment=[self environmentSnapshot];
     MWLog(@"diagnostics.export",@{});
     dispatch_async(_queue,^{
@@ -207,6 +241,7 @@ NSDictionary *MWErrorFields(NSError *error) {
     });
 }
 - (void)clearWithCompletion:(void (^)(NSError *))completion {
+    MWDiagnosticCaptureCancel(&_keyboardCapture);
     dispatch_async(_queue,^{
         MWLogStoreClose(&self->_store);
         for(unsigned i=0;i<4;i++) [[NSFileManager defaultManager] removeItemAtPath:[self->_directory stringByAppendingPathComponent:[NSString stringWithFormat:@"events-%u.jsonl",i]] error:nil];
