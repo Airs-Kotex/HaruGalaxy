@@ -1,12 +1,12 @@
 # HaruGalaxy · 初春星河
 
-[简体中文](README.md) · [Download 0.3.12](https://github.com/Airs-Kotex/HaruGalaxy/releases/tag/v0.3.12) · [Issues](https://github.com/Airs-Kotex/HaruGalaxy/issues)
+[简体中文](README.md) · [Download 0.3.13](https://github.com/Airs-Kotex/HaruGalaxy/releases/tag/v0.3.13) · [Issues](https://github.com/Airs-Kotex/HaruGalaxy/issues)
 
 A native multi-window workspace for TrollStore. HaruGalaxy hosts installed apps in movable windows with an edge panel, free or original-aspect resizing, half-screen snapping and local diagnostic exports.
 
 The edge entry, title bars and window panel now use translucent glass controls, with dark/light appearance, Reduce Transparency and contrast adaptations.
 
-The0.3.12 assets are now **build18**, combining flush half-screen headers, the visible compatibility entry and illustrated guides. Re-download and install the same-named package over build17; the settings title shows the installed build.
+The0.3.13 assets are now **build19**, adding minimized execution choices, physical orientation following, iPad layouts and explicit guest-process closing. Install this release over0.3.12; the settings title shows the installed build.
 
 ## Illustrated guides
 
@@ -19,7 +19,7 @@ These are **operation illustrations, not simulator or physical-device screenshot
 ## Install
 
 1. Install [TrollStore](https://github.com/opa334/TrollStore) on a supported device.
-2. Download [HaruGalaxy-0.3.12.tipa](https://github.com/Airs-Kotex/HaruGalaxy/releases/download/v0.3.12/HaruGalaxy-0.3.12.tipa).
+2. Download [HaruGalaxy-0.3.13.tipa](https://github.com/Airs-Kotex/HaruGalaxy/releases/download/v0.3.13/HaruGalaxy-0.3.13.tipa).
 3. Open the file in TrollStore and install it over an existing 0.3.1 or later installation.
 4. Open HaruGalaxy and enable the floating workspace in Settings.
 
@@ -43,7 +43,7 @@ Bundle identifier: `io.github.airskotex.harugalaxy`. Versions0.3.0 and earlier u
 | Maximize / double-tap the title | Fill the screen; restore through the edge panel |
 | Fourth blue top button / panel “挂起” | Park a live thumbnail at the top right |
 | Panel “挂起设置” | Jump to thumbnail size and aspect settings |
-| Panel “兼容显示” | Open a visible list of windows and select one to change display mode |
+| Panel “原始画布” | Open a visible list of windows and select one to change display mode |
 | Tap a parked thumbnail | Restore prior position, dimensions, resize and snap/full-screen state |
 | App row → … → open original app | End that hosted window and open the ordinary app |
 
@@ -59,19 +59,19 @@ When guest content reaches a system edge exclusion, the workspace passes the ove
 
 ## Parking
 
-Use the fourth blue top button or panel's **“挂起”** text action, then tap the top-right thumbnail to restore. Its icon is drawn by the app rather than relying on an SF Symbols name. **Panel → 挂起设置** jumps directly to size(18%–50%) and aspect settings(original,1:1,4:3,3:4,16:9,9:16). Settings title shows version/build: **0.3.12 (18)**. Multiple thumbnails stack in the safe area; their appearance does not change restored geometry. Parking keeps sessions alive, not process suspension.
+Use the fourth blue top button or panel's **“挂起”** text action, then tap the top-right thumbnail to restore. Its icon is drawn by the app rather than relying on an SF Symbols name. **Panel → 挂起设置** jumps directly to size(18%–50%) and aspect settings(original,1:1,4:3,3:4,16:9,9:16). Settings title shows version/build: **0.3.13 (19)**. Multiple thumbnails stack in the safe area; their appearance does not change restored geometry. Parking keeps sessions alive, not process suspension.
 
 ![Illustrated parking workflow and thumbnail size/aspect settings](docs/images/03-parking-guide.png)
 
-## Display compatibility
+## Original canvas
 
-Use **Edge entry → panel top “兼容显示” → select an app**. The list explicitly offers compatibility reopening or returning a compatible window to ordinary display. If empty, open a guest window first. The previous per-app ellipsis menu remains available.
+Use **Edge entry → panel top “原始画布” → select an app**. The list offers reopening with the original canvas or returning to ordinary window-sized layout. If empty, open a guest window first. The previous per-app ellipsis menu remains available.
 
-Compatibility mode reopens with the system's native logical canvas. The outer window can still resize freely; content scales instead of repeatedly changing the app's layout size.
+Original-canvas mode reopens with the system's native logical canvas. The outer window can still resize freely; content scales instead of repeatedly changing the app's layout size.
 
 The choice is saved per app. Switching recreates that hosted session and may lose form state, while preserving outer layout, snap/full-screen and parked state. The reported iOS15 issues in870 Game Box andTelegram are not device-confirmed fixed; layer registration does not establish correct images or media loading.
 
-![Illustrated direct compatibility entry and app selection list](docs/images/04-compatibility-entry.png)
+![Illustrated original-canvas entry and app selection list](docs/images/04-compatibility-entry.png)
 
 ## Search
 
@@ -81,7 +81,7 @@ If iOS rejects the foreground request, the floating workspace returns with a mes
 
 ## Keyboard and switching to the ordinary app
 
-Direct keyboard presentation inside hosted apps remains unresolved. The copy input board was removed; normal-app search is preserved. Partial hosted-keyboard preparation is skipped when paired PID APIs are absent. To diagnose keyboard or bottom-control issues, choose **Settings → “采集键盘诊断（20秒）”**, tap the affected guest control during the next20 seconds, then export the diagnostic bundle.
+Direct keyboard presentation inside hosted apps remains unresolved. The copy input board was removed; normal-app search is preserved. When the complete hosting APIs are absent, build19 stops active guest focus selection and its input-environment remapping. Hidden keyboard interception remains unconfirmed; original-canvas mode is a layout option and cannot repair keyboard routing or missing scene layers. To diagnose keyboard or bottom-control issues, choose **Settings → “采集键盘诊断（20秒）”**, tap the affected guest control during the next20 seconds, then export the diagnostic bundle.
 
 To switch to the ordinary app, use **… → 结束小窗并打开原应用** on its panel row. Capability checks run before ending the hosted window. When the newer deactivation method is absent, an older scene-settings update path is used; if neither is available, the window stays open. Successful release is followed by an ordinary launch request, with other windows collected into the panel. The target is not automatically recreated, and forms/cursor positions may differ.
 
@@ -132,3 +132,13 @@ The [Chinese README](README.md#借鉴项目与致谢) describes each project's r
 ## Star history
 
 [![Star History Chart](https://api.star-history.com/svg?repos=Airs-Kotex/HaruGalaxy&type=Date)](https://star-history.com/#Airs-Kotex/HaruGalaxy&Date)
+
+## Minimized execution, rotation and closing
+
+**Settings → 浮动工作区 → 最小化行为** selects system-managed suspension (default) or background keepalive. The setting applies immediately to minimized windows; their panel rows show whether the OS granted keepalive. System-managed suspension does not forcibly freeze an app, and keepalive can be revoked. Parking remains a live visual thumbnail.
+
+The workspace and guests follow physical orientation, including both landscape directions and iPad upside-down portrait. A flat device retains the last direction. Hidden and parked windows restore using the current geometry. The universal package supports iPhone and iPad; tablet/split-view geometry is covered by portable checks, with actual iPad behavior awaiting device feedback. An app may still decline a native landscape layout.
+
+Explicit Close cleans up the guest scene and asks RunningBoard to terminate the original hosted process instance. Unsaved state and other pages in that same process may be lost. Native seamless handoff cannot currently be guaranteed, so this is the requested process-exit fallback. Exit is observed separately from request acceptance; failures are reported. Minimize, parking and automatic host teardown do not terminate guest processes.
+
+Keyboard layer changes trigger bounded automatic diagnostics while guests are present. The reader defaults to the export session; use `--session all` to include historical launches. No pixels, text, keys or clipboard are collected.

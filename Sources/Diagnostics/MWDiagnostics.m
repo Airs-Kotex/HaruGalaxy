@@ -152,7 +152,7 @@ NSDictionary *MWErrorFields(NSError *error) {
     CFTypeRef (*createTask)(CFAllocatorRef)=security ? dlsym(security,"SecTaskCreateFromSelf") : NULL;
     CFTypeRef (*readEntitlement)(CFTypeRef,CFStringRef,CFErrorRef *)=security ? dlsym(security,"SecTaskCopyValueForEntitlement") : NULL;
     CFTypeRef task=createTask ? createTask(kCFAllocatorDefault) : NULL;
-    if(task && readEntitlement) for(NSString *key in @[@"platform-application",@"com.apple.multitasking.unlimitedassertions",@"com.apple.frontboard.launchapplications",@"com.apple.runningboard.assertions.frontboard",@"com.apple.runningboard.primitiveattribute"]) {
+    if(task && readEntitlement) for(NSString *key in @[@"platform-application",@"com.apple.multitasking.unlimitedassertions",@"com.apple.frontboard.launchapplications",@"com.apple.runningboard.assertions.frontboard",@"com.apple.runningboard.primitiveattribute",@"com.apple.runningboard.terminateprocess"]) {
         CFTypeRef value=readEntitlement(task,(__bridge CFStringRef)key,NULL);
         entitlements[key]=value ? CFBridgingRelease(value) : @"absent";
     }

@@ -19,3 +19,6 @@ New project implementation is licensed under Apache License 2.0. See `LICENSE`.
 
 Links: https://github.com/straight-tamago/UiharuX · https://github.com/YuriDevTeam/MilkyWay3-Public · https://github.com/khanhduytran0/FrontBoardAppLauncher · https://github.com/Lessica/TrollSpeed · https://github.com/LiveContainer/LiveContainer
 
+
+Build19 additionally consults the pinned RunningBoardServices `RBSTerminateRequest`, `RBSTerminateContext` and `RBSProcessPredicate` method declarations for explicitly user-requested, original-process-instance termination. Full runtime headers are not distributed.
+The `com.apple.runningboard.terminateprocess` entitlement name is also present in FrontBoardAppLauncher’s pinned `entitlements.xml`; OS authorization is still checked through the request result.

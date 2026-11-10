@@ -27,7 +27,7 @@
         [_main addAction:[UIAction actionWithHandler:^(__kindof UIAction *action){ (void)action; if(weakPanel.activateHandler) weakPanel.activateHandler(bundle); }] forControlEvents:UIControlEventTouchUpInside];
         _options=[UIButton buttonWithType:UIButtonTypeSystem];
         [_options setImage:[UIImage systemImageNamed:@"ellipsis.circle"] forState:UIControlStateNormal];
-        _options.accessibilityLabel=@"显示兼容选项";
+        _options.accessibilityLabel=@"原始画布选项";
         _options.showsMenuAsPrimaryAction=YES; [self addSubview:_options];
         _minimize=[self action:@"minus" label:@"最小化到面板" handler:^{if(weakPanel.minimizeHandler) weakPanel.minimizeHandler(bundle);}];
         _fullscreen=[self action:@"arrow.up.left.and.arrow.down.right" label:@"铺满屏幕" handler:^{if(weakPanel.fullscreenHandler) weakPanel.fullscreenHandler(bundle);}];
@@ -49,7 +49,10 @@
     BOOL minimized=window.model.state==MWWindowMinimized;
     NSString *status=window.isParked ? @"已挂起 · 点按还原" : (minimized ? @"已收纳 · 点按恢复" :
         (window.model.state==MWWindowLoading ? @"启动中" : (window.model.state==MWWindowFailed ? @"启动失败 · 点按查看" :
-        (window.compatibleCanvas ? @"兼容显示" : (window.model.maximized ? @"全屏" : @"窗口")))));
+        (window.compatibleCanvas ? @"原始画布" : (window.model.maximized ? @"全屏" : @"窗口")))));
+    if(minimized) status=window.session.keepAliveRequested ?
+        (window.session.keepAliveGranted ? @"已收纳 · 保活已获批" : @"已收纳 · 保活未获批") : @"已收纳 · 系统管理挂起";
+    if(window.userCloseStatus) status=window.userCloseStatus;
     [_main setTitle:[NSString stringWithFormat:@"%@\n%@",window.application.name,status] forState:UIControlStateNormal];
     [_minimize setImage:[UIImage systemImageNamed:minimized ? @"arrow.up.forward.app" : @"minus"] forState:UIControlStateNormal];
     _minimize.accessibilityLabel=minimized ? @"恢复窗口" : @"最小化到面板";
@@ -62,7 +65,7 @@
     [_park setTitle:window.isParked ? @"还原" : @"挂起" forState:UIControlStateNormal];
     _park.accessibilityLabel=window.isParked ? @"还原挂起窗口" : @"挂起到右上角";
     NSString *bundle=_bundle; __weak MWWindowPanel *panel=_panel;
-    UIAction *compatible=[UIAction actionWithTitle:@"兼容显示并重新打开" image:[UIImage systemImageNamed:@"rectangle.inset.filled"]
+    UIAction *compatible=[UIAction actionWithTitle:@"原始画布并重新打开" image:[UIImage systemImageNamed:@"rectangle.inset.filled"]
         identifier:nil handler:^(__kindof UIAction *action) {
             (void)action; if(panel.compatibleCanvasHandler) panel.compatibleCanvasHandler(bundle,YES);
         }];
@@ -124,7 +127,7 @@
         [_parkingSettings addTarget:self action:@selector(parkingSettings) forControlEvents:UIControlEventTouchUpInside];
         [self.contentView addSubview:_parkingSettings];
         _displayOptions=[UIButton buttonWithType:UIButtonTypeSystem];
-        [_displayOptions setTitle:@"兼容显示" forState:UIControlStateNormal];
+        [_displayOptions setTitle:@"原始画布" forState:UIControlStateNormal];
         _displayOptions.accessibilityIdentifier=@"harugalaxy.panel.displayOptions";
         [_displayOptions addTarget:self action:@selector(displayOptions) forControlEvents:UIControlEventTouchUpInside];
         [self.contentView addSubview:_displayOptions];
@@ -145,7 +148,8 @@
 - (void)updateWindows:(NSArray<MWWindowView *> *)windows {
     NSMutableArray *snapshot=[NSMutableArray arrayWithCapacity:windows.count];
     for(MWWindowView *window in windows) [snapshot addObject:@[
-        window.application.bundleIdentifier,window.application.name ?: @"",@(window.model.state),@(window.model.maximized),@(window.compatibleCanvas)]];
+        window.application.bundleIdentifier,window.application.name ?: @"",@(window.model.state),@(window.model.maximized),@(window.compatibleCanvas),
+        @(window.session.keepAliveRequested),@(window.session.keepAliveGranted),window.userCloseStatus ?: @""]];
     if([snapshot isEqual:_lastSnapshot]) return;
     NSMutableArray *rows=[NSMutableArray array];
     NSMutableDictionary *byBundle=[NSMutableDictionary dictionaryWithCapacity:windows.count];

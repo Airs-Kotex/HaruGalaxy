@@ -8,3 +8,4 @@ FOUNDATION_EXPORT id MWRuntimeBoolValue(id object,NSString *selector);
 FOUNDATION_EXPORT id MWRuntimeInsetsValue(id object,NSString *selector);
 FOUNDATION_EXPORT id MWRuntimeIntegerValue(id object,NSString *selector);
 FOUNDATION_EXPORT NSDictionary *MWDiagnosticWindow(UIWindow *window);
+FOUNDATION_EXPORT id MWRuntimeRectValue(id object,NSString *name);

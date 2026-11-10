@@ -6,6 +6,7 @@
 #import "MWGlassSurface.h"
 #import "MWWindowControlImages.h"
 #import "../Diagnostics/MWDiagnostics.h"
+#import "../Core/MWGuestPolicy.h"
 
 static MWRect MWFromCGRect(CGRect r) { return (MWRect){r.origin.x,r.origin.y,r.size.width,r.size.height}; }
 static CGRect MWToCGRect(MWRect r) { return CGRectMake(r.x,r.y,r.width,r.height); }
@@ -57,6 +58,10 @@ static NSArray *MWRectFields(CGRect r) { return @[@(r.origin.x),@(r.origin.y),@(
     CGSize _parkedLogicalSize;
     BOOL _resizeActivated;
     BOOL _parkWhenReady;
+    UIInterfaceOrientation _workspaceOrientation;
+    UIEdgeInsets _workspaceSafeInsets;
+    NSString *_userCloseStatus;
+    BOOL _userClosePending;
 }
 @synthesize model=_model;
 
@@ -133,7 +138,7 @@ static NSArray *MWRectFields(CGRect r) { return @[@(r.origin.x),@(r.origin.y),@(
     if(self.window && self.superview) {
         MWWindowModel layoutModel=_model;
         layoutModel.frame=MWFromCGRect(self.frame);
-        MWWindowTitleLayout title=MWWindowTitlePlacement(layoutModel,MWFromCGRect(_viewport),self.window.safeAreaInsets.top);
+        MWWindowTitleLayout title=MWWindowTitlePlacement(layoutModel,MWFromCGRect(_viewport),_workspaceSafeInsets.top);
         if(!CGRectEqualToRect(self.frame,MWToCGRect(title.frame))) {
             _model.frame=title.frame; self.frame=MWToCGRect(title.frame);
         }
@@ -144,8 +149,8 @@ static NSArray *MWRectFields(CGRect r) { return @[@(r.origin.x),@(r.origin.y),@(
     _surface.layer.cornerRadius=full ? 0 : (self.isParked ? 12 : 18);
     _surface.layer.borderWidth=full ? 0 : 1;
     _bar.hidden=full || self.isParked;
-    CGFloat leading=MAX(0,self.window.safeAreaInsets.left-self.frame.origin.x);
-    CGFloat trailing=MAX(0,CGRectGetMaxX(self.frame)-(CGRectGetMaxX(_viewport)-self.window.safeAreaInsets.right));
+    CGFloat leading=MAX(0,_workspaceSafeInsets.left-self.frame.origin.x);
+    CGFloat trailing=MAX(0,CGRectGetMaxX(self.frame)-(CGRectGetMaxX(_viewport)-_workspaceSafeInsets.right));
     MWWindowControls controls=MWWindowControlRects(MWFromCGRect(self.bounds),titleInset,leading,trailing);
     _bar.frame=CGRectMake(controls.topLeft.x,controls.topLeft.y,
         controls.topRight.x+controls.topRight.width-controls.topLeft.x,controls.topLeft.height);
@@ -179,8 +184,7 @@ static NSArray *MWRectFields(CGRect r) { return @[@(r.origin.x),@(r.origin.y),@(
         _shadowSize=self.bounds.size; _shadowMaximized=_model.maximized;
         self.layer.shadowPath=[UIBezierPath bezierPathWithRoundedRect:self.bounds cornerRadius:full ? 0 : (self.isParked ? 12 : 18)].CGPath;
     }
-    if(self.isParked) return; // Thumbnail scaling must not resize the guest scene.
-    UIInterfaceOrientation orientation=self.window.windowScene.interfaceOrientation;
+    UIInterfaceOrientation orientation=[self guestOrientation];
     if(!CGSizeEqualToSize(_lastSize,_logicalSize) || _lastOrientation!=orientation ||
        !UIEdgeInsetsEqualToEdgeInsets(_lastSafeInsets,[self guestSafeInsets])) {
         if(_resizing || _dragging) [self scheduleSceneGeometry]; else [self submitSceneGeometry];
@@ -191,9 +195,14 @@ static NSArray *MWRectFields(CGRect r) { return @[@(r.origin.x),@(r.origin.y),@(
     return [_guestHost convertRect:CGRectMake(t.x,t.y,_logicalSize.width*t.scale,_logicalSize.height*t.scale) toView:self.window];
 }
 - (UIEdgeInsets)guestSafeInsets {
-    if(!self.window) return UIEdgeInsetsZero;
+    if(!self.window || self.isParked) return UIEdgeInsetsZero;
     CGRect safe=UIEdgeInsetsInsetRect(self.window.bounds,self.window.safeAreaInsets);
-    MWInsets insets=MWGuestSafeInsets(MWFromCGRect([self renderedGuestRectInWindow]),MWFromCGRect(safe),_logicalSize.width,_logicalSize.height);
+    // Convert both rectangles into the guest host's axes. The workspace may
+    // be rotated relative to UIWindowScene when system rotation is locked.
+    safe=[_guestHost convertRect:safe fromView:self.window];
+    MWContentTransform t=MWFitContent(_logicalSize.width,_logicalSize.height,_guestHost.bounds.size.width,_guestHost.bounds.size.height);
+    MWRect rendered={t.x,t.y,_logicalSize.width*t.scale,_logicalSize.height*t.scale};
+    MWInsets insets=MWGuestSafeInsets(rendered,MWFromCGRect(safe),_logicalSize.width,_logicalSize.height);
     return UIEdgeInsetsMake(insets.top,insets.left,insets.bottom,insets.right);
 }
 - (void)safeAreaInsetsDidChange {
@@ -231,8 +240,7 @@ static NSArray *MWRectFields(CGRect r) { return @[@(r.origin.x),@(r.origin.y),@(
     [self submitSceneGeometry];
 }
 - (void)submitSceneGeometry {
-    if(self.isParked) return;
-    UIInterfaceOrientation orientation=self.window.windowScene.interfaceOrientation;
+    UIInterfaceOrientation orientation=[self guestOrientation];
     UIEdgeInsets insets=[self guestSafeInsets];
     if(CGSizeEqualToSize(_lastSize,_logicalSize) && _lastOrientation==orientation && UIEdgeInsetsEqualToEdgeInsets(_lastSafeInsets,insets)) return;
     _lastSize=_logicalSize; _lastOrientation=orientation; _lastSafeInsets=insets;
@@ -246,7 +254,7 @@ static NSArray *MWRectFields(CGRect r) { return @[@(r.origin.x),@(r.origin.y),@(
 - (void)start {
     [self layoutIfNeeded];
     _session=[[MWSceneSession alloc] initWithBundleIdentifier:_application.bundleIdentifier];
-    [_session setVisible:!_hostHidden];
+    [self applyExecutionPolicy];
     __weak typeof(self) weakSelf=self;
     _session.failureHandler=^(NSError *error) { [weakSelf failed:error]; };
     _session.inputRequestHandler=^{
@@ -257,7 +265,7 @@ static NSArray *MWRectFields(CGRect r) { return @[@(r.origin.x),@(r.origin.y),@(
         if(view && view.active && !view->_hostHidden && !view.hidden && !view.window.rootViewController.presentedViewController)
             [view.session refreshKeyboardFocusInWindow:view.window];
     };
-    [_session updateSize:_logicalSize orientation:self.window.windowScene.interfaceOrientation safeAreaInsets:[self guestSafeInsets]];
+    [_session updateSize:_logicalSize orientation:[self guestOrientation] safeAreaInsets:[self guestSafeInsets]];
     [_session startWithSize:_logicalSize completion:^(NSError *error) {
         MWWindowView *view=weakSelf;
         if(!view || view->_model.state==MWWindowClosed) return;
@@ -290,6 +298,14 @@ static NSArray *MWRectFields(CGRect r) { return @[@(r.origin.x),@(r.origin.y),@(
     [self updateStatus:nil]; [self start];
 }
 - (void)updateStatus:(NSString *)error {
+    if(_userCloseStatus) {
+        _message.text=_userCloseStatus; _message.hidden=NO; _retry.hidden=YES;
+        [_spinner stopAnimating];
+        _minimize.enabled=_maximize.enabled=_parkButton.enabled=NO;
+        _closeButton.enabled=!_userClosePending;
+        _resize.hidden=_freeResize.hidden=_aspectTopLeft.hidden=_freeBottomLeft.hidden=_inputRail.hidden=YES;
+        return;
+    }
     BOOL loading=_model.state==MWWindowLoading;
     if(error.length) _failureMessage=[error copy];
     if(_model.state!=MWWindowFailed) _failureMessage=nil;
@@ -406,13 +422,13 @@ static NSArray *MWRectFields(CGRect r) { return @[@(r.origin.x),@(r.origin.y),@(
         if(!free) {
             _proportionalSize=[self systemCanvasSize];
             _model.aspectRatio=_proportionalSize.width/_proportionalSize.height;
-            _model.frame=MWBeginProportionalResize(MWFromCGRect(_gestureFrame),MWFromCGRect(_viewport),_model.aspectRatio,self.window.safeAreaInsets.top);
+            _model.frame=MWBeginProportionalResize(MWFromCGRect(_gestureFrame),MWFromCGRect(_viewport),_model.aspectRatio,_workspaceSafeInsets.top);
             self.frame=MWToCGRect(_model.frame); _gestureFrame=self.frame;
         }
         [gesture setTranslation:CGPointZero inView:self.superview]; delta=CGPointZero;
         MWLog(@"window.resize_begin",@{@"bundle":_application.bundleIdentifier,@"mode":free ? @"free" : @"proportional",@"corner":@(handle.corner)});
     }
-    MWRect usable=MWProportionalViewport(MWFromCGRect(_viewport),self.window.safeAreaInsets.top);
+    MWRect usable=MWProportionalViewport(MWFromCGRect(_viewport),_workspaceSafeInsets.top);
     _model.frame=free ? MWResizeFreeCornerRect(MWFromCGRect(_gestureFrame),delta.x,delta.y,MWFromCGRect(_viewport),handle.corner==MWResizeBottomLeft) :
         MWResizeAspectCornerRect(MWFromCGRect(_gestureFrame),delta.x,delta.y,usable,_model.aspectRatio,handle.corner==MWResizeTopLeft);
     self.frame=MWToCGRect(_model.frame);
@@ -511,14 +527,22 @@ static NSArray *MWRectFields(CGRect r) { return @[@(r.origin.x),@(r.origin.y),@(
     [self logContentGeometry:@"gesture_finished"];
     if(self.geometryHandler) self.geometryHandler(MWToCGRect(_model.maximized ? _model.restoreFrame : _model.frame));
 }
-- (void)applyViewport:(CGRect)viewport {
+- (void)applyViewport:(CGRect)viewport orientation:(UIInterfaceOrientation)orientation safeInsets:(UIEdgeInsets)insets {
+    if(CGRectEqualToRect(_viewport,viewport) && _workspaceOrientation==orientation && UIEdgeInsetsEqualToEdgeInsets(_workspaceSafeInsets,insets)) return;
     [self cancelInteractions];
+    BOOL switchedAxes=_workspaceOrientation && UIInterfaceOrientationIsLandscape(_workspaceOrientation)!=UIInterfaceOrientationIsLandscape(orientation);
+    _workspaceOrientation=orientation; _workspaceSafeInsets=insets;
+    if(self.isParked && switchedAxes) _parkedLogicalSize=CGSizeMake(_parkedLogicalSize.height,_parkedLogicalSize.width);
     if(_model.resizeMode==MWResizeProportional) {
         _proportionalSize=[self systemCanvasSize]; _model.aspectRatio=_proportionalSize.width/_proportionalSize.height;
         if(_model.maximized) _restoreLogicalSize=_proportionalSize;
         if(self.isParked) _parking.saved.aspectRatio=_model.aspectRatio;
     }
-    if(self.isParked) { _viewport=viewport; return; }
+    if(self.isParked) {
+        _viewport=viewport;
+        MWWindowReflow(&_parking.saved,MWFromCGRect(viewport));
+        [self setNeedsLayout]; return;
+    }
     _viewport=viewport; MWWindowReflow(&_model,MWFromCGRect(viewport)); self.frame=MWToCGRect(_model.frame);
     [self setNeedsLayout];
 }
@@ -574,11 +598,14 @@ static NSArray *MWRectFields(CGRect r) { return @[@(r.origin.x),@(r.origin.y),@(
 - (CGSize)systemCanvasSize {
     UIScreen *screen=self.window.windowScene.screen ?: UIScreen.mainScreen;
     CGSize reference=screen.fixedCoordinateSpace.bounds.size;
-    UIInterfaceOrientation orientation=self.window.windowScene.interfaceOrientation;
+    UIInterfaceOrientation orientation=[self guestOrientation];
     BOOL landscape=UIInterfaceOrientationIsLandscape(orientation);
     if(orientation==UIInterfaceOrientationUnknown) landscape=screen.bounds.size.width>screen.bounds.size.height;
     MWRect canvas=MWSystemCanvas(reference.width,reference.height,landscape);
     return CGSizeMake(canvas.width,canvas.height);
+}
+- (UIInterfaceOrientation)guestOrientation {
+    return _workspaceOrientation ?: self.window.windowScene.interfaceOrientation;
 }
 - (void)logContentGeometry:(NSString *)reason {
     MWLog(@"window.content_geometry",@{@"bundle":_application.bundleIdentifier,@"reason":reason,
@@ -594,13 +621,13 @@ static NSArray *MWRectFields(CGRect r) { return @[@(r.origin.x),@(r.origin.y),@(
     [self cancelInteractions];
     if(!MWWindowApply(&_model,MWEventMinimize)) return;
     MWLog(@"window.minimize",@{@"bundle":_application.bundleIdentifier});
-    self.hidden=YES; [_session setVisible:NO];
+    self.hidden=YES; [self applyExecutionPolicy];
 }
 - (void)restore {
     if(self.isParked) { [self unpark]; return; }
     if(!MWWindowApply(&_model,MWEventRestore)) return;
     MWLog(@"window.restore",@{@"bundle":_application.bundleIdentifier});
-    self.hidden=NO; [_session setVisible:!_hostHidden]; [self updateStatus:nil];
+    self.hidden=NO; [self applyExecutionPolicy]; [self updateStatus:nil];
 }
 - (void)close {
     if(!MWWindowApply(&_model,MWEventClose)) { [_session close]; return; }
@@ -610,6 +637,37 @@ static NSArray *MWRectFields(CGRect r) { return @[@(r.origin.x),@(r.origin.y),@(
     if(self.snapPreviewHandler) self.snapPreviewHandler(CGRectZero,NO);
     _guestHost.guestView=nil; [_guestView removeFromSuperview]; _guestView=nil; [_session close]; [self removeFromSuperview];
 }
+- (void)closeAfterUserRequest:(void (^)(NSError *))completion {
+    if(_userClosePending) return;
+    if(!_userCloseStatus && !MWWindowApply(&_model,MWEventClose)) { completion(nil); return; }
+    _userClosePending=YES; _userCloseStatus=@"正在结束应用…\n完成后再从主屏幕打开";
+    self.hidden=NO; [self updateStatus:nil];
+    _snapGeneration++; _geometryGeneration++;
+    [_geometryDisplayLink invalidate]; _geometryDisplayLink=nil;
+    _dragging=NO; _resizing=NO;
+    if(self.snapPreviewHandler) self.snapPreviewHandler(CGRectZero,NO);
+    _guestHost.guestView=nil; [_guestView removeFromSuperview]; _guestView=nil;
+    __weak typeof(self) weakSelf=self;
+    _session.closeProgressHandler=^{
+        MWWindowView *view=weakSelf;
+        if(!view || !view->_userClosePending) return;
+        view->_userCloseStatus=@"系统仍在处理结束请求\n可从系统多任务界面结束此应用";
+        [view updateStatus:nil]; if(view.stateHandler) view.stateHandler();
+    };
+    void (^finished)(NSError *)=^(NSError *error) {
+        MWWindowView *view=weakSelf;
+        if(view) {
+            view->_userClosePending=NO;
+            view->_userCloseStatus=error ? [NSString stringWithFormat:@"结束未完成：%@\n可点关闭重试",error.localizedDescription] : nil;
+            if(error) [view updateStatus:nil]; else [view removeFromSuperview];
+            if(view.stateHandler) view.stateHandler();
+        }
+        completion(error);
+    };
+    if(_session) [_session closeAfterUserRequest:finished]; else finished(nil);
+}
+- (NSString *)userCloseStatus { return _userCloseStatus; }
+- (BOOL)userClosePending { return _userClosePending; }
 - (void)releaseForOriginalApplication:(void (^)(NSError *))completion {
     NSError *issue=[_session originalApplicationHandoffIssue];
     if(issue) { completion(issue); return; }
@@ -625,7 +683,11 @@ static NSArray *MWRectFields(CGRect r) { return @[@(r.origin.x),@(r.origin.y),@(
 - (void)setHostVisible:(BOOL)visible {
     if(!visible) [self cancelInteractions];
     _hostHidden=!visible;
-    [_session setVisible:visible && _model.state!=MWWindowMinimized];
+    [self applyExecutionPolicy];
+}
+- (void)applyExecutionPolicy {
+    MWGuestExecution policy=MWGuestExecutionForState(_model.state,!_hostHidden,MWPreferences.shared.keepMinimizedAlive);
+    [_session setVisible:policy.presented keepAlive:policy.keepAlive];
 }
 - (void)dealloc { [_geometryDisplayLink invalidate]; [_session close]; }
 @end

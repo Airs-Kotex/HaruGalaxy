@@ -210,13 +210,13 @@ def parking(font):
 
 
 def compatibility(font):
-    d = Diagram(font, "04", "兼容显示，现在直接可见", "无需先找省略号：打开边缘面板，点击顶部“兼容显示”。")
+    d = Diagram(font, "04", "原始画布，现在直接可见", "无需先找省略号：打开边缘面板，点击顶部“原始画布”。")
     d.step(64, 238, "1", "打开窗口面板")
-    d.step(598, 238, "2", "点击“兼容显示”")
+    d.step(598, 238, "2", "点击“原始画布”")
     d.step(1120, 238, "3", "选择需要重开的 App")
     d.rect(76, 328, 422, 484, WHITE, 24, LINE)
     d.text(104, 358, "窗口面板", 28)
-    for i, title in enumerate(["打开应用", "挂起设置", "兼容显示"]):
+    for i, title in enumerate(["打开应用", "挂起设置", "原始画布"]):
         xx = 94+i*128
         d.rect(xx, 423, 122, 50, TEAL if i == 2 else "#edf2ed", 8)
         d.text(xx+61, 448, title, 20, WHITE if i == 2 else INK, "mm")
@@ -228,14 +228,14 @@ def compatibility(font):
     d.text(120, 725, "收纳    全屏    挂起    关闭", 20, MUTED)
     d.arrow([(511, 553), (563, 553)], TEAL, 3)
     d.rect(598, 328, 432, 484, WHITE, 24, LINE)
-    d.text(624, 356, "兼容显示", 28)
+    d.text(624, 356, "原始画布", 28)
     d.text(624, 410, "点选一个窗口进行切换", 19, MUTED)
     d.rect(618, 464, 392, 122, "#e0eee7", 12, TEAL)
     d.text(640, 485, "示例应用 A", 23)
-    d.text(640, 529, "兼容显示并重新打开", 22, TEAL)
+    d.text(640, 529, "原始画布并重新打开", 22, TEAL)
     d.rect(618, 610, 392, 143, "#edf2ed", 12)
     d.text(640, 632, "示例应用 B", 23)
-    d.text(640, 676, "当前为兼容显示", 19, MUTED)
+    d.text(640, 676, "当前为原始画布", 19, MUTED)
     d.text(640, 707, "点此切回普通并重新打开", 19, TEAL)
     d.text(1116, 382, "使用系统原始画布", 27)
     d.text(1116, 432, "外窗可自由改变尺寸，", 22, MUTED)
@@ -245,7 +245,7 @@ def compatibility(font):
     d.text(1116, 628, "页面或表单可能重置，", 22, MUTED)
     d.text(1116, 666, "外窗布局会保留。", 22, MUTED)
     d.text(800, 858, "如果列表为空，请先从窗口面板打开一个应用。", 22, MUTED, "mm")
-    d.footer("兼容显示是可选恢复方式，不能保证解决所有空白画面或图片加载问题。")
+    d.footer("原始画布仅调整内容尺寸；不能修复键盘、未提交图层或图片加载问题。")
     d.save("04-compatibility-entry.png")
 
 

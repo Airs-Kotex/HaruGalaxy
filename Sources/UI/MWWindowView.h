@@ -20,12 +20,16 @@
 @property(nonatomic,readonly,getter=isParked) BOOL parked;
 @property(nonatomic,readonly) CGFloat parkedContentRatio;
 @property(nonatomic,readonly) MWWindowModel restorableModel;
+@property(nonatomic,copy,readonly) NSString *userCloseStatus;
+@property(nonatomic,readonly) BOOL userClosePending;
 - (instancetype)initWithApplication:(MWApplication *)application frame:(CGRect)frame;
 - (void)start;
-- (void)applyViewport:(CGRect)viewport;
+- (void)applyViewport:(CGRect)viewport orientation:(UIInterfaceOrientation)orientation safeInsets:(UIEdgeInsets)insets;
+- (void)applyExecutionPolicy;
 - (void)minimize;
 - (void)restore;
 - (void)close;
+- (void)closeAfterUserRequest:(void (^)(NSError *error))completion;
 - (void)setHostVisible:(BOOL)visible;
 - (void)toggleMaximize;
 - (void)setInitialResizeMode:(MWResizeMode)mode;

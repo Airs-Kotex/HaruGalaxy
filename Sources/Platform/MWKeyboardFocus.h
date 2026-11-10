@@ -2,6 +2,7 @@
 #import <UIKit/UIKit.h>
 
 @interface MWKeyboardFocus : NSObject
+@property(nonatomic,readonly) BOOL supportsGuestHosting;
 + (instancetype)shared;
 - (void)registerGuest:(NSString *)identifier processIdentifier:(pid_t)pid scene:(id)scene;
 - (void)unregisterGuest:(NSString *)identifier;

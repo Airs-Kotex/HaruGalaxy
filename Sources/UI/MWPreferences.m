@@ -4,6 +4,11 @@
 NSString *const MWPreferencesDidChangeNotification=@"MWPreferencesDidChange";
 
 @implementation MWPreferences
+- (BOOL)keepMinimizedAlive { return [NSUserDefaults.standardUserDefaults boolForKey:@"keepMinimizedAlive"]; }
+- (void)setKeepMinimizedAlive:(BOOL)value {
+    [NSUserDefaults.standardUserDefaults setBool:value forKey:@"keepMinimizedAlive"];
+    [[NSNotificationCenter defaultCenter] postNotificationName:MWPreferencesDidChangeNotification object:self];
+}
 - (double)parkedSizeFraction {
     id value=[NSUserDefaults.standardUserDefaults objectForKey:@"parkedSizeFraction"];
     double size=[value isKindOfClass:NSNumber.class] ? [value doubleValue] : 0.36;

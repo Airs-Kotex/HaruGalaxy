@@ -25,7 +25,7 @@
 }
 - (void)dismiss { [self dismissViewControllerAnimated:YES completion:nil]; }
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView { (void)tableView; return 5; }
-- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section { (void)tableView; return section<3 ? 2 : (section==3 ? 5 : 1); }
+- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section { (void)tableView; return section==1 ? 3 : (section<3 ? 2 : (section==3 ? 5 : 1)); }
 - (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
     (void)tableView; return @[@"外观",@"浮动工作区",@"挂起小窗",@"真机诊断",@"关于"][section];
 }
@@ -35,7 +35,7 @@
     if(section==1) {
         NSString *status=!MWFloatingHost.shared.enabled ? @"未启用" : (!MWFloatingHost.shared.ready ? @"正在等待浮窗根视图与窗口连接" :
             (MWFloatingHost.shared.backgroundExecutionValid ? @"系统已批准当前请求" : @"请求未获批准或已失效，请导出诊断"));
-        return [NSString stringWithFormat:@"轻点入口打开面板，按住直接拖动到任意位置。松手靠近左右边缘才吸附收起；位于屏幕中间时保持展开。也可开启“入口保持展开”。最小化窗口收进面板。\n后台执行状态：%@。",status];
+        return [NSString stringWithFormat:@"最小化后窗口收进面板。“系统挂起”不申请保活，冻结与回收由 iOS 管理；“保活”请求继续运行，耗电可能增加，是否获批见窗口面板。切换立即应用于已最小化窗口。\n小窗随设备方向旋转，平放时保持上次方向。\n轻点入口打开面板，按住拖动。浮动工作区后台状态：%@。",status];
     }
     if(section==2) return @"挂起窗口位于右上角，点击缩略窗还原。大小按可用区域短边的比例调整，多窗口时自动缩小以免重叠；外形比例只影响缩略窗，内容保持等比，恢复时仍使用挂起前的位置、尺寸和模式。";
     if(section==3) return @"键盘无法出现时，点“采集键盘诊断”后在20秒内返回小窗点击文本框，再导出诊断包。采集包括输入请求、焦点状态、窗口显示状态和接口能力，不记录输入文字、按键或剪贴板。详细日志默认开启，本机滚动保留约8 MiB。";
@@ -51,6 +51,13 @@
         theme.selectedSegmentIndex=MWPreferences.shared.appearance;
         [theme addTarget:self action:@selector(themeChanged:) forControlEvents:UIControlEventValueChanged];
         cell.accessoryView=theme;
+    } else if(indexPath.section==1 && indexPath.row==2) {
+        cell.textLabel.text=@"最小化行为";
+        UISegmentedControl *policy=[[UISegmentedControl alloc] initWithItems:@[@"系统挂起",@"保活"]];
+        policy.selectedSegmentIndex=MWPreferences.shared.keepMinimizedAlive ? 1 : 0;
+        policy.accessibilityLabel=@"最小化后的运行方式";
+        [policy addTarget:self action:@selector(minimizePolicyChanged:) forControlEvents:UIControlEventValueChanged];
+        cell.accessoryView=policy;
     } else if(indexPath.section<2) {
         UISwitch *toggle=[UISwitch new];
         BOOL keepExpanded=indexPath.section==1 && indexPath.row==1;
@@ -88,6 +95,7 @@
     return cell;
 }
 - (void)logLevelChanged:(UISwitch *)sender { MWDiagnostics.shared.detailed=sender.on; }
+- (void)minimizePolicyChanged:(UISegmentedControl *)sender { MWPreferences.shared.keepMinimizedAlive=sender.selectedSegmentIndex==1; }
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
     if(indexPath.section!=3 || indexPath.row==0) return;

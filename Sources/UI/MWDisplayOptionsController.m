@@ -6,7 +6,7 @@
 }
 - (instancetype)init { return [super initWithStyle:UITableViewStyleInsetGrouped]; }
 - (void)viewDidLoad {
-    [super viewDidLoad]; self.title=@"兼容显示";
+    [super viewDidLoad]; self.title=@"原始画布";
     self.navigationItem.leftBarButtonItem=[[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemClose
         target:self action:@selector(close)];
     self.tableView.rowHeight=UITableViewAutomaticDimension; self.tableView.estimatedRowHeight=76;
@@ -19,14 +19,14 @@
 }
 - (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
     (void)tableView; (void)section;
-    return @"兼容显示使用手机原始画布，再缩放到小窗中。切换会重新打开该小窗，当前页面或表单可能重置。外窗位置和比例会保留；不能保证解决所有应用的画面问题。";
+    return @"原始画布使用手机原始画布，再缩放到小窗中。切换会重新打开该小窗，当前页面或表单可能重置。外窗位置和比例会保留；仅调整布局，不能修复键盘或未提交画面的应用。";
 }
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
     (void)tableView;
     NSDictionary *row=self.windows[indexPath.row];
     UITableViewCell *cell=[[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:nil];
     cell.textLabel.text=row[@"name"]; cell.textLabel.numberOfLines=2;
-    cell.detailTextLabel.text=[row[@"compatible"] boolValue] ? @"当前为兼容显示 · 点此切回普通并重新打开" : @"兼容显示并重新打开";
+    cell.detailTextLabel.text=[row[@"compatible"] boolValue] ? @"当前为原始画布 · 点此切回普通并重新打开" : @"原始画布并重新打开";
     cell.detailTextLabel.numberOfLines=0; cell.detailTextLabel.textColor=self.view.tintColor;
     cell.accessoryType=UITableViewCellAccessoryDisclosureIndicator; return cell;
 }

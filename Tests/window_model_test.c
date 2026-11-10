@@ -436,8 +436,35 @@ static void flush_snapped_title(void) {
     layout=MWWindowTitlePlacement(ordinary,viewport,47); assert(layout.titleInset==0);
 }
 
+static void ipad_layouts(void) {
+    const MWRect viewports[]={{0,0,768,1024},{0,0,1024,768},{0,0,834,1194},
+        {0,0,1194,834},{0,0,1024,1366},{0,0,1366,1024},{0,0,375,1024},{0,0,744,1133}};
+    for(unsigned i=0;i<sizeof(viewports)/sizeof(*viewports);i++) {
+        MWRect v=viewports[i],rotated={0,0,v.height,v.width};
+        for(int target=MWSnapTop;target<=MWSnapRight;target++) {
+            MWWindowModel m=MWWindowCreate((MWRect){30,60,320,460}); MWWindowApply(&m,MWEventReady);
+            assert(MWWindowSnap(&m,(MWSnapTarget)target,v));
+            MWWindowReflow(&m,rotated);
+            equal_rect(m.frame,MWHalfScreenRect(rotated,m.snapTarget));
+            assert(MWWindowApply(&m,MWEventMinimize));
+            MWWindowReflow(&m,v); assert(MWWindowApply(&m,MWEventRestore));
+            equal_rect(m.frame,MWHalfScreenRect(v,m.snapTarget));
+            MWWindowParking parking={0};
+            assert(MWWindowPark(&m,&parking));
+            MWWindowReflow(&parking.saved,rotated);
+            assert(MWWindowUnpark(&m,&parking,rotated));
+            equal_rect(m.frame,MWHalfScreenRect(rotated,m.snapTarget));
+            assert(MWWindowToggleMaximize(&m,rotated)); equal_rect(m.frame,rotated);
+        }
+        for(unsigned slot=0;slot<4;slot++) {
+            MWRect r=MWParkedRect(v,4.0/3,0.5,16.0/9,slot,4);
+            assert(r.x>=0 && r.y>=0 && r.x+r.width<=v.width+0.001 && r.y+r.height<=v.height+0.001);
+        }
+    }
+}
 int main(void) {
     lifecycle(); bounds(); maximize_restore(); proportional_scaling(); free_resize_and_snap(); original_canvas_and_reachable_snap(); free_entry_placement(); isolated_resize_rail(); guest_safe_insets(); compatible_guest_canvas(); deliberate_resize_and_layout_restore(); parked_roundtrip_and_placement(); four_corner_controls_and_resize(); flush_snapped_title();
-    puts("PASS: lifecycle, free/proportional resize, full/half-screen, top inset continuity, rotation and edge handle");
+    ipad_layouts();
+    puts("PASS: lifecycle, resize, half/full-screen, parking restore, iPhone/iPad viewport rotation and edge handle");
     return 0;
 }

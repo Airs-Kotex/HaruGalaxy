@@ -10,6 +10,10 @@
 #import "MWSceneInputEnvironment.h"
 #import "MWRuntimeDiagnostics.h"
 #import "MWApplicationProfile.h"
+#import "MWBackgroundLease.h"
+#import "MWSceneLayerDiagnostics.h"
+#import "MWGuestTermination.h"
+#import "../Core/MWGuestPolicy.h"
 #import "../Core/MWRuntimeTypes.h"
 #import "../Core/MWNativeHandoff.h"
 #import <objc/runtime.h>
@@ -57,6 +61,13 @@ static id MWSceneForeground(UIApplicationSceneSettings *settings) {
     BOOL _clientConnectionObserved;
     NSUInteger _renderEventCount;
     NSDictionary *_lastRenderSnapshot;
+    MWBackgroundLease *_backgroundLease;
+    BOOL _keepAliveRequested;
+    NSDictionary *_lastInputLayers;
+    NSUInteger _inputLayerSamples;
+    CFTimeInterval _lastInputLayerTime;
+    void (^_userCloseAfterLaunch)(NSError *);
+    RBSProcessHandle *_ownedProcessForUserClose;
 }
 
 - (instancetype)initWithBundleIdentifier:(NSString *)bundleIdentifier {
@@ -114,6 +125,11 @@ static id MWSceneForeground(UIApplicationSceneSettings *settings) {
         _process=[PrivClass(RBSProcessHandle) handleForPredicate:predicate error:&error];
         MWLog(@"guest.process",@{@"bundle":self.bundleIdentifier,@"pid":@(_process.pid),@"error":MWErrorFields(error)});
         if(!_process || _process.pid<=0) { [self fail:error ?: MWError(15,@"未能取得应用进程。")]; return; }
+        _ownedProcessForUserClose=_process;
+        if(_userCloseAfterLaunch) {
+            void (^closed)(NSError *)=_userCloseAfterLaunch; _userCloseAfterLaunch=nil;
+            [self closeAfterUserRequest:closed]; return;
+        }
         [[PrivClass(FBProcessManager) sharedInstance] registerProcessForAuditToken:_process.auditToken];
         FBSMutableSceneDefinition *definition=[PrivClass(FBSMutableSceneDefinition) definition];
         definition.identity=[PrivClass(FBSSceneIdentity) identityForIdentifier:self.sceneIdentifier];
@@ -125,6 +141,7 @@ static id MWSceneForeground(UIApplicationSceneSettings *settings) {
         settings.foreground=_visible;
         settings.frame=(CGRect){CGPointZero,_size};
         settings.interfaceOrientation=_orientation;
+        [self applyDeviceOrientation:settings];
         settings.level=1;
         settings.canShowAlerts=YES;
         settings.persistenceIdentifier=self.sceneIdentifier;
@@ -136,7 +153,8 @@ static id MWSceneForeground(UIApplicationSceneSettings *settings) {
         client.interfaceOrientation=_orientation;
         parameters.clientSettings=client;
         _scene=[[PrivClass(FBSceneManager) sharedInstance] createSceneWithDefinition:definition initialParameters:parameters];
-        if(_scene) _inputEnvironment=[[MWSceneInputEnvironment alloc] initWithScene:_scene identifier:self.sceneIdentifier processIdentifier:_process.pid];
+        if(_scene && MWKeyboardFocus.shared.supportsGuestHosting)
+            _inputEnvironment=[[MWSceneInputEnvironment alloc] initWithScene:_scene identifier:self.sceneIdentifier processIdentifier:_process.pid];
         [self observeGuestInput];
         _presenter=[_scene.uiPresentationManager createPresenterWithIdentifier:self.sceneIdentifier];
         if(!_scene || !_presenter) {
@@ -145,6 +163,7 @@ static id MWSceneForeground(UIApplicationSceneSettings *settings) {
         [_presenter activate];
         if(!_presenter.presentationView) { [self fail:MWError(16,@"应用未提供可显示的小窗视图。")]; return; }
         if(!_visible) [_presenter deactivate];
+        [self updateBackgroundLease];
         [MWKeyboardFocus.shared registerGuest:self.sceneIdentifier processIdentifier:_process.pid scene:_scene];
         MWLog(@"guest.presenter_ready",@{@"bundle":self.bundleIdentifier,@"scene":self.sceneIdentifier,@"pid":@(_process.pid),@"note":@"presenter object only; first frame not observed"});
         _transaction=nil;
@@ -225,12 +244,28 @@ static id MWSceneForeground(UIApplicationSceneSettings *settings) {
         @"width":@(_size.width),@"height":@(_size.height)};
 }
 - (void)observeRendering:(NSString *)reason {
+    [self observeInputLayers:reason];
     if(_closed || !_scene || _renderEventCount>=24) return;
     NSDictionary *snapshot=[self renderDiagnosticSnapshot];
     if([reason isEqual:@"content_state_changed"] && [snapshot isEqual:_lastRenderSnapshot]) return;
     _lastRenderSnapshot=snapshot; _renderEventCount++;
     MWLog(@"guest.render_probe",@{@"bundle":self.bundleIdentifier,@"scene":self.sceneIdentifier,@"reason":reason,
         @"ordinal":@(_renderEventCount),@"render":snapshot,@"meaning":@"layer_registration_only_not_pixels"});
+}
+- (void)observeInputLayers:(NSString *)reason {
+    if(_closed || !_scene || !_visible || _nativeCompletion || _inputLayerSamples>=60) return;
+    CFTimeInterval now=CACurrentMediaTime();
+    if(_lastInputLayerTime>0 && now-_lastInputLayerTime<0.3) return;
+    _lastInputLayerTime=now;
+    NSDictionary *layers=MWSceneLayerSnapshot(_scene,_presenter);
+    if([layers isEqual:_lastInputLayers]) return;
+    _lastInputLayers=layers; _inputLayerSamples++;
+    MWLog(@"keyboard.guest_layers",@{@"scene":self.sceneIdentifier,@"bundle":self.bundleIdentifier,@"reason":reason,
+        @"ordinal":@(_inputLayerSamples),@"layers":layers,@"focus":[MWKeyboardFocus.shared diagnosticSnapshotWithCapabilities:NO]});
+    // Capture bottom probes while the guest is still present, rather than
+    // only after settings/export have changed focus or collected the windows.
+    [NSNotificationCenter.defaultCenter postNotificationName:MWKeyboardDiagnosticSampleNotification object:self
+        userInfo:@{@"reason":@"guest_layer_change",@"capabilities":@NO}];
 }
 - (void)readGuestInputState {
     if(_closed || !_scene) return;
@@ -260,6 +295,7 @@ static id MWSceneForeground(UIApplicationSceneSettings *settings) {
     else if(_orientation==UIInterfaceOrientationPortraitUpsideDown) safeSelector=@"safeAreaInsetsPortraitUpsideDown";
     NSMutableDictionary *snapshot=[@{@"bundle":self.bundleIdentifier,@"scene":self.sceneIdentifier,
         @"pid":@(_process.pid),@"closed":@(_closed),@"visibleRequested":@(_visible),@"observingInput":@(_observingInput),
+        @"keepAliveRequested":@(_keepAliveRequested),@"keepAliveGranted":@(self.keepAliveGranted),
         @"inputKnown":@(_inputKnown),@"lastInputActive":@(_inputActive),
         @"systemInputActive":MWRuntimeBoolValue(client,@"systemInputActive"),
         @"foreground":MWSceneForeground(settings),@"sceneActive":MWRuntimeBoolValue(_scene,@"isActive"),
@@ -267,6 +303,7 @@ static id MWSceneForeground(UIApplicationSceneSettings *settings) {
         @"safeAreaRequested":@[@(_safeInsets.top),@(_safeInsets.left),@(_safeInsets.bottom),@(_safeInsets.right)],
         @"safeAreaReported":MWRuntimeInsetsValue(settings,safeSelector),@"orientation":@(_orientation),
         @"render":[self renderDiagnosticSnapshot],
+        @"inputLayers":MWSceneLayerSnapshot(_scene,_presenter),
         @"inputEnvironment":_inputEnvironment ? [_inputEnvironment diagnosticSnapshot] : @{@"registered":@NO}} mutableCopy];
     if(capabilities || (!_diagnosticCapabilitiesRecorded && _scene)) {
         _diagnosticCapabilitiesRecorded=(_scene!=nil);
@@ -291,7 +328,7 @@ static id MWSceneForeground(UIApplicationSceneSettings *settings) {
         pid_t pid=strongSelf->_process.pid;
         if(pid<=0 || (kill(pid,0)==-1 && errno==ESRCH))
             [strongSelf fail:MWError(18,@"应用已退出，可重新打开小窗。")];
-        else if(strongSelf->_visible) [strongSelf readGuestInputState];
+        else if(strongSelf->_visible) { [strongSelf readGuestInputState]; [strongSelf observeInputLayers:@"periodic_change_check"]; }
     });
     dispatch_resume(_monitor);
 }
@@ -322,6 +359,7 @@ static id MWSceneForeground(UIApplicationSceneSettings *settings) {
         UIInterfaceOrientation resolved=_orientation;
         [_scene updateSettingsWithBlock:^(UIMutableApplicationSceneSettings *settings) {
             settings.frame=(CGRect){CGPointZero,size}; settings.interfaceOrientation=resolved;
+            [self applyDeviceOrientation:settings];
             [self applySafeInsets:settings];
         }];
     } @catch(NSException *exception) {
@@ -330,8 +368,27 @@ static id MWSceneForeground(UIApplicationSceneSettings *settings) {
 }
 
 - (void)setVisible:(BOOL)visible {
+    [self setVisible:visible keepAlive:NO];
+}
+- (BOOL)keepAliveRequested { return _keepAliveRequested; }
+- (BOOL)keepAliveGranted { return _keepAliveRequested && _backgroundLease.valid; }
+- (void)updateBackgroundLease {
+    if(!_keepAliveRequested || _closed || _nativeCompletion || _visible) {
+        [_backgroundLease invalidate]; _backgroundLease=nil; return;
+    }
+    if(!_process || _process.pid<=0 || _backgroundLease) return;
+    _backgroundLease=[MWBackgroundLease new]; NSError *error=nil;
+    BOOL requested=[_backgroundLease acquireForProcess:_process.pid name:@"HaruGalaxy minimized guest" error:&error];
+    MWLog(@"guest.keepalive",@{@"bundle":self.bundleIdentifier,@"pid":@(_process.pid),
+        @"requested":@(requested),@"granted":@(_backgroundLease.valid),@"error":MWErrorFields(error)});
+}
+- (void)setVisible:(BOOL)visible keepAlive:(BOOL)keepAlive {
     if(_closed || _nativeCompletion) return;
+    _keepAliveRequested=keepAlive && !visible;
+    BOOL visibilityChanged=_visible!=visible;
     _visible=visible;
+    [self updateBackgroundLease];
+    if(!visibilityChanged) return;
     if(!visible) [self releaseKeyboardFocus];
     MWTrace(@"guest.visibility",@{@"bundle":self.bundleIdentifier,@"visible":@(visible)});
     @try {
@@ -340,6 +397,13 @@ static id MWSceneForeground(UIApplicationSceneSettings *settings) {
     } @catch(NSException *exception) {
         [self fail:MWError(20,[NSString stringWithFormat:@"更新窗口状态失败：%@",exception.reason])];
     }
+}
+- (void)applyDeviceOrientation:(UIMutableApplicationSceneSettings *)settings {
+    SEL device=NSSelectorFromString(@"setDeviceOrientation:"),enabled=NSSelectorFromString(@"setDeviceOrientationEventsEnabled:");
+    if(MWGuestMethod(settings,device,'v',"q"))
+        ((void(*)(id,SEL,NSInteger))objc_msgSend)(settings,device,MWDeviceOrientationForInterface((int)_orientation));
+    if(MWGuestMethod(settings,enabled,'v',"B") || MWGuestMethod(settings,enabled,'v',"c"))
+        ((void(*)(id,SEL,BOOL))objc_msgSend)(settings,enabled,YES);
 }
 - (void)requestKeyboardFocusInWindow:(UIWindow *)window {
     if(!_closed && _visible && _scene && _presenter.presentationView.window==window)
@@ -356,7 +420,9 @@ static id MWSceneForeground(UIApplicationSceneSettings *settings) {
     MWLog(@"guest.failed",@{@"bundle":self.bundleIdentifier,@"scene":self.sceneIdentifier,@"error":MWErrorFields(error)});
     void (^completion)(NSError *)=_completion;
     void (^failure)(NSError *)=self.failureHandler;
+    void (^userClose)(NSError *)=_userCloseAfterLaunch; _userCloseAfterLaunch=nil;
     [self close];
+    if(userClose) { userClose(error); return; }
     if(completion) completion(error); else if(failure) failure(error);
 }
 
@@ -368,6 +434,22 @@ static id MWSceneForeground(UIApplicationSceneSettings *settings) {
     _closed=YES; ++_generation; _completion=nil; self.failureHandler=nil; self.inputRequestHandler=nil;
     [self tearDown];
     if(nativeCompletion) nativeCompletion(MWError(63,@"原应用切换已取消，未发送打开请求。"));
+}
+- (void)closeAfterUserRequest:(void (^)(NSError *))completion {
+    if(_userCloseAfterLaunch) { completion(MWError(72,@"该应用正在关闭。")); return; }
+    if(!_process && _transaction && _completion && !_closed) {
+        // Do not cancel launch bookkeeping before learning its exact handle:
+        // otherwise a late launch could survive the user's Close action.
+        _userCloseAfterLaunch=[completion copy]; self.failureHandler=nil; self.inputRequestHandler=nil;
+        _visible=NO; _keepAliveRequested=NO; return;
+    }
+    id process=_process ?: _ownedProcessForUserClose; // Retain the original handle across local teardown.
+    // Device feedback shows local scene release does not establish seamless
+    // native relaunch. Do NOT wait for native handoff before termination:
+    // that would allow an app opened from Home to reuse the old process.
+    [self close];
+    MWLog(@"guest.user_close_cleanup",@{@"bundle":self.bundleIdentifier,@"cleanupFailed":@(_cleanupFailed)});
+    MWEndOwnedGuest(process,self.closeProgressHandler,completion);
 }
 
 - (MWNativeRoute)nativeHandoffRoute {
@@ -412,6 +494,7 @@ static id MWSceneForeground(UIApplicationSceneSettings *settings) {
         completion(MWError(64,@"场景接口检查失败，未发送打开请求。")); return;
     }
     _nativeCompletion=[completion copy]; _visible=NO; _generation++;
+    [_backgroundLease invalidate]; _backgroundLease=nil; _keepAliveRequested=NO;
     _completion=nil; self.failureHandler=nil; self.inputRequestHandler=nil;
     [self releaseKeyboardFocus];
     uint64_t generation=MWNativeHandoffBegin(&_nativeHandoff,NSProcessInfo.processInfo.systemUptime);
@@ -487,6 +570,7 @@ static id MWSceneForeground(UIApplicationSceneSettings *settings) {
 }
 - (BOOL)tearDown {
     BOOL released=YES;
+    [_backgroundLease invalidate]; _backgroundLease=nil; _keepAliveRequested=NO;
     [MWKeyboardFocus.shared unregisterGuest:self.sceneIdentifier];
     if([MWKeyboardFocus.shared hasPendingCleanup]) released=NO;
     if(_observingInput) {

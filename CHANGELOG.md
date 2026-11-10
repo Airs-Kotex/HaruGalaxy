@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.3.13 — Minimized execution, orientation and guest closing (build19)
+
+### Added
+
+- Select system-managed suspension or background keepalive after minimizing, with current grant status in the panel.
+- Follow physical device orientation for workspace and guest geometry, retaining the last direction while flat and updating parked/minimized restore layouts. Add iPad and split-view viewport coverage.
+- Explicit Close now releases the hosted scene and requests termination of its original process instance, then observes exit. Automatic host teardown and canvas-mode reopening remain non-terminating. This is the fallback for unreliable native relaunch, and unsaved guest state may be lost.
+- Automatically capture bounded keyboard layer/hosted-layer changes while a guest is present; default the diagnostic reader to the current export session.
+
+### Changed
+
+- Stop unsupported guest keyboard selection and its environment remapping when complete hosting APIs are missing; retain normal-app search. Direct guest keyboard input and hidden touch interception remain unresolved on device.
+- Rename the former compatibility entry to **原始画布** (original canvas), describing a layout choice rather than a keyboard or missing-image repair.
+- Preserve the compact four-corner controls, flush half-screen headers and operation guides from0.3.12.
+
+
 ## 0.3.12 — Four-corner resizing, flush halves and visible controls (build18)
 
 This updated0.3.12 replaces the original build17 assets at the user's request. It combines all0.3.12 changes; no0.3.13 release is created.

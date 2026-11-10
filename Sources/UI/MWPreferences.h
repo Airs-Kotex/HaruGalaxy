@@ -7,6 +7,7 @@ FOUNDATION_EXPORT NSString *const MWPreferencesDidChangeNotification;
 @property(nonatomic) UIUserInterfaceStyle appearance;
 @property(nonatomic) BOOL reduceMotion;
 @property(nonatomic) BOOL edgeAlwaysExpanded;
+@property(nonatomic) BOOL keepMinimizedAlive;
 @property(nonatomic) double parkedSizeFraction;
 @property(nonatomic) double parkedAspectRatio;
 @property(nonatomic,readonly) NSArray<NSString *> *recentBundleIDs;

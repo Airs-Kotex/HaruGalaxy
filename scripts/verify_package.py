@@ -24,8 +24,12 @@ def verify(path):
         assert '"HaruGalaxy"' in archive.read(prefix + "en.lproj/InfoPlist.strings").decode()
         assert info["MinimumOSVersion"] == expected_info["MinimumOSVersion"]
         assert info["CFBundleShortVersionString"] == expected_info["CFBundleShortVersionString"]
+        assert info["CFBundleVersion"] == expected_info["CFBundleVersion"]
         assert info["UIDeviceFamily"] == [1, 2]
         assert "UIInterfaceOrientationPortrait" in info["UISupportedInterfaceOrientations"]
+        assert set(info["UISupportedInterfaceOrientations~ipad"]) == {
+            "UIInterfaceOrientationPortrait", "UIInterfaceOrientationPortraitUpsideDown",
+            "UIInterfaceOrientationLandscapeLeft", "UIInterfaceOrientationLandscapeRight"}
         assert archive.getinfo(prefix + NAME).external_attr >> 16 & 0o111, "Executable mode missing"
         for resource in ["LICENSE", "NOTICE.md", "AppIcon60x60@2x.png", "AppIcon60x60@3x.png", "AppIcon76x76@2x.png"]:
             assert len(archive.read(prefix + resource)) > 0, "Missing resource: " + resource
@@ -71,7 +75,10 @@ def verify(path):
             entitlements = plistlib.loads(signature[offset + 8:offset + length])
     expected = plistlib.loads((ROOT / "Resources/entitlements.plist").read_bytes())
     assert code_directory and entitlements == expected, "Signed entitlements do not match project"
-    assert "com.apple.runningboard.terminateprocess" not in entitlements
+    # Explicit guest Close now uses an original-process-handle termination
+    # request; automatic teardown and display-mode reopen do not.
+    assert entitlements.get("com.apple.runningboard.terminateprocess") is True
+    assert "com.apple.runningboard.terminatemanagedprocesses" not in entitlements
     assert any("UIKit.framework" in dependency for dependency in dependencies)
     print(f"PASS: {path.name}: package layout, plist, arm64/iOS {info['MinimumOSVersion']}, signature structure, entitlements and resources")
     print("Offline checks do not prove installation, entitlements being granted, or runtime compatibility.")

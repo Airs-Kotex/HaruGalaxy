@@ -30,6 +30,8 @@
 	<true/>
 	<key>com.apple.runningboard.targetidentities</key>
 	<true/>
+	<key>com.apple.runningboard.terminateprocess</key>
+	<true/>
 	<key>com.apple.security.exception.mach-lookup.global-name</key>
 	<array>
 		<string>com.apple.frontboard.systemappservices</string>

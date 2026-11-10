@@ -57,11 +57,26 @@ id MWRuntimeIntegerValue(id object,NSString *name) {
         return @"unavailable";
     } @catch(NSException *exception) { (void)exception; return @"exception"; }
 }
+id MWRuntimeRectValue(id object,NSString *name) {
+    @try {
+        SEL selector=NSSelectorFromString(name);
+        if(!object || ![object respondsToSelector:selector]) return @"unavailable";
+        Method method=class_getInstanceMethod(object_getClass(object),selector);
+        if(!method || method_getNumberOfArguments(method)!=2) return @"unavailable";
+        char result[128]={0}; method_getReturnType(method,result,sizeof(result));
+        NSMethodSignature *signature=[object methodSignatureForSelector:selector];
+        if(!strstr(result,"CGRect") || signature.methodReturnLength!=sizeof(CGRect)) return @"unavailable";
+        CGRect r=((CGRect(*)(id,SEL))objc_msgSend)(object,selector);
+        if(!isfinite(r.origin.x) || !isfinite(r.origin.y) || !isfinite(r.size.width) || !isfinite(r.size.height)) return @"invalid";
+        return @[@(r.origin.x),@(r.origin.y),@(r.size.width),@(r.size.height)];
+    } @catch(NSException *exception) { (void)exception; return @"exception"; }
+}
 NSDictionary *MWDiagnosticWindow(UIWindow *window) {
     if(!window) return @{@"present":@NO};
     return @{@"present":@YES,@"class":NSStringFromClass(window.class),@"hidden":@(window.hidden),@"alpha":@(window.alpha),
         @"key":@(window.isKeyWindow),@"level":@(window.windowLevel),@"interactive":@(window.userInteractionEnabled),
         @"width":@(window.bounds.size.width),@"height":@(window.bounds.size.height),
+        @"frame":@[@(window.frame.origin.x),@(window.frame.origin.y),@(window.frame.size.width),@(window.frame.size.height)],
         @"safeInsets":@[@(window.safeAreaInsets.top),@(window.safeAreaInsets.left),@(window.safeAreaInsets.bottom),@(window.safeAreaInsets.right)],
         @"scene":window.windowScene.session.persistentIdentifier ?: @"none",
         @"sceneState":@(window.windowScene ? window.windowScene.activationState : UISceneActivationStateUnattached)};

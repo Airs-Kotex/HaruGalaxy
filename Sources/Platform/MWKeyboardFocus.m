@@ -87,6 +87,16 @@ static id MWKeyboardBool(id object,NSString *name) {
     id client=MWKeyboardObject(NSClassFromString(@"UIKeyboardArbiterManager"),@"arbiterClient");
     return client ?: MWKeyboardObject(NSClassFromString(@"_UIKeyboardArbiterClient"),@"automaticSharedArbiterClient");
 }
+- (BOOL)supportsGuestHosting {
+    @try {
+        id client=[self client];
+        return MWKeyboardCanPrepareHosting(
+            MWKeyboardMethod(client,NSSelectorFromString(@"addWindowHostingPID:callerID:"),'v',"i@"),
+            MWKeyboardMethod(client,NSSelectorFromString(@"removeWindowHostingPID:callerID:"),'v',"i@"),
+            MWKeyboardMethod(client,NSSelectorFromString(@"prepareForHostedWindowWithScene:"),'@',"@"),
+            MWKeyboardMethod(client,NSSelectorFromString(@"finishWithHostedWindow"),'v',""));
+    } @catch(NSException *exception) { (void)exception; return NO; }
+}
 - (id)tokenForScene:(id)scene {
     id token=MWKeyboardObject(scene,@"identityToken");
     Class cls=NSClassFromString(@"FBSSceneIdentityToken");
@@ -158,7 +168,7 @@ static id MWKeyboardBool(id object,NSString *name) {
     SEL finish=NSSelectorFromString(@"finishWithHostedWindow");
     if(!scene || !MWKeyboardMethod(client,prepare,'@',"@") || !MWKeyboardMethod(client,finish,'v',"")) {
         MWLog(@"keyboard.presentation_unavailable",@{@"reason":@"paired hosting API unavailable"});
-        return YES; // Preserve the existing focus-only path on other systems.
+        return NO;
     }
     _preparedClient=client; _preparedScene=scene; _preparationNeedsCleanup=YES;
     id window=((id(*)(id,SEL,id))objc_msgSend)(client,prepare,scene);
@@ -181,17 +191,15 @@ static id MWKeyboardBool(id object,NSString *name) {
         MWKeyboardMethod(client,NSSelectorFromString(@"prepareForHostedWindowWithScene:"),'@',"@"),
         MWKeyboardMethod(client,NSSelectorFromString(@"finishWithHostedWindow"),'v',""));
     if(!supported) {
-        // iOS16.2 returned a hosted window while add/remove PID were absent.
-        // Do not enter partial presentation mode; normal system presentation
-        // retains ownership on this capability set.
+        // The unsupported case is rejected before key/focus changes too.
         if(![self clearHostedPresentation]) return NO;
         if(!guest.reportedUnsupportedHosting) {
             guest.reportedUnsupportedHosting=YES;
-            MWLog(@"keyboard.hosting_skipped",@{@"scene":identifier,@"reason":@"incomplete_paired_API",@"focusOnly":@YES,
+            MWLog(@"keyboard.hosting_skipped",@{@"scene":identifier,@"reason":@"incomplete_paired_API",@"focusOnly":@NO,
                 @"addPID":MWRuntimeMethodSnapshot(client,NSStringFromSelector(add)),
                 @"removePID":MWRuntimeMethodSnapshot(client,NSStringFromSelector(remove))});
         }
-        return YES;
+        return NO;
     }
     if(![self prepareHostedPresentation:client scene:window.windowScene]) return NO;
     _boundClient=client; _boundCaller=caller; _boundPID=guest.pid; _bindingNeedsCleanup=YES;
@@ -206,6 +214,17 @@ static id MWKeyboardBool(id object,NSString *name) {
     CFTimeInterval now=CACurrentMediaTime();
     if(_state.selected && _state.owner==owner && _window==window && now-_lastRequest<0.15) return;
     @try {
+        if(guest && !self.supportsGuestHosting) {
+            // iOS16.2 has no paired PID registration. Selecting anyway left
+            // no presentation route and repeatedly interfered with system
+            // focus. Do not claim focus or take the key window on this path.
+            if(!guest.reportedUnsupportedHosting) {
+                guest.reportedUnsupportedHosting=YES;
+                MWLog(@"keyboard.guest_selection_disabled",@{@"scene":identifier,@"pid":@(pid),
+                    @"reason":@"incomplete_paired_API",@"policy":@"system_managed_no_guest_selection"});
+            }
+            return;
+        }
         id manager=[self manager]; if(!manager) return;
         [window makeKeyWindow];
         if(![self bindGuest:guest identifier:identifier window:window]) {
@@ -289,6 +308,12 @@ static id MWKeyboardBool(id object,NSString *name) {
         id remote=MWKeyboardObject(NSClassFromString(@"_UIRemoteKeyboards"),@"sharedRemoteKeyboards");
         id state=MWKeyboardObject(client,@"currentClientState") ?: MWKeyboardObject(remote,@"currentState");
         id source=MWKeyboardObject(state,@"sourceSceneIdentityString");
+        NSString *expected=nil;
+        for(MWKeyboardGuest *guest in _guests.allValues) if(_state.selected && guest.owner==_state.owner) {
+            id representation=MWKeyboardObject(guest.sceneToken,@"stringRepresentation");
+            if([representation isKindOfClass:NSString.class]) expected=representation;
+            break;
+        }
         return @{@"selected":@(_state.selected),@"owner":@(_state.owner),@"suspended":@(_state.suspended),
             @"client":client ? NSStringFromClass([client class]) : @"unavailable",
             @"allowed":MWKeyboardBool(client,@"allowedToShowKeyboard"),
@@ -297,6 +322,8 @@ static id MWKeyboardBool(id object,NSString *name) {
             @"presentationPrepared":@(_preparedClient!=nil),@"keyboardWindowPresent":@(_preparedKeyboardWindow!=nil),
             @"keyboardWindowHidden":@(_preparedKeyboardWindow.hidden),
             @"sourceScene":[source isKindOfClass:NSString.class] ? source : @"unavailable",
+            @"sourceMatchesSelectedGuest":expected && [source isKindOfClass:NSString.class] ? @([expected isEqual:source]) : @"unavailable",
+            @"guestHostingSupported":@(self.supportsGuestHosting),
             @"registeredGuests":@(_guests.count)};
     } @catch(NSException *exception) { return @{@"snapshotUnavailable":@YES}; }
 }
@@ -305,6 +332,12 @@ static id MWKeyboardBool(id object,NSString *name) {
     NSMutableDictionary *result=[[self snapshot] mutableCopy];
     result[@"selectedWindow"]=MWDiagnosticWindow(_window);
     result[@"preparedWindow"]=MWDiagnosticWindow(_preparedKeyboardWindow);
+    id remote=MWRuntimeObjectValue(NSClassFromString(@"_UIRemoteKeyboards"),@"sharedRemoteKeyboards");
+    id window=MWRuntimeObjectValue(remote,@"keyboardWindow");
+    result[@"remoteWindow"]=MWDiagnosticWindow([window isKindOfClass:UIWindow.class] ? window : nil);
+    id remoteState=MWRuntimeObjectValue(remote,@"currentState");
+    result[@"remoteOnScreen"]=MWRuntimeBoolValue(remoteState,@"keyboardOnScreen");
+    result[@"remoteFrame"]=MWRuntimeRectValue(remoteState,@"keyboardPosition");
     NSMutableArray *registered=[NSMutableArray array];
     for(NSString *identifier in _guests) {
         MWKeyboardGuest *guest=_guests[identifier];
@@ -329,7 +362,9 @@ static id MWKeyboardBool(id object,NSString *name) {
     return result;
 }
 - (void)keyboardEvent:(NSNotification *)notification {
-    MWLog(@"keyboard.visibility",@{@"notification":notification.name,@"state":[self snapshot]});
+    NSValue *frame=notification.userInfo[UIKeyboardFrameEndUserInfoKey];
+    MWLog(@"keyboard.visibility",@{@"notification":notification.name,@"state":[self snapshot],
+        @"frame":frame ? NSStringFromCGRect(frame.CGRectValue) : @"unavailable"});
 }
 - (void)dealloc { [[NSNotificationCenter defaultCenter] removeObserver:self]; }
 @end

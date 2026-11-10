@@ -10,6 +10,23 @@ spec.loader.exec_module(reader)
 
 
 class DiagnosticsReaderTests(unittest.TestCase):
+    def test_latest_session_does_not_attribute_old_keyboard_capture_to_new_build(self):
+        rows=[
+            {"time":1,"sequence":1,"session":"old","event":"session.start","fields":{"version":"0.3.9","build":"14"}},
+            {"time":2,"sequence":2,"session":"old","event":"keyboard.diagnostic_sample","fields":{"guests":[{}]}},
+            {"time":3,"sequence":1,"session":"new","event":"session.start","fields":{"version":"0.3.12","build":"18"}},
+            {"time":4,"sequence":2,"session":"new","event":"guest.user_close_requested","fields":{"accepted":True}}]
+        bundle={"schema":1,"environment":{"session":"new"},"logs":{"events":"\n".join(json.dumps(r) for r in rows)}}
+        data=reader.summarize(bundle,"latest")
+        self.assertEqual(data["events"],2)
+        self.assertEqual(data["total_events"],4)
+        self.assertEqual(data["keyboard_capture"]["counts"],{})
+        self.assertEqual(data["available_sessions"]["old"]["build"],"14")
+        self.assertNotIn("guest.user_close_exited",data["execution_pipeline"]["counts"])
+        self.assertEqual(reader.summarize(bundle,"all")["events"],4)
+        self.assertEqual(reader.summarize(bundle,"old")["keyboard_capture"]["counts"]["keyboard.diagnostic_sample"],1)
+        with self.assertRaises(ValueError): reader.summarize(bundle,"missing")
+
     def test_rotated_logs_order_and_incomplete_record(self):
         def record(sequence,event):
             return json.dumps({"time":sequence,"sequence":sequence,"event":event,"fields":{},"session":"test"})+"\n"

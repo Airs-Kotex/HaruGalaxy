@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 
-def summarize(bundle):
+def summarize(bundle, session=None):
     if not isinstance(bundle, dict) or bundle.get("schema") != 1 or not isinstance(bundle.get("logs"), dict):
         raise ValueError("Expected diagnostic bundle schema 1 with a logs object")
     environment = bundle.get("environment", {})
@@ -30,6 +30,23 @@ def summarize(bundle):
             except (ValueError, TypeError):
                 malformed.append(f"{filename}:{line_number}")
     records.sort(key=lambda row: (row["time"], row["sequence"]))
+    all_records = records
+    sessions = {}
+    for row in all_records:
+        key = str(row.get("session", "unknown"))
+        entry = sessions.setdefault(key, {"events": 0})
+        entry["events"] += 1
+        if row["event"] == "session.start":
+            entry.update({k: row["fields"].get(k) for k in ("version", "build", "model", "systemVersion")})
+    selected = None
+    if session and session != "all":
+        selected = session
+        if session == "latest":
+            selected = environment.get("session") or (str(records[-1].get("session", "unknown")) if records else None)
+        if selected is not None:
+            if str(selected) not in sessions:
+                raise ValueError("Requested session is absent from this diagnostic bundle")
+            records = [row for row in records if str(row.get("session", "unknown")) == str(selected)]
     counts = Counter(row["event"] for row in records)
     important = [row for row in records if any(token in row["event"] for token in
                  ("failed", "exception", "timeout", "invalidated", "unavailable", "gap", "problem_marker", "background.requested", "guard."))]
@@ -137,7 +154,10 @@ def summarize(bundle):
             "LaunchServices accepted the request, not that the ordinary app rendered or has a usable keyboard. "
             "The target hosted session ends and is not automatically recreated. cancelled and timeouts must "
             "not be interpreted as successful handoffs.")}
-    return {"environment": environment, "events": len(records), "sessions": sorted({str(row.get("session", "unknown")) for row in records}),
+    execution_trace = [row for row in records if row["event"].startswith(("guest.keepalive", "guest.user_close", "orientation."))]
+    return {"environment": environment, "events": len(records), "selected_session": selected,
+            "available_sessions": sessions, "total_events": len(all_records),
+            "sessions": sorted({str(row.get("session", "unknown")) for row in records}),
             "counts": dict(sorted(counts.items())), "malformed_lines": malformed,
             "dropped": bundle.get("dropped"), "storage": bundle.get("storage"), "important_events": important[-80:],
             "export_errors": bundle.get("exportErrors", {}), "raw_files": list(bundle.get("rawFiles", {})),
@@ -150,16 +170,20 @@ def summarize(bundle):
             "render_pipeline": render_stages,
             "input_board_pipeline": board_stages,
             "native_handoff_pipeline": native_stages,
+            "execution_pipeline": {"counts":dict(sorted(Counter(r["event"] for r in execution_trace).items())),
+                "recent_events":execution_trace[-80:],
+                "interpretation":"Keepalive requested is not a grant. Termination accepted is not process exit; require guest.user_close_exited. Orientation requests are not proof that a guest honors the requested layout."},
             "interpretation": "A heartbeat gap is an observation, not proof of a crash. Assertion valid is not proof of rendering or input."}
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("bundle", type=Path)
+    parser.add_argument("--session", default="latest", help="latest (default), all, or exact session identifier")
     args = parser.parse_args()
     if args.bundle.stat().st_size > 64 * 1024 * 1024:
         raise SystemExit("Diagnostic bundle exceeds 64 MiB")
-    print(json.dumps(summarize(json.loads(args.bundle.read_text())), ensure_ascii=False, indent=2))
+    print(json.dumps(summarize(json.loads(args.bundle.read_text()),args.session), ensure_ascii=False, indent=2))
 
 
 if __name__ == "__main__":
