@@ -1,12 +1,12 @@
 # HaruGalaxy · 初春星河
 
-[简体中文](README.md) · [Download 0.3.14](https://github.com/Airs-Kotex/HaruGalaxy/releases/tag/v0.3.14) · [Issues](https://github.com/Airs-Kotex/HaruGalaxy/issues)
+[简体中文](README.md) · [Download 0.3.15](https://github.com/Airs-Kotex/HaruGalaxy/releases/tag/v0.3.15) · [Issues](https://github.com/Airs-Kotex/HaruGalaxy/issues)
 
 A native multi-window workspace for TrollStore. HaruGalaxy hosts installed apps in movable windows with an edge panel, free or original-aspect resizing, half-screen snapping and local diagnostic exports.
 
 The edge entry, title bars and window panel now use translucent glass controls, with dark/light appearance, Reduce Transparency and contrast adaptations.
 
-The0.3.14 assets are **build20**, correcting legacy landscape scene coordinates and presentation rotation, and resetting the selected app before a new hosted scene to prevent overlapping native playback. Install over0.3.13; Settings should show **0.3.14 (20)**.
+The 0.3.15 assets are **build21**, correcting hosted-app orientation selection, adding a system orientation source, and preventing client orientation echoes from keeping ordinary apps in portrait. Install over 0.3.14; Settings should show **0.3.15 (21)**. Rotation, touch and fullscreen transitions still require device validation; see the [implementation and limitations](docs/implementation-status-0.3.15.md).
 
 ## Illustrated guides
 
@@ -19,7 +19,7 @@ These are **operation illustrations, not simulator or physical-device screenshot
 ## Install
 
 1. Install [TrollStore](https://github.com/opa334/TrollStore) on a supported device.
-2. Download [HaruGalaxy-0.3.14.tipa](https://github.com/Airs-Kotex/HaruGalaxy/releases/download/v0.3.14/HaruGalaxy-0.3.14.tipa).
+2. Download [HaruGalaxy-0.3.15.tipa](https://github.com/Airs-Kotex/HaruGalaxy/releases/download/v0.3.15/HaruGalaxy-0.3.15.tipa).
 3. Open the file in TrollStore and install it over an existing 0.3.1 or later installation.
 4. Open HaruGalaxy and enable the floating workspace in Settings.
 
@@ -59,7 +59,7 @@ When guest content reaches a system edge exclusion, the workspace passes the ove
 
 ## Parking
 
-Use the fourth blue top button or panel's **“挂起”** text action, then tap the top-right thumbnail to restore. Its icon is drawn by the app rather than relying on an SF Symbols name. **Panel → 挂起设置** jumps directly to size(18%–50%) and aspect settings(original,1:1,4:3,3:4,16:9,9:16). Settings title shows version/build: **0.3.14 (20)**. Multiple thumbnails stack in the safe area; their appearance does not change restored geometry. Parking keeps sessions alive, not process suspension.
+Use the fourth blue top button or panel's **“挂起”** text action, then tap the top-right thumbnail to restore. Its icon is drawn by the app rather than relying on an SF Symbols name. **Panel → 挂起设置** jumps directly to size(18%–50%) and aspect settings(original,1:1,4:3,3:4,16:9,9:16). Settings title shows version/build: **0.3.15 (21)**. Multiple thumbnails stack in the safe area; their appearance does not change restored geometry. Parking keeps sessions alive, not process suspension.
 
 ![Illustrated parking workflow and thumbnail size/aspect settings](docs/images/03-parking-guide.png)
 

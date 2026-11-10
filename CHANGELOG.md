@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.3.15 — Hosted orientation selection and system rotation (build21)
+
+### Fixed
+
+- Select hosted directions using runtime orientation constraints, with declared orientations as a fallback. Keep a valid runtime mask across unknown readings so a temporary zero does not force landscape content back to portrait.
+- Follow workspace rotation when a client only echoes prior host requests. Start a new confirmation cycle for every nonzero mask, including repeated values.
+- Capture client orientation values at callback entry before dispatching to the main queue, preserving intermediate observations that delayed re-reading could lose.
+- Keep content axes, proportional layout and parked geometry consistent with the selected guest orientation. Prefer iPad-specific declarations where available.
+- Keep foreground UIDevice seeds from overriding an established system direction; preserve gravity following for ordinary and floating workspaces under rotation lock.
+
+### Added
+
+- A guarded `FBSOrientationObserver` input with lifecycle isolation and existing UIDevice/CoreMotion fallbacks.
+- Orientation-source, retained-mask and submission diagnostics; no raw sensor samples, screen pixels or typed text are recorded.
+- Portable regressions for client echo loops, mask renewal/expiry, delayed observation consumption and four-direction geometry.
+
+Offline checks and scoped independent review passed. No new device or simulator validation is claimed. A repeated landscape mask with a portrait report can represent either a renewed request or an exit whose direction changed first; the conservative policy retains the recent valid mask and does not guarantee every fullscreen exit. Existing keyboard and unrelated rendering limitations remain.
+
 ## 0.3.14 — Landscape scene coordinates and exclusive app entry (build20)
 
 ### Fixed

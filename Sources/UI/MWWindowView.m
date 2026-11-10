@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 #import "MWWindowView.h"
+#import "../Core/MWSceneGeometry.h"
 #import "MWPreferences.h"
 #import "MWGuestContentView.h"
 #import "MWCornerHandle.h"
@@ -59,6 +60,7 @@ static NSArray *MWRectFields(CGRect r) { return @[@(r.origin.x),@(r.origin.y),@(
     BOOL _resizeActivated;
     BOOL _parkWhenReady;
     UIInterfaceOrientation _workspaceOrientation;
+    UIInterfaceOrientation _layoutGuestOrientation;
     UIEdgeInsets _workspaceSafeInsets;
     NSString *_userCloseStatus;
     BOOL _userClosePending;
@@ -134,6 +136,7 @@ static NSArray *MWRectFields(CGRect r) { return @[@(r.origin.x),@(r.origin.y),@(
 }
 - (void)layoutSubviews {
     [super layoutSubviews];
+    [self updateGuestOrientationGeometry];
     CGFloat titleInset=0;
     if(self.window && self.superview) {
         MWWindowModel layoutModel=_model;
@@ -165,6 +168,7 @@ static NSArray *MWRectFields(CGRect r) { return @[@(r.origin.x),@(r.origin.y),@(
     CGSize systemSize=_compatibleCanvas ? [self systemCanvasSize] : _proportionalSize;
     MWRect canvas=MWGuestCanvas(MWFromCGRect(_content.bounds),(MWRect){0,0,systemSize.width,systemSize.height},
         _model.resizeMode==MWResizeProportional,_model.maximized,_compatibleCanvas);
+    canvas=MWGuestCanvasForOrientation(canvas,(int)(_workspaceOrientation ?: self.window.windowScene.interfaceOrientation),(int)[self guestOrientation]);
     _logicalSize=CGSizeMake(canvas.width,canvas.height);
     if(self.isParked) _logicalSize=_parkedLogicalSize;
     _guestHost.frame=_content.bounds;
@@ -260,6 +264,10 @@ static NSArray *MWRectFields(CGRect r) { return @[@(r.origin.x),@(r.origin.y),@(
     _session.presentationGeometryHandler=^{
         MWWindowView *view=weakSelf;
         if(!view || view->_model.state==MWWindowClosed) return;
+        if([view guestOrientation]!=view->_layoutGuestOrientation) {
+            [view cancelInteractions];
+            [view setNeedsLayout]; [view layoutIfNeeded];
+        }
         [view->_guestHost setNeedsLayout]; [view->_guestHost layoutIfNeeded];
     };
     _session.startupStatusHandler=^(NSString *status) {
@@ -274,6 +282,7 @@ static NSArray *MWRectFields(CGRect r) { return @[@(r.origin.x),@(r.origin.y),@(
         if(view && view.active && !view->_hostHidden && !view.hidden && !view.window.rootViewController.presentedViewController)
             [view.session refreshKeyboardFocusInWindow:view.window];
     };
+    [self setNeedsLayout]; [self layoutIfNeeded];
     [_session updateSize:_logicalSize orientation:[self guestOrientation] safeAreaInsets:[self guestSafeInsets]];
     [_session startWithSize:_logicalSize completion:^(NSError *error) {
         MWWindowView *view=weakSelf;
@@ -539,14 +548,8 @@ static NSArray *MWRectFields(CGRect r) { return @[@(r.origin.x),@(r.origin.y),@(
 - (void)applyViewport:(CGRect)viewport orientation:(UIInterfaceOrientation)orientation safeInsets:(UIEdgeInsets)insets {
     if(CGRectEqualToRect(_viewport,viewport) && _workspaceOrientation==orientation && UIEdgeInsetsEqualToEdgeInsets(_workspaceSafeInsets,insets)) return;
     [self cancelInteractions];
-    BOOL switchedAxes=_workspaceOrientation && UIInterfaceOrientationIsLandscape(_workspaceOrientation)!=UIInterfaceOrientationIsLandscape(orientation);
     _workspaceOrientation=orientation; _workspaceSafeInsets=insets;
-    if(self.isParked && switchedAxes) _parkedLogicalSize=CGSizeMake(_parkedLogicalSize.height,_parkedLogicalSize.width);
-    if(_model.resizeMode==MWResizeProportional) {
-        _proportionalSize=[self systemCanvasSize]; _model.aspectRatio=_proportionalSize.width/_proportionalSize.height;
-        if(_model.maximized) _restoreLogicalSize=_proportionalSize;
-        if(self.isParked) _parking.saved.aspectRatio=_model.aspectRatio;
-    }
+    [self updateGuestOrientationGeometry];
     if(self.isParked) {
         _viewport=viewport;
         MWWindowReflow(&_parking.saved,MWFromCGRect(viewport));
@@ -614,7 +617,20 @@ static NSArray *MWRectFields(CGRect r) { return @[@(r.origin.x),@(r.origin.y),@(
     return CGSizeMake(canvas.width,canvas.height);
 }
 - (UIInterfaceOrientation)guestOrientation {
-    return _workspaceOrientation ?: self.window.windowScene.interfaceOrientation;
+    UIInterfaceOrientation workspace=_workspaceOrientation ?: self.window.windowScene.interfaceOrientation;
+    return _session ? [_session orientationForWorkspace:workspace] : workspace;
+}
+- (void)updateGuestOrientationGeometry {
+    UIInterfaceOrientation orientation=[self guestOrientation];
+    if(orientation==UIInterfaceOrientationUnknown || orientation==_layoutGuestOrientation) return;
+    BOOL switchedAxes=_layoutGuestOrientation && UIInterfaceOrientationIsLandscape(_layoutGuestOrientation)!=UIInterfaceOrientationIsLandscape(orientation);
+    _layoutGuestOrientation=orientation;
+    if(self.isParked && switchedAxes) _parkedLogicalSize=CGSizeMake(_parkedLogicalSize.height,_parkedLogicalSize.width);
+    if(_model.resizeMode==MWResizeProportional) {
+        _proportionalSize=[self systemCanvasSize]; _model.aspectRatio=_proportionalSize.width/_proportionalSize.height;
+        if(_model.maximized) _restoreLogicalSize=_proportionalSize;
+        if(self.isParked) _parking.saved.aspectRatio=_model.aspectRatio;
+    }
 }
 - (void)logContentGeometry:(NSString *)reason {
     MWLog(@"window.content_geometry",@{@"bundle":_application.bundleIdentifier,@"reason":reason,

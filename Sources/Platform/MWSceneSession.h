@@ -12,6 +12,7 @@
 - (instancetype)initWithBundleIdentifier:(NSString *)bundleIdentifier;
 - (void)startWithSize:(CGSize)size completion:(void (^)(NSError *error))completion;
 - (void)updateSize:(CGSize)size orientation:(UIInterfaceOrientation)orientation safeAreaInsets:(UIEdgeInsets)insets;
+- (UIInterfaceOrientation)orientationForWorkspace:(UIInterfaceOrientation)orientation;
 - (void)setVisible:(BOOL)visible;
 - (void)setVisible:(BOOL)visible keepAlive:(BOOL)keepAlive;
 @property(nonatomic,readonly) BOOL keepAliveRequested;

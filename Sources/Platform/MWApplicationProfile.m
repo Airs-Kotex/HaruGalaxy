@@ -48,6 +48,10 @@ NSDictionary *MWApplicationProfile(NSString *bundle) {
         id fullscreen=MWProfileValue(proxy,@"UIRequiresFullScreen",NSNumber.class);
         result[@"requiresFullScreen"]=[fullscreen isKindOfClass:NSNumber.class] ? fullscreen : @"not_declared";
         id orientations=MWProfileValue(proxy,@"UISupportedInterfaceOrientations",NSArray.class);
+        if(UIDevice.currentDevice.userInterfaceIdiom==UIUserInterfaceIdiomPad) {
+            id ipad=MWProfileValue(proxy,@"UISupportedInterfaceOrientations~ipad",NSArray.class);
+            if([ipad isKindOfClass:NSArray.class] && [ipad count]) orientations=ipad;
+        }
         NSMutableArray *allowed=[NSMutableArray array];
         if([orientations isKindOfClass:NSArray.class]) for(id value in orientations) {
             if(allowed.count>=4) break;

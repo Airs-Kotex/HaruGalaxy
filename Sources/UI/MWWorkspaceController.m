@@ -16,6 +16,7 @@
 #import "../Platform/MWDeviceOrientation.h"
 #import "../Platform/MWBackgroundLease.h"
 #import "../Core/MWGuestPolicy.h"
+#import "../Core/MWOrientationState.h"
 
 @interface MWCanvas : UIView
 @property(nonatomic) BOOL passThrough;
@@ -142,11 +143,15 @@
     [_bubble cancelInteraction];
     [self.view setNeedsLayout];
 }
+- (BOOL)shouldAutorotate { return YES; }
+- (UIInterfaceOrientationMask)supportedInterfaceOrientations {
+    return UIDevice.currentDevice.userInterfaceIdiom==UIUserInterfaceIdiomPad ? UIInterfaceOrientationMaskAll : UIInterfaceOrientationMaskAllButUpsideDown;
+}
 - (void)layoutOrientedCanvas {
     UIInterfaceOrientation host=self.view.window.windowScene.interfaceOrientation;
     if(host==UIInterfaceOrientationUnknown) host=UIInterfaceOrientationPortrait;
-    UIInterfaceOrientation target=_deviceOrientation.orientation ?: host;
-    int turns=MWOrientationQuarterTurns((int)target)-MWOrientationQuarterTurns((int)host);
+    UIInterfaceOrientation target=[_deviceOrientation orientationForHost:host floating:_floating];
+    int turns=MWWorkspaceQuarterTurns((int)host,(int)target);
     CGSize size=self.view.bounds.size;
     if(abs(turns)%2) size=CGSizeMake(size.height,size.width);
     _canvas.bounds=(CGRect){CGPointZero,size};
@@ -196,7 +201,7 @@
 }
 - (void)updateChrome {
     if(!self.isViewLoaded) return;
-    [_deviceOrientation setMotionEnabled:!_hostHidden && _windows.count>0];
+    [_deviceOrientation setTrackingEnabled:!_hostHidden && _windows.count>0];
     self.view.backgroundColor=_floating ? UIColor.clearColor : UIColor.systemGroupedBackgroundColor;
     self.view.opaque=!_floating; self.view.layer.opaque=!_floating;
     _canvas.passThrough=_floating;
@@ -531,7 +536,7 @@
 - (void)setHostVisible:(BOOL)visible {
     MWLog(@"workspace.visibility",@{@"visible":@(visible),@"floating":@(_floating),@"windows":@(_windows.count)});
     _hostHidden=!visible;
-    [_deviceOrientation setMotionEnabled:visible && _windows.count>0];
+    [_deviceOrientation setTrackingEnabled:visible && _windows.count>0];
     if(!visible) { [self cancelNativeOpen]; [_bubble cancelInteraction]; [self closePanel]; }
     for(MWWindowView *window in _windows.allValues) [window setHostVisible:visible && window.superview==_canvas];
 }

@@ -17,6 +17,7 @@
 #import "../Core/MWGuestPolicy.h"
 #import "../Core/MWSceneGeometry.h"
 #import "../Core/MWGuestLaunchGate.h"
+#import "../Core/MWOrientationState.h"
 #import "../Core/MWRuntimeTypes.h"
 #import "../Core/MWNativeHandoff.h"
 #import <objc/runtime.h>
@@ -42,6 +43,23 @@ static id MWSceneForeground(UIApplicationSceneSettings *settings) {
         return @([settings isForeground]);
     } @catch(NSException *exception) { (void)exception; return @"exception"; }
 }
+typedef struct {
+    int orientation;
+    unsigned mask;
+} MWGuestOrientationObservation;
+static MWGuestOrientationObservation MWSceneOrientationObservation(id scene) {
+    // Capture scalars on the callback queue. Re-reading scene.clientSettings
+    // after dispatch could collapse a matching direction and a later exit into
+    // two copies of the exit, leaving the retained mask unconfirmed forever.
+    id client=MWRuntimeObjectValue(scene,@"clientSettings");
+    id orientation=MWRuntimeIntegerValue(client,@"interfaceOrientation");
+    id supported=MWRuntimeIntegerValue(client,@"supportedInterfaceOrientations");
+    return (MWGuestOrientationObservation){
+        .orientation=[orientation isKindOfClass:NSNumber.class] && [orientation integerValue]>=1 && [orientation integerValue]<=4 ?
+            [orientation intValue] : 0,
+        .mask=[supported isKindOfClass:NSNumber.class] ? [supported unsignedIntValue] : 0
+    };
+}
 
 @implementation MWSceneSession {
     FBApplicationProcessLaunchTransaction *_transaction;
@@ -56,6 +74,10 @@ static id MWSceneForeground(UIApplicationSceneSettings *settings) {
     NSUInteger _generation;
     CGSize _size;
     UIInterfaceOrientation _orientation;
+    NSDictionary *_applicationProfile;
+    unsigned _declaredOrientationMask;
+    MWGuestOrientationState _guestOrientationState;
+    int _clientOrientation;
     MWNativeHandoff _nativeHandoff;
     void (^_nativeCompletion)(NSError *);
     BOOL _cleanupFailed;
@@ -80,18 +102,34 @@ static id MWSceneForeground(UIApplicationSceneSettings *settings) {
         _bundleIdentifier=[bundleIdentifier copy];
         _sceneIdentifier=[@"io.github.airskotex.harugalaxy.guest." stringByAppendingString:NSUUID.UUID.UUIDString];
         _visible=YES; _orientation=UIInterfaceOrientationPortrait;
+        _applicationProfile=MWApplicationProfile(bundleIdentifier);
+        NSDictionary *values=@{@"UIInterfaceOrientationPortrait":@1,@"UIInterfaceOrientationPortraitUpsideDown":@2,
+            @"UIInterfaceOrientationLandscapeRight":@3,@"UIInterfaceOrientationLandscapeLeft":@4};
+        for(NSString *name in _applicationProfile[@"declaredOrientations"]) {
+            int direction=[values[name] intValue];
+            if(MWOrientationIsValid(direction)) _declaredOrientationMask|=1u<<direction;
+        }
     }
     return self;
 }
 
 - (UIView *)contentView { return _presenter.presentationView; }
+- (UIInterfaceOrientation)orientationForWorkspace:(UIInterfaceOrientation)orientation {
+    return (UIInterfaceOrientation)MWGuestOrientation((int)orientation,_declaredOrientationMask,_guestOrientationState.retainedMask,
+        _clientOrientation,(int)_orientation);
+}
+- (void)applyGuestOrientationObservation:(MWGuestOrientationObservation)observation {
+    NSAssert(NSThread.isMainThread,@"Guest orientation state is main-thread owned");
+    _clientOrientation=observation.orientation;
+    MWGuestRetainOrientationMask(&_guestOrientationState,observation.mask,_clientOrientation);
+}
 
 - (void)startWithSize:(CGSize)size completion:(void (^)(NSError *))completion {
     NSAssert(NSThread.isMainThread,@"Scene sessions are main-thread owned");
     if(_started || _closed) { completion(MWError(10,@"该窗口会话已结束，请重新打开。")); return; }
     if(MWGuestResetPending(self.bundleIdentifier)) { completion(MWError(73,@"该应用的旧进程尚未结束，请稍后重新打开。")); return; }
     _started=YES; _size=size; _completion=[completion copy];
-    MWLog(@"guest.application_profile",MWApplicationProfile(self.bundleIdentifier));
+    MWLog(@"guest.application_profile",_applicationProfile);
     MWLog(@"guest.launch_requested",@{@"bundle":self.bundleIdentifier,@"scene":self.sceneIdentifier,@"width":@(size.width),@"height":@(size.height)});
     NSString *issue=MWSceneCapabilityIssue();
     if(issue) { [self fail:MWError(11,issue)]; return; }
@@ -240,11 +278,13 @@ static id MWSceneForeground(UIApplicationSceneSettings *settings) {
 }
 - (void)scene:(id)scene didUpdateClientSettingsWithDiff:(id)diff oldClientSettings:(id)old transitionContext:(id)context {
     (void)diff; (void)old; (void)context;
+    MWGuestOrientationObservation observation=MWSceneOrientationObservation(scene);
     __weak typeof(self) weakSelf=self;
     dispatch_async(dispatch_get_main_queue(),^{
         MWSceneSession *session=weakSelf;
         if(session && !session->_closed && session->_scene==scene) {
             [session readGuestInputState];
+            [session applyGuestOrientationObservation:observation];
             if(session.presentationGeometryHandler) session.presentationGeometryHandler();
         }
     });
@@ -261,11 +301,14 @@ static id MWSceneForeground(UIApplicationSceneSettings *settings) {
 }
 - (void)scene:(id)scene clientDidConnect:(id)client {
     (void)client;
+    MWGuestOrientationObservation observation=MWSceneOrientationObservation(scene);
     __weak typeof(self) weakSelf=self;
     dispatch_async(dispatch_get_main_queue(),^{
         MWSceneSession *session=weakSelf;
         if(!session || session->_closed || session->_scene!=scene) return;
         session->_clientConnectionObserved=YES; [session observeRendering:@"client_connected"];
+        [session applyGuestOrientationObservation:observation];
+        if(session.presentationGeometryHandler) session.presentationGeometryHandler();
     });
 }
 - (void)sceneContentStateDidChange:(id)scene {
@@ -360,6 +403,9 @@ static id MWSceneForeground(UIApplicationSceneSettings *settings) {
         @"orientationReported":MWRuntimeIntegerValue(settings,@"interfaceOrientation"),
         @"clientOrientation":MWRuntimeIntegerValue(client,@"interfaceOrientation"),
         @"clientSupportedOrientations":MWRuntimeIntegerValue(client,@"supportedInterfaceOrientations"),
+        @"declaredOrientationMask":@(_declaredOrientationMask),
+        @"retainedClientOrientationMask":@(_guestOrientationState.retainedMask),
+        @"retainedClientOrientationMaskConfirmed":@(_guestOrientationState.maskConfirmed),
         @"render":[self renderDiagnosticSnapshot],
         @"inputLayers":MWSceneLayerSnapshot(_scene,_presenter),
         @"inputEnvironment":_inputEnvironment ? [_inputEnvironment diagnosticSnapshot] : @{@"registered":@NO}} mutableCopy];
@@ -407,6 +453,7 @@ static id MWSceneForeground(UIApplicationSceneSettings *settings) {
 }
 - (void)updateSize:(CGSize)size orientation:(UIInterfaceOrientation)orientation safeAreaInsets:(UIEdgeInsets)insets {
     if(_closed || _nativeCompletion || !isfinite(size.width) || !isfinite(size.height) || size.width<1 || size.height<1) return;
+    UIInterfaceOrientation previous=_orientation;
     _size=size;
     _safeInsets=insets;
     if(orientation!=UIInterfaceOrientationUnknown) _orientation=orientation;
@@ -421,6 +468,14 @@ static id MWSceneForeground(UIApplicationSceneSettings *settings) {
             [self applyDeviceOrientation:settings];
             [self applySafeInsets:settings];
         }];
+        if(previous!=resolved) {
+            id settings=MWRuntimeObjectValue(_scene,@"settings"),client=MWRuntimeObjectValue(_scene,@"clientSettings");
+            MWLog(@"guest.orientation_submitted",@{@"requested":@(resolved),
+                @"settingsReported":MWRuntimeIntegerValue(settings,@"interfaceOrientation"),
+                @"clientReported":MWRuntimeIntegerValue(client,@"interfaceOrientation"),
+                @"clientSupportedOrientations":MWRuntimeIntegerValue(client,@"supportedInterfaceOrientations"),
+                @"note":@"settings submission only; client rendering and touch require device validation"});
+        }
     } @catch(NSException *exception) {
         [self fail:MWError(19,[NSString stringWithFormat:@"更新小窗尺寸失败：%@",exception.reason])];
     }

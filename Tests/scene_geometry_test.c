@@ -16,6 +16,16 @@ int main(void) {
     }
     MWRect observed=MWSceneFrameForInterface((MWRect){0,0,850.92,547.19},3);
     near(observed.width,547.19); near(observed.height,850.92);
+    MWRect constrained=MWGuestCanvasForOrientation((MWRect){0,0,390,844},1,3);
+    near(constrained.width,844); near(constrained.height,390);
+    MWRect constrainedNative=MWSceneFrameForInterface(constrained,3);
+    near(constrainedNative.width,390); near(constrainedNative.height,844);
+    constrained=MWGuestCanvasForOrientation((MWRect){0,0,380,260},1,3);
+    near(constrained.width,380); near(constrained.height,260);
+    constrained=MWGuestCanvasForOrientation((MWRect){0,0,844,390},3,1);
+    near(constrained.width,390); near(constrained.height,844);
+    constrained=MWGuestCanvasForOrientation((MWRect){0,0,380,260},1,1);
+    near(constrained.width,380); near(constrained.height,260); // free resize unchanged
     const MWAffine natives[]={{1,0,0,1,40,70},{0,1,-1,0,768,0},{0,-1,1,0,0,1024},{-1,0,0,-1,1024,768}};
     for(unsigned i=0;i<4;i++) {
         MWAffine inv; assert(MWInvertPresentation(natives[i],&inv));

@@ -7,6 +7,14 @@ MWRect MWSceneFrameForInterface(MWRect logical,int orientation) {
     }
     return logical;
 }
+MWRect MWGuestCanvasForOrientation(MWRect logical,int workspace,int guest) {
+    if(workspace<1 || workspace>4 || guest<1 || guest>4) return logical;
+    bool guestLandscape=guest==3 || guest==4,workspaceLandscape=workspace==3 || workspace==4;
+    if(guestLandscape!=workspaceLandscape && (logical.width>logical.height)!=guestLandscape) {
+        double width=logical.width; logical.width=logical.height; logical.height=width;
+    }
+    return logical;
+}
 bool MWInvertPresentation(MWAffine t,MWAffine *inverse) {
     if(!inverse || !isfinite(t.a) || !isfinite(t.b) || !isfinite(t.c) || !isfinite(t.d) || !isfinite(t.tx) || !isfinite(t.ty)) return false;
     double determinant=t.a*t.d-t.b*t.c;
