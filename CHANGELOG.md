@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.3.11 — Parking, deliberate resize and display compatibility
+
+### Fixed
+
+- Delay proportional resize until14 points of movement, preventing small rail gestures from immediately reshaping a half-screen window. Center conversion and keep the title out of the top system pull-down area.
+- Preserve outer geometry, resize/snap/full-screen state and parking when reopening a window for display-mode changes.
+
+### Added
+
+- A parking icon in the title and panel. Keep the live app as a top-right thumbnail; tap to restore the saved window state.
+- Settings for parked size18%–50% and aspect(original,1:1,4:3,3:4,16:9,9:16). Scale thumbnails without changing the saved app canvas or restore state.
+- Per-app compatibility display: reopen using the native system canvas, then scale it inside the outer window. Ordinary free resizing remains the default.
+- Automatic, bounded client-connection/content-state/layer observations and allowlisted installed-app metadata to investigate blank/image failures.
+
+### Changed
+
+- Move “End window and open original app” into the app row's ellipsis menu, keeping four usable action buttons.
+
+The iPhone12/iOS15.4.1 log confirms presenter creation for870 andTelegram but lacks rendered-content evidence. Compatibility display is a recovery option, not a claim that their device rendering or guest keyboard is fixed. Parking is visual window management, not process suspension or native video PiP.
+
 ## 0.3.10 — Guest edge controls and keyboard capability gating
 
 ### Fixed

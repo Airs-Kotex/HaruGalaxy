@@ -141,5 +141,20 @@ class DiagnosticsReaderTests(unittest.TestCase):
         self.assertIn("synthetic host-window queries",data["interpretation"])
         self.assertEqual(reader.summarize({"schema":1,"logs":{}})["window_touch_pipeline"]["bottom_samples"],[])
 
+    def test_render_observations_preserve_unknown_empty_and_registered_layers(self):
+        events=[("guest.application_profile",{"sceneManifest":"absent","supportsMultipleScenes":"not_declared"}),
+                ("guest.presenter_ready",{"note":"object only"}),
+                ("guest.render_probe",{"render":{"layerCount":"unavailable"}}),
+                ("guest.render_probe",{"render":{"layerCount":0}}),
+                ("guest.render_probe",{"render":{"layerCount":1,"clientConnectionObserved":False}})]
+        text="\n".join(json.dumps({"time":i,"sequence":i,"event":event,"fields":fields,"session":"render-test"})
+                       for i,(event,fields) in enumerate(events))
+        data=reader.summarize({"schema":1,"logs":{"events":text}})["render_pipeline"]
+        self.assertEqual([r["fields"]["render"]["layerCount"] for r in data["recent_events"][2:]],["unavailable",0,1])
+        self.assertEqual(data["counts"]["guest.render_probe"],3)
+        self.assertIn("not a rendered frame",data["interpretation"])
+        self.assertIn("does not prove correct images",data["interpretation"])
+        self.assertEqual(reader.summarize({"schema":1,"logs":{}})["render_pipeline"]["counts"],{})
+
 
 if __name__=="__main__": unittest.main()

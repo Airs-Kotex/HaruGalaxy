@@ -14,10 +14,10 @@
     self.tableView.rowHeight=56;
 }
 - (void)dismiss { [self dismissViewControllerAnimated:YES completion:nil]; }
-- (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView { (void)tableView; return 4; }
-- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section { (void)tableView; return section<2 ? 2 : (section==2 ? 5 : 1); }
+- (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView { (void)tableView; return 5; }
+- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section { (void)tableView; return section<3 ? 2 : (section==3 ? 5 : 1); }
 - (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
-    (void)tableView; return @[@"外观",@"浮动工作区",@"真机诊断",@"关于"][section];
+    (void)tableView; return @[@"外观",@"浮动工作区",@"挂起小窗",@"真机诊断",@"关于"][section];
 }
 - (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
     (void)tableView;
@@ -27,7 +27,8 @@
             (MWFloatingHost.shared.backgroundExecutionValid ? @"系统已批准当前请求" : @"请求未获批准或已失效，请导出诊断"));
         return [NSString stringWithFormat:@"轻点入口打开面板，按住直接拖动到任意位置。松手靠近左右边缘才吸附收起；位于屏幕中间时保持展开。也可开启“入口保持展开”。最小化窗口收进面板。\n后台执行状态：%@。",status];
     }
-    if(section==2) return @"键盘无法出现时，点“采集键盘诊断”后在20秒内返回小窗点击文本框，再导出诊断包。采集包括输入请求、焦点状态、窗口显示状态和接口能力，不记录输入文字、按键或剪贴板。详细日志默认开启，本机滚动保留约8 MiB。";
+    if(section==2) return @"挂起窗口位于右上角，点击缩略窗还原。大小按可用区域短边的比例调整，多窗口时自动缩小以免重叠；外形比例只影响缩略窗，内容保持等比，恢复时仍使用挂起前的位置、尺寸和模式。";
+    if(section==3) return @"键盘无法出现时，点“采集键盘诊断”后在20秒内返回小窗点击文本框，再导出诊断包。采集包括输入请求、焦点状态、窗口显示状态和接口能力，不记录输入文字、按键或剪贴板。详细日志默认开启，本机滚动保留约8 MiB。";
     return [NSString stringWithFormat:@"%@ · TrollStore\n原生应用小窗、边缘收纳、自由与原始比例缩放。系统与应用兼容性见项目说明。",NSBundle.mainBundle.infoDictionary[@"CFBundleShortVersionString"]];
 }
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
@@ -50,6 +51,18 @@
         [toggle addTarget:self action:@selector(toggleChanged:) forControlEvents:UIControlEventValueChanged];
         cell.accessoryView=toggle;
     } else if(indexPath.section==2) {
+        if(indexPath.row==0) {
+            cell.textLabel.text=[NSString stringWithFormat:@"大小 %.0f%%",MWPreferences.shared.parkedSizeFraction*100];
+            UISlider *slider=[[UISlider alloc] initWithFrame:CGRectMake(0,0,150,44)];
+            slider.minimumValue=0.18; slider.maximumValue=0.5; slider.value=MWPreferences.shared.parkedSizeFraction;
+            slider.accessibilityLabel=@"挂起小窗大小";
+            [slider addTarget:self action:@selector(parkedSizeChanged:) forControlEvents:UIControlEventValueChanged]; cell.accessoryView=slider;
+        } else {
+            cell.textLabel.text=@"外形比例";
+            UIButton *button=[UIButton buttonWithType:UIButtonTypeSystem]; button.frame=CGRectMake(0,0,150,44);
+            [self updateParkedRatioButton:button]; cell.accessoryView=button;
+        }
+    } else if(indexPath.section==3) {
         cell.textLabel.text=@[@"详细诊断记录",@"采集键盘诊断（20秒）",@"标记刚发生的问题",@"导出诊断包",@"清空日志"][indexPath.row];
         if(indexPath.row==0) {
             UISwitch *toggle=[UISwitch new]; toggle.on=MWDiagnostics.shared.detailed;
@@ -67,7 +80,7 @@
 - (void)logLevelChanged:(UISwitch *)sender { MWDiagnostics.shared.detailed=sender.on; }
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
-    if(indexPath.section!=2 || indexPath.row==0) return;
+    if(indexPath.section!=3 || indexPath.row==0) return;
     if(indexPath.row==1) {
         [self dismissViewControllerAnimated:YES completion:^{[MWDiagnostics.shared startKeyboardCapture];}];
         return;
@@ -94,6 +107,28 @@
             [self presentViewController:share animated:YES completion:nil];
         }];
     }
+}
+- (void)parkedSizeChanged:(UISlider *)sender {
+    MWPreferences.shared.parkedSizeFraction=sender.value;
+    UITableViewCell *cell=[self.tableView cellForRowAtIndexPath:[NSIndexPath indexPathForRow:0 inSection:2]];
+    cell.textLabel.text=[NSString stringWithFormat:@"大小 %.0f%%",sender.value*100];
+}
+- (void)updateParkedRatioButton:(UIButton *)button {
+    NSArray *ratios=@[@0,@1,@(4.0/3),@(3.0/4),@(16.0/9),@(9.0/16)];
+    NSArray *titles=@[@"跟随原窗口",@"1:1",@"4:3",@"3:4",@"16:9",@"9:16"];
+    NSMutableArray *actions=[NSMutableArray array];
+    __weak typeof(self) weakSelf=self; __weak UIButton *weakButton=button;
+    for(NSUInteger i=0;i<ratios.count;i++) {
+        double ratio=[ratios[i] doubleValue];
+        UIAction *action=[UIAction actionWithTitle:titles[i] image:nil identifier:nil handler:^(__kindof UIAction *item) {
+            (void)item; MWPreferences.shared.parkedAspectRatio=ratio; [weakSelf updateParkedRatioButton:weakButton];
+        }];
+        if(fabs(ratio-MWPreferences.shared.parkedAspectRatio)<0.0001) {
+            action.state=UIMenuElementStateOn; [button setTitle:titles[i] forState:UIControlStateNormal];
+        }
+        [actions addObject:action];
+    }
+    button.menu=[UIMenu menuWithTitle:@"挂起外形比例" children:actions]; button.showsMenuAsPrimaryAction=YES;
 }
 - (void)showDiagnosticMessage:(NSString *)message {
     if(self.presentedViewController || !self.viewIfLoaded.window || self.isBeingDismissed) return;

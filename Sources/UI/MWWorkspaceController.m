@@ -82,6 +82,8 @@
     _panel.openApplicationHandler=^{[weakSelf closePanel]; [weakSelf openPicker];};
     _panel.settingsHandler=^{[weakSelf closePanel]; [weakSelf openSettings];};
     _panel.openOriginalHandler=^(NSString *bundle){[weakSelf openOriginalBundle:bundle];};
+    _panel.compatibleCanvasHandler=^(NSString *bundle,BOOL enabled){[weakSelf reopenBundle:bundle compatibleCanvas:enabled];};
+    _panel.parkHandler=^(NSString *bundle){[weakSelf closePanel]; [weakSelf toggleParkBundle:bundle];};
     _panel.activateHandler=^(NSString *bundle){[weakSelf closePanel]; [weakSelf restoreBundle:bundle];};
     _panel.minimizeHandler=^(NSString *bundle){[weakSelf panelToggleMinimize:bundle];};
     _panel.fullscreenHandler=^(NSString *bundle){[weakSelf closePanel]; [weakSelf toggleFullscreenBundle:bundle];};
@@ -138,6 +140,16 @@
         _viewport=viewport;
         for(MWWindowView *window in _windows.allValues) [window applyViewport:viewport];
     }
+    NSMutableArray<MWWindowView *> *parked=[NSMutableArray array];
+    for(NSString *bundle in _order.reverseObjectEnumerator)
+        if(_windows[bundle].isParked) [parked addObject:_windows[bundle]];
+    CGRect safeBounds=UIEdgeInsetsInsetRect(bounds,safe);
+    for(NSUInteger i=0;i<parked.count;i++) {
+        MWWindowView *window=parked[i];
+        MWRect r=MWParkedRect((MWRect){safeBounds.origin.x,safeBounds.origin.y,safeBounds.size.width,safeBounds.size.height},
+            window.parkedContentRatio,MWPreferences.shared.parkedSizeFraction,MWPreferences.shared.parkedAspectRatio,(unsigned)i,(unsigned)parked.count);
+        [window placeParkedInFrame:CGRectMake(r.x,r.y,r.width,r.height)];
+    }
 }
 - (void)updateChrome {
     if(!self.isViewLoaded) return;
@@ -164,6 +176,7 @@
     if(!_panel.hidden) [_panel updateWindows:windows];
 }
 - (void)raiseControls {
+    for(NSString *bundle in _order) if(_windows[bundle].isParked) [self.view bringSubviewToFront:_windows[bundle]];
     if(!_snapPreview.hidden) [self.view bringSubviewToFront:_snapPreview];
     if(!_panel.hidden) { [self.view bringSubviewToFront:_panelShield]; [self.view bringSubviewToFront:_panel]; }
     [self.view bringSubviewToFront:_bubble];
@@ -196,6 +209,24 @@
     if(_nativeOpeningTarget) return;
     [self restoreBundle:bundle];
     MWWindowView *window=_windows[bundle]; [window toggleMaximize]; [self updateChrome];
+}
+- (void)toggleParkBundle:(NSString *)bundle {
+    if(_nativeOpeningTarget || _hostHidden || MWFloatingHost.shared.isLocked) return;
+    MWWindowView *window=_windows[bundle];
+    if(window.isParked) { [self restoreBundle:bundle]; return; }
+    if(!window || window.model.state!=MWWindowVisible) return;
+    // A loading surface can finish after native-app switching collected it.
+    // Reattach that exact view before asking it to become a visible thumbnail.
+    if(window.superview!=self.view) [self.view addSubview:window];
+    [window setHostVisible:YES];
+    [window park];
+    for(NSString *candidate in [[_order copy] reverseObjectEnumerator]) {
+        MWWindowView *other=_windows[candidate];
+        if(other && other.model.state==MWWindowVisible && !other.hidden && other.superview==self.view) {
+            [self activateBundle:candidate]; break;
+        }
+    }
+    [self updateChrome];
 }
 - (BOOL)hasVisibleFullscreen {
     for(MWWindowView *window in _windows.allValues) if(window.model.maximized && !window.hidden && window.model.state==MWWindowVisible) return YES;
@@ -245,9 +276,9 @@
     __weak typeof(self) weakSelf=self;
     __weak MWWindowView *weakTarget=target;
     [target releaseForOriginalApplication:^(NSError *releaseError) {
-        MWWorkspaceController *controller=weakSelf;
+        MWWorkspaceController *controller=weakSelf; MWWindowView *owned=weakTarget;
         if(!controller || generation!=controller->_nativeOpenGeneration ||
-           !weakTarget || controller->_nativeOpeningTarget!=weakTarget) return;
+           !owned || controller->_nativeOpeningTarget!=owned) return;
         [controller closePanel];
         controller->_nativeOpeningTarget=nil;
         if(controller->_hostHidden || MWFloatingHost.shared.isLocked) return;
@@ -261,7 +292,7 @@
         if(!accepted) {
             // A preflight can fail after another guest's input cleanup. If
             // release never began, keep this exact target instead of losing it.
-            MWWindowView *retained=weakTarget;
+            MWWindowView *retained=owned;
             if(retained && retained.model.state!=MWWindowClosed) {
                 controller->_windows[bundle]=retained;
                 [controller->_order addObject:bundle];
@@ -285,7 +316,42 @@
     if(target) MWLog(@"native_handoff.cancelled",@{@"bundle":target.application.bundleIdentifier});
     [target close];
 }
+- (void)reopenBundle:(NSString *)bundle compatibleCanvas:(BOOL)enabled {
+    MWWindowView *target=_windows[bundle];
+    if(!target || _nativeOpeningTarget || self.presentedViewController || _hostHidden || MWFloatingHost.shared.isLocked) return;
+    NSError *preflight=[target.session originalApplicationHandoffIssue];
+    [self closePanel];
+    if(preflight) { [self showMessage:preflight.localizedDescription]; return; }
+    MWWindowModel savedModel=target.restorableModel;
+    BOOL wasParked=target.isParked;
+    MWRect r=savedModel.maximized ? savedModel.restoreFrame : savedModel.frame;
+    [MWPreferences.shared saveFrame:CGRectMake(r.x,r.y,r.width,r.height) forBundle:bundle viewport:_viewport];
+    [MWPreferences.shared saveResizeMode:target.model.maximized ? target.model.restoreResizeMode : target.model.resizeMode forBundle:bundle];
+    _nativeOpeningTarget=target;
+    NSUInteger generation=++_nativeOpenGeneration;
+    [_windows removeObjectForKey:bundle]; [_order removeObject:bundle];
+    __weak typeof(self) weakSelf=self; __weak MWWindowView *weakTarget=target;
+    [target releaseForOriginalApplication:^(NSError *error) {
+        MWWorkspaceController *controller=weakSelf; MWWindowView *owned=weakTarget;
+        if(!controller || !owned || generation!=controller->_nativeOpenGeneration || controller->_nativeOpeningTarget!=owned) return;
+        [controller closePanel]; controller->_nativeOpeningTarget=nil;
+        if(controller->_hostHidden || MWFloatingHost.shared.isLocked) return;
+        MWLog(@"workspace.compatibility_reopen",@{@"bundle":bundle,@"compatible":@(enabled),@"error":MWErrorFields(error)});
+        if(error) {
+            if(owned.model.state!=MWWindowClosed) {
+                controller->_windows[bundle]=owned; [controller->_order addObject:bundle];
+            }
+            [controller updateChrome]; [controller showMessage:error.localizedDescription]; return;
+        }
+        [MWPreferences.shared saveCompatibleCanvas:enabled forBundle:bundle];
+        [controller openApplication:owned.application restoringModel:&savedModel initiallyParked:wasParked];
+    }];
+    [self updateChrome];
+}
 - (void)openApplication:(MWApplication *)application {
+    [self openApplication:application restoringModel:NULL initiallyParked:NO];
+}
+- (void)openApplication:(MWApplication *)application restoringModel:(const MWWindowModel *)savedModel initiallyParked:(BOOL)parked {
     if(_nativeOpeningTarget) return;
     MWLog(@"workspace.open",@{@"bundle":application.bundleIdentifier,@"floating":@(_floating)});
     MWWindowView *existing=_windows[application.bundleIdentifier];
@@ -300,15 +366,24 @@
     initialViewport.size.height=MAX(1,initialViewport.size.height-self.view.safeAreaInsets.top);
     MWRect placed=MWConstrainRect((MWRect){frame.origin.x,frame.origin.y,frame.size.width,frame.size.height},
         (MWRect){initialViewport.origin.x,initialViewport.origin.y,initialViewport.size.width,initialViewport.size.height});
-    frame=CGRectMake(placed.x,placed.y,placed.width,placed.height);
+    frame=savedModel ? CGRectMake(savedModel->frame.x,savedModel->frame.y,savedModel->frame.width,savedModel->frame.height) :
+        CGRectMake(placed.x,placed.y,placed.width,placed.height);
     MWWindowView *window=[[MWWindowView alloc] initWithApplication:application frame:frame];
+    [window setInitialCompatibleCanvas:[MWPreferences.shared compatibleCanvasForBundle:application.bundleIdentifier]];
+    [window setInitiallyParked:parked];
     [window setInitialResizeMode:[MWPreferences.shared resizeModeForBundle:application.bundleIdentifier]];
+    if(savedModel) {
+        MWWindowModel restored=MWWindowRestoreForLaunch(*savedModel,(MWRect){_viewport.origin.x,_viewport.origin.y,_viewport.size.width,_viewport.size.height});
+        [window setInitialModel:restored];
+    }
     NSString *bundle=application.bundleIdentifier;
     _windows[bundle]=window; [_order addObject:bundle];
     __weak typeof(self) weakSelf=self;
     window.activateHandler=^{[weakSelf activateBundle:bundle];};
     window.closeHandler=^{[weakSelf closeBundle:bundle];};
     window.minimizeHandler=^{[weakSelf minimizeBundle:bundle];};
+    window.parkHandler=^{[weakSelf toggleParkBundle:bundle];};
+    window.restoreHandler=^{[weakSelf restoreBundle:bundle];};
     window.geometryHandler=^(CGRect geometry) {
         MWWorkspaceController *controller=weakSelf;
         if(controller) {
@@ -331,7 +406,7 @@
 - (void)activateBundle:(NSString *)bundle {
     if(_nativeOpeningTarget) return;
     MWWindowView *selected=_windows[bundle];
-    if(!selected || selected.model.state==MWWindowClosed || selected.superview!=self.view) return;
+    if(!selected || selected.model.state==MWWindowClosed || selected.isParked || selected.superview!=self.view) return;
     for(MWWindowView *window in _windows.allValues) window.active=(window==selected);
     [self.view bringSubviewToFront:selected];
     [_order removeObject:bundle]; [_order addObject:bundle];

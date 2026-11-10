@@ -9,6 +9,7 @@
 #import "MWKeyboardFocus.h"
 #import "MWSceneInputEnvironment.h"
 #import "MWRuntimeDiagnostics.h"
+#import "MWApplicationProfile.h"
 #import "../Core/MWRuntimeTypes.h"
 #import "../Core/MWNativeHandoff.h"
 #import <objc/runtime.h>
@@ -53,6 +54,9 @@ static id MWSceneForeground(UIApplicationSceneSettings *settings) {
     BOOL _cleanupFailed;
     UIEdgeInsets _safeInsets;
     BOOL _diagnosticCapabilitiesRecorded;
+    BOOL _clientConnectionObserved;
+    NSUInteger _renderEventCount;
+    NSDictionary *_lastRenderSnapshot;
 }
 
 - (instancetype)initWithBundleIdentifier:(NSString *)bundleIdentifier {
@@ -70,6 +74,7 @@ static id MWSceneForeground(UIApplicationSceneSettings *settings) {
     NSAssert(NSThread.isMainThread,@"Scene sessions are main-thread owned");
     if(_started || _closed) { completion(MWError(10,@"该窗口会话已结束，请重新打开。")); return; }
     _started=YES; _size=size; _completion=[completion copy];
+    MWLog(@"guest.application_profile",MWApplicationProfile(self.bundleIdentifier));
     MWLog(@"guest.launch_requested",@{@"bundle":self.bundleIdentifier,@"scene":self.sceneIdentifier,@"width":@(size.width),@"height":@(size.height)});
     NSString *issue=MWSceneCapabilityIssue();
     if(issue) { [self fail:MWError(11,issue)]; return; }
@@ -145,6 +150,16 @@ static id MWSceneForeground(UIApplicationSceneSettings *settings) {
         _transaction=nil;
         void (^completion)(NSError *)=_completion; _completion=nil;
         if(completion) completion(nil);
+        [self observeRendering:@"presenter_attached"];
+        NSUInteger renderGeneration=_generation;
+        __weak typeof(self) renderSelf=self;
+        for(NSNumber *delay in @[@0.5,@2.0,@6.0,@12.0]) {
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(delay.doubleValue*NSEC_PER_SEC)),dispatch_get_main_queue(),^{
+                MWSceneSession *session=renderSelf;
+                if(session && !session->_closed && !session->_nativeCompletion && session->_generation==renderGeneration)
+                    [session observeRendering:[NSString stringWithFormat:@"after_%g",delay.doubleValue]];
+            });
+        }
         [self readGuestInputState];
         if(!_closed) [self startMonitoring];
     } @catch(NSException *exception) {
@@ -170,6 +185,52 @@ static id MWSceneForeground(UIApplicationSceneSettings *settings) {
         MWSceneSession *session=weakSelf;
         if(session && !session->_closed && session->_scene==scene) [session readGuestInputState];
     });
+}
+- (void)scene:(id)scene clientDidConnect:(id)client {
+    (void)client;
+    __weak typeof(self) weakSelf=self;
+    dispatch_async(dispatch_get_main_queue(),^{
+        MWSceneSession *session=weakSelf;
+        if(!session || session->_closed || session->_scene!=scene) return;
+        session->_clientConnectionObserved=YES; [session observeRendering:@"client_connected"];
+    });
+}
+- (void)sceneContentStateDidChange:(id)scene {
+    __weak typeof(self) weakSelf=self;
+    dispatch_async(dispatch_get_main_queue(),^{
+        MWSceneSession *session=weakSelf;
+        if(session && !session->_closed && session->_scene==scene && !session->_nativeCompletion)
+            [session observeRendering:@"content_state_changed"];
+    });
+}
+- (NSDictionary *)renderDiagnosticSnapshot {
+    id manager=MWRuntimeObjectValue(_scene,@"layerManager");
+    id layers=MWRuntimeObjectValue(manager,@"layers");
+    NSArray *list=[layers isKindOfClass:NSOrderedSet.class] ? [layers array] :
+        ([layers isKindOfClass:NSSet.class] ? [layers allObjects] : ([layers isKindOfClass:NSArray.class] ? layers : nil));
+    NSUInteger nonKeyboard=0; BOOL typesKnown=list.count<=64;
+    for(id layer in list) {
+        if(!typesKnown) break;
+        id keyboard=MWRuntimeBoolValue(layer,@"isKeyboardLayer");
+        id proxy=MWRuntimeBoolValue(layer,@"isKeyboardProxyLayer");
+        if(![keyboard isKindOfClass:NSNumber.class] || ![proxy isKindOfClass:NSNumber.class]) { typesKnown=NO; break; }
+        if(![keyboard boolValue] && ![proxy boolValue]) nonKeyboard++;
+    }
+    return @{@"sceneValid":MWRuntimeBoolValue(_scene,@"isValid"),@"legacyScene":MWRuntimeBoolValue(_scene,@"_isLegacy"),
+        @"contentState":MWRuntimeIntegerValue(_scene,@"contentState"),@"clientConnectionObserved":@(_clientConnectionObserved),
+        @"layerCount":list ? @(list.count) : @"unavailable",
+        @"nonKeyboardLayerCount":list && typesKnown ? @(nonKeyboard) : @"unavailable",
+        @"presenterActive":MWRuntimeBoolValue(_presenter,@"isActive"),@"presenterHosting":MWRuntimeBoolValue(_presenter,@"isHosting"),
+        @"foreground":MWSceneForeground(MWRuntimeObjectValue(_scene,@"settings")),@"visibleRequested":@(_visible),
+        @"width":@(_size.width),@"height":@(_size.height)};
+}
+- (void)observeRendering:(NSString *)reason {
+    if(_closed || !_scene || _renderEventCount>=24) return;
+    NSDictionary *snapshot=[self renderDiagnosticSnapshot];
+    if([reason isEqual:@"content_state_changed"] && [snapshot isEqual:_lastRenderSnapshot]) return;
+    _lastRenderSnapshot=snapshot; _renderEventCount++;
+    MWLog(@"guest.render_probe",@{@"bundle":self.bundleIdentifier,@"scene":self.sceneIdentifier,@"reason":reason,
+        @"ordinal":@(_renderEventCount),@"render":snapshot,@"meaning":@"layer_registration_only_not_pixels"});
 }
 - (void)readGuestInputState {
     if(_closed || !_scene) return;
@@ -205,6 +266,7 @@ static id MWSceneForeground(UIApplicationSceneSettings *settings) {
         @"presenterActive":MWRuntimeBoolValue(_presenter,@"isActive"),@"presenterHosting":MWRuntimeBoolValue(_presenter,@"isHosting"),
         @"safeAreaRequested":@[@(_safeInsets.top),@(_safeInsets.left),@(_safeInsets.bottom),@(_safeInsets.right)],
         @"safeAreaReported":MWRuntimeInsetsValue(settings,safeSelector),@"orientation":@(_orientation),
+        @"render":[self renderDiagnosticSnapshot],
         @"inputEnvironment":_inputEnvironment ? [_inputEnvironment diagnosticSnapshot] : @{@"registered":@NO}} mutableCopy];
     if(capabilities || (!_diagnosticCapabilitiesRecorded && _scene)) {
         _diagnosticCapabilitiesRecorded=(_scene!=nil);

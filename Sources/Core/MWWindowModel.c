@@ -19,6 +19,10 @@ MWInsets MWGuestSafeInsets(MWRect r,MWRect s,double w,double h) {
     double right=clamp(r.x+r.width-s.x-s.width,0,r.width-left);
     return (MWInsets){top*h/r.height,left*w/r.width,bottom*h/r.height,right*w/r.width};
 }
+MWRect MWGuestCanvas(MWRect available,MWRect systemCanvas,bool proportional,bool maximized,bool compatible) {
+    MWRect result=safe_viewport(compatible || (proportional && !maximized) ? systemCanvas : available);
+    result.x=0; result.y=0; return result;
+}
 
 MWRect MWConstrainRect(MWRect r, MWRect viewport) {
     MWRect v=safe_viewport(viewport);
@@ -191,6 +195,43 @@ bool MWWindowSnap(MWWindowModel *m,MWSnapTarget target,MWRect viewport) {
 }
 
 static double safe_ratio(double r) { return isfinite(r) && r>0.01 && r<100 ? r : 0.5; }
+bool MWResizeDragActivated(double dx,double dy) {
+    return isfinite(dx) && isfinite(dy) && hypot(dx,dy)>=14;
+}
+MWRect MWProportionalViewport(MWRect viewport,double safeTop) {
+    MWRect v=safe_viewport(viewport);
+    double inset=clamp(finite_or(safeTop,0),0,fmax(0,v.height-MWWindowChromeHeight-1));
+    v.y+=inset; v.height-=inset; return v;
+}
+MWRect MWBeginProportionalResize(MWRect start,MWRect viewport,double ratio,double safeTop) {
+    MWRect usable=MWProportionalViewport(viewport,safeTop);
+    MWRect fit=MWFitAspectRect(start,usable,ratio);
+    fit.x=start.x+(start.width-fit.width)/2;
+    fit.y=start.y+(start.height-fit.height)/2;
+    return MWFitAspectRect(fit,usable,ratio);
+}
+MWWindowModel MWWindowRestoreForLaunch(MWWindowModel saved,MWRect viewport) {
+    saved.state=MWWindowLoading; MWWindowReflow(&saved,viewport); return saved;
+}
+bool MWWindowPark(MWWindowModel *m,MWWindowParking *p) {
+    if(!m || !p || p->parked || m->state!=MWWindowVisible) return false;
+    p->saved=*m; p->parked=true; m->state=MWWindowParked; return true;
+}
+bool MWWindowUnpark(MWWindowModel *m,MWWindowParking *p,MWRect viewport) {
+    if(!m || !p || !p->parked || m->state!=MWWindowParked) return false;
+    *m=p->saved; p->parked=false; MWWindowReflow(m,viewport); return true;
+}
+MWRect MWParkedRect(MWRect viewport,double contentRatio,double sizeFraction,double chosenRatio,unsigned slot,unsigned count) {
+    MWRect v=safe_viewport(viewport);
+    count=count<1 ? 1 : (count>4 ? 4 : count); if(slot>=count) slot=count-1;
+    double margin=fmin(8,fmin(v.width,v.height)/(2*(count+1)));
+    double side=fmin(v.width,v.height)*clamp(finite_or(sizeFraction,0.36),0.18,0.5);
+    double slotHeight=(v.height-margin*(count+1))/count;
+    double maxWidth=fmin(side,v.width-2*margin),maxHeight=fmin(side,slotHeight);
+    double ratio=safe_ratio(isfinite(chosenRatio) && chosenRatio>0 ? chosenRatio : contentRatio);
+    double width=fmin(maxWidth,maxHeight*ratio),height=width/ratio;
+    return (MWRect){v.x+v.width-margin-width,v.y+margin+slot*(maxHeight+margin),width,height};
+}
 MWRect MWFitAspectRect(MWRect r, MWRect viewport, double ratio) {
     MWRect v=safe_viewport(viewport); ratio=safe_ratio(ratio);
     if(v.height<=MWWindowChromeHeight+1) return v; // No positive content height can fit.

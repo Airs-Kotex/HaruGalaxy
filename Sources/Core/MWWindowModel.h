@@ -10,7 +10,7 @@ typedef struct { double x, y, width, height; } MWRect;
 #define MWEdgeTouchWidth 56.0
 #define MWEdgeTouchHeight 76.0
 #define MWCornerTouchSize 28.0
-typedef enum { MWWindowLoading, MWWindowVisible, MWWindowMinimized, MWWindowFailed, MWWindowClosed } MWWindowState;
+typedef enum { MWWindowLoading, MWWindowVisible, MWWindowMinimized, MWWindowFailed, MWWindowClosed, MWWindowParked } MWWindowState;
 typedef enum { MWEventReady, MWEventFailed, MWEventRetry, MWEventMinimize, MWEventRestore, MWEventClose } MWWindowEvent;
 typedef enum { MWResizeFree, MWResizeProportional } MWResizeMode;
 typedef enum { MWSnapNone, MWSnapTop, MWSnapBottom, MWSnapLeft, MWSnapRight } MWSnapTarget;
@@ -22,6 +22,7 @@ typedef struct {
     MWResizeMode resizeMode, restoreResizeMode;
     MWSnapTarget snapTarget, restoreSnapTarget;
 } MWWindowModel;
+typedef struct { bool parked; MWWindowModel saved; } MWWindowParking;
 
 MWWindowModel MWWindowCreate(MWRect frame);
 MWRect MWConstrainRect(MWRect rect, MWRect viewport);
@@ -53,4 +54,12 @@ typedef struct { double scale, x, y; } MWContentTransform;
 MWContentTransform MWFitContent(double logicalWidth, double logicalHeight, double availableWidth, double availableHeight);
 typedef struct { double top,left,bottom,right; } MWInsets;
 MWInsets MWGuestSafeInsets(MWRect rendered,MWRect safeRect,double logicalWidth,double logicalHeight);
+MWRect MWGuestCanvas(MWRect available,MWRect systemCanvas,bool proportional,bool maximized,bool compatible);
+bool MWResizeDragActivated(double dx,double dy);
+MWRect MWProportionalViewport(MWRect viewport,double safeTop);
+MWRect MWBeginProportionalResize(MWRect start,MWRect viewport,double ratio,double safeTop);
+MWWindowModel MWWindowRestoreForLaunch(MWWindowModel saved,MWRect viewport);
+bool MWWindowPark(MWWindowModel *model,MWWindowParking *parking);
+bool MWWindowUnpark(MWWindowModel *model,MWWindowParking *parking,MWRect viewport);
+MWRect MWParkedRect(MWRect viewport,double contentRatio,double sizeFraction,double chosenRatio,unsigned slot,unsigned count);
 #endif

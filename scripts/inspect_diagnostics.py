@@ -105,6 +105,18 @@ def summarize(bundle):
             "prove guest or WindowServer routing. railOverlapsContent checks model rectangles. Absent delivery "
             "does not prove a blocked tap. Compare selected-window safeInsets and guest safeAreaRequested; "
             "zero safe area can expose controls to system edge gestures. Never mix separate sessions when attributing a symptom.")}
+    render_events = [row for row in records if row["event"] in
+                     ("guest.application_profile", "guest.render_probe", "guest.presenter_ready", "workspace.compatibility_reopen")]
+    render_stages = {
+        "counts": dict(sorted(Counter(row["event"] for row in render_events).items())),
+        "recent_events": render_events[-80:],
+        "interpretation": (
+            "presenter_ready establishes a presenter object, not a rendered frame. render_probe records scene "
+            "connection observations and registered layers, never pixel contents. layerCount=0 differs from "
+            "unavailable; a positive count does not prove correct images or media loading. Missing client-connect "
+            "callbacks may reflect observer timing. application_profile describes the installed app's declared "
+            "scene manifest/version; absent multiple-scene declarations are not proof that hosting is impossible. "
+            "Compatibility mode keeps system canvas dimensions and restarts only the selected hosted window.")}
     board_trace = [row for row in records if row["event"].startswith("input_board.")]
     board_stages = {
         "counts": dict(sorted(Counter(row["event"] for row in board_trace).items())),
@@ -135,6 +147,7 @@ def summarize(bundle):
             "keyboard_pipeline": keyboard_stages,
             "keyboard_capture": capture_stages,
             "window_touch_pipeline": touch_stages,
+            "render_pipeline": render_stages,
             "input_board_pipeline": board_stages,
             "native_handoff_pipeline": native_stages,
             "interpretation": "A heartbeat gap is an observation, not proof of a crash. Assertion valid is not proof of rendering or input."}

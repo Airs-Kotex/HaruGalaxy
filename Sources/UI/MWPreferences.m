@@ -4,6 +4,39 @@
 NSString *const MWPreferencesDidChangeNotification=@"MWPreferencesDidChange";
 
 @implementation MWPreferences
+- (double)parkedSizeFraction {
+    id value=[NSUserDefaults.standardUserDefaults objectForKey:@"parkedSizeFraction"];
+    double size=[value isKindOfClass:NSNumber.class] ? [value doubleValue] : 0.36;
+    return isfinite(size) ? MIN(0.5,MAX(0.18,size)) : 0.36;
+}
+- (void)setParkedSizeFraction:(double)value {
+    if(!isfinite(value)) return;
+    [NSUserDefaults.standardUserDefaults setDouble:MIN(0.5,MAX(0.18,value)) forKey:@"parkedSizeFraction"];
+    [[NSNotificationCenter defaultCenter] postNotificationName:MWPreferencesDidChangeNotification object:self];
+}
+- (double)parkedAspectRatio {
+    double value=[NSUserDefaults.standardUserDefaults doubleForKey:@"parkedAspectRatio"];
+    for(NSNumber *ratio in @[@0,@1,@(4.0/3),@(3.0/4),@(16.0/9),@(9.0/16)])
+        if(fabs(value-ratio.doubleValue)<0.0001) return ratio.doubleValue;
+    return 0;
+}
+- (void)setParkedAspectRatio:(double)value {
+    for(NSNumber *ratio in @[@0,@1,@(4.0/3),@(3.0/4),@(16.0/9),@(9.0/16)]) if(fabs(value-ratio.doubleValue)<0.0001) {
+        [NSUserDefaults.standardUserDefaults setDouble:ratio.doubleValue forKey:@"parkedAspectRatio"];
+        [[NSNotificationCenter defaultCenter] postNotificationName:MWPreferencesDidChangeNotification object:self]; return;
+    }
+}
+- (BOOL)compatibleCanvasForBundle:(NSString *)bundle {
+    id value=[NSUserDefaults.standardUserDefaults dictionaryForKey:@"compatibleCanvases"][bundle];
+    return [value isKindOfClass:NSNumber.class] && [value boolValue];
+}
+- (void)saveCompatibleCanvas:(BOOL)enabled forBundle:(NSString *)bundle {
+    if(!bundle.length) return;
+    NSMutableDictionary *values=[[NSUserDefaults.standardUserDefaults dictionaryForKey:@"compatibleCanvases"] mutableCopy] ?: [NSMutableDictionary dictionary];
+    if(values.count>=50 && !values[bundle]) [values removeAllObjects];
+    if(enabled) values[bundle]=@YES; else [values removeObjectForKey:bundle];
+    [NSUserDefaults.standardUserDefaults setObject:values forKey:@"compatibleCanvases"];
+}
 - (MWResizeMode)resizeModeForBundle:(NSString *)bundle {
     NSNumber *value=[NSUserDefaults.standardUserDefaults dictionaryForKey:@"windowResizeModes"][bundle];
     return [value isKindOfClass:NSNumber.class] && value.integerValue==MWResizeProportional ? MWResizeProportional : MWResizeFree;

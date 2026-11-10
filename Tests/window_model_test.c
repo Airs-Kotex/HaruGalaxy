@@ -258,9 +258,85 @@ static void guest_safe_insets(void) {
     i=MWGuestSafeInsets((MWRect){NAN,0,430,932},safe,430,932);
     assert(i.top==0 && i.bottom==0);
 }
+static void compatible_guest_canvas(void) {
+    MWRect native={0,0,390,844},tiny={0,0,390,164};
+    // Device evidence: a saved200pt window launched only164pt of App content.
+    equal_rect(MWGuestCanvas(tiny,native,false,false,false),tiny);
+    equal_rect(MWGuestCanvas(tiny,native,false,false,true),native);
+    equal_rect(MWGuestCanvas(tiny,native,true,false,false),native);
+    equal_rect(MWGuestCanvas(tiny,native,true,true,false),tiny);
+    equal_rect(MWGuestCanvas(tiny,native,false,true,true),native);
+    MWRect landscape={0,0,844,390};
+    equal_rect(MWGuestCanvas(tiny,landscape,false,false,true),landscape);
+    for(int w=220;w<=390;w+=17) for(int h=164;h<=844;h+=29) {
+        MWRect fixed=MWGuestCanvas((MWRect){0,0,w,h},native,false,false,true);
+        equal_rect(fixed,native);
+        MWContentTransform t=MWFitContent(fixed.width,fixed.height,w,h);
+        assert(t.scale>0 && t.x>=-0.00001 && t.y>=-0.00001);
+        assert(t.x+fixed.width*t.scale<=w+0.00001 && t.y+fixed.height*t.scale<=h+0.00001);
+    }
+}
+static void deliberate_resize_and_layout_restore(void) {
+    assert(!MWResizeDragActivated(0,0) && !MWResizeDragActivated(5,5) && !MWResizeDragActivated(13,0));
+    assert(MWResizeDragActivated(14,0) && MWResizeDragActivated(0,-14));
+    assert(!MWResizeDragActivated(NAN,10));
+    MWRect viewport={0,0,430,932},half={0,0,430,466};
+    MWRect r=MWBeginProportionalResize(half,viewport,430.0/932,59);
+    assert(r.y>=59 && fabs(r.width/(r.height-MWWindowChromeHeight)-430.0/932)<0.00001);
+    assert(fabs(r.x-(430-r.width)/2)<0.001); // Do not pin the smaller result to the left.
+    MWWindowModel m=MWWindowCreate((MWRect){20,10,300,500}); MWWindowApply(&m,MWEventReady);
+    MWWindowModel next=MWWindowRestoreForLaunch(m,viewport);
+    equal_rect(next.frame,m.frame); assert(next.state==MWWindowLoading && next.resizeMode==m.resizeMode);
+    MWWindowSnap(&m,MWSnapBottom,viewport);
+    next=MWWindowRestoreForLaunch(m,viewport);
+    assert(next.snapTarget==MWSnapBottom); equal_rect(next.frame,m.frame);
+    MWWindowToggleMaximize(&m,viewport); next=MWWindowRestoreForLaunch(m,viewport);
+    assert(next.maximized && next.restoreSnapTarget==MWSnapBottom); equal_rect(next.restoreFrame,m.restoreFrame);
+}
+static void parked_roundtrip_and_placement(void) {
+    MWRect viewport={0,0,430,932}; MWWindowModel m=MWWindowCreate((MWRect){20,100,300,500});
+    MWWindowParking p={0}; assert(!MWWindowPark(&m,&p));
+    MWWindowApply(&m,MWEventReady); MWWindowModel saved=m;
+    assert(MWWindowPark(&m,&p) && m.state==MWWindowParked);
+    assert(!MWWindowPark(&m,&p));
+    assert(MWWindowUnpark(&m,&p,viewport)); equal_rect(m.frame,saved.frame);
+    assert(m.resizeMode==saved.resizeMode && m.aspectRatio==saved.aspectRatio);
+    MWWindowSnap(&m,MWSnapTop,viewport); saved=m;
+    assert(MWWindowPark(&m,&p) && MWWindowUnpark(&m,&p,viewport));
+    assert(m.snapTarget==saved.snapTarget); equal_rect(m.frame,saved.frame);
+    MWWindowToggleMaximize(&m,viewport); saved=m;
+    assert(MWWindowPark(&m,&p) && MWWindowUnpark(&m,&p,viewport));
+    assert(m.maximized && m.restoreSnapTarget==saved.restoreSnapTarget); equal_rect(m.restoreFrame,saved.restoreFrame);
+    assert(MWWindowPark(&m,&p)); MWWindowApply(&m,MWEventClose);
+    assert(!MWWindowUnpark(&m,&p,viewport)); // A thumbnail cannot revive a closed session.
+    m=MWWindowCreate((MWRect){20,70,260,600}); p=(MWWindowParking){0};
+    MWWindowApply(&m,MWEventReady); m.resizeMode=MWResizeProportional; m.aspectRatio=430.0/932;
+    MWWindowReflow(&m,viewport); saved=m; assert(MWWindowPark(&m,&p));
+    MWRect thumbnail=MWParkedRect((MWRect){0,59,430,839},m.aspectRatio,0.5,16.0/9,0,1);
+    assert(fabs(thumbnail.width/thumbnail.height-16.0/9)<0.00001);
+    assert(MWWindowUnpark(&m,&p,viewport)); equal_rect(m.frame,saved.frame);
+    assert(m.resizeMode==MWResizeProportional && m.aspectRatio==saved.aspectRatio);
+    assert(MWWindowPark(&m,&p));
+    assert(MWWindowUnpark(&m,&p,(MWRect){0,0,932,430}));
+    assert(m.frame.x>=0 && m.frame.y>=0 && m.frame.x+m.frame.width<=932.001 && m.frame.y+m.frame.height<=430.001);
+    const MWRect areas[]={{0,59,430,839},{44,0,844,409},{0,20,320,548},{0,0,28,40}};
+    const double aspects[]={0,1,4.0/3,3.0/4,16.0/9,9.0/16};
+    for(unsigned a=0;a<4;a++) for(unsigned count=1;count<=4;count++)
+        for(unsigned ratio=0;ratio<6;ratio++) for(unsigned slot=0;slot<count;slot++) {
+            MWRect r=MWParkedRect(areas[a],430.0/932,0.36,aspects[ratio],slot,count);
+            assert(r.width>0 && r.height>0 && r.x>=areas[a].x && r.y>=areas[a].y);
+            assert(r.x+r.width<=areas[a].x+areas[a].width+0.001 && r.y+r.height<=areas[a].y+areas[a].height+0.001);
+            double expected=aspects[ratio]>0 ? aspects[ratio] : 430.0/932;
+            assert(fabs(r.width/r.height-expected)<0.00001);
+            if(slot>0) {
+                MWRect previous=MWParkedRect(areas[a],430.0/932,0.36,aspects[ratio],slot-1,count);
+                assert(r.y>=previous.y+previous.height);
+            }
+        }
+}
 
 int main(void) {
-    lifecycle(); bounds(); maximize_restore(); proportional_scaling(); free_resize_and_snap(); original_canvas_and_reachable_snap(); free_entry_placement(); isolated_resize_rail(); guest_safe_insets();
+    lifecycle(); bounds(); maximize_restore(); proportional_scaling(); free_resize_and_snap(); original_canvas_and_reachable_snap(); free_entry_placement(); isolated_resize_rail(); guest_safe_insets(); compatible_guest_canvas(); deliberate_resize_and_layout_restore(); parked_roundtrip_and_placement();
     puts("PASS: lifecycle, free/proportional resize, full/half-screen, top inset continuity, rotation and edge handle");
     return 0;
 }

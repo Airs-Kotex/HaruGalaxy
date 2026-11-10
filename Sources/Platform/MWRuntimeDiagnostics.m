@@ -47,6 +47,16 @@ id MWRuntimeInsetsValue(id object,NSString *name) {
         return @[@(insets.top),@(insets.left),@(insets.bottom),@(insets.right)];
     } @catch(NSException *exception) { (void)exception; return @"exception"; }
 }
+id MWRuntimeIntegerValue(id object,NSString *name) {
+    @try {
+        SEL selector=NSSelectorFromString(name);
+        if(MWDiagnosticGetter(object,selector,'q')) return @(((long long(*)(id,SEL))objc_msgSend)(object,selector));
+        if(MWDiagnosticGetter(object,selector,'Q')) return @(((unsigned long long(*)(id,SEL))objc_msgSend)(object,selector));
+        if(MWDiagnosticGetter(object,selector,'i')) return @(((int(*)(id,SEL))objc_msgSend)(object,selector));
+        if(MWDiagnosticGetter(object,selector,'I')) return @(((unsigned int(*)(id,SEL))objc_msgSend)(object,selector));
+        return @"unavailable";
+    } @catch(NSException *exception) { (void)exception; return @"exception"; }
+}
 NSDictionary *MWDiagnosticWindow(UIWindow *window) {
     if(!window) return @{@"present":@NO};
     return @{@"present":@YES,@"class":NSStringFromClass(window.class),@"hidden":@(window.hidden),@"alpha":@(window.alpha),

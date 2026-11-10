@@ -24,7 +24,9 @@ static NSArray *MWRectFields(CGRect r) { return @[@(r.origin.x),@(r.origin.y),@(
     UIView *_surface, *_content;
     MWGlassSurface *_bar, *_inputRail;
     UILabel *_title, *_message;
-    UIButton *_minimize, *_maximize, *_retry;
+    UIButton *_minimize, *_maximize, *_retry, *_parkButton;
+    UIControl *_parkedShield;
+    UIImageView *_restoreMark;
     MWCornerHandle *_resize, *_freeResize;
     UIActivityIndicatorView *_spinner;
     MWWindowModel _model;
@@ -50,6 +52,10 @@ static NSArray *MWRectFields(CGRect r) { return @[@(r.origin.x),@(r.origin.y),@(
     UIEdgeInsets _lastSafeInsets;
     uint64_t _touchCapture;
     NSUInteger _touchRecords;
+    MWWindowParking _parking;
+    CGSize _parkedLogicalSize;
+    BOOL _resizeActivated;
+    BOOL _parkWhenReady;
 }
 @synthesize model=_model;
 
@@ -78,6 +84,7 @@ static NSArray *MWRectFields(CGRect r) { return @[@(r.origin.x),@(r.origin.y),@(
         [self button:@"xmark" label:@"关闭小窗" color:UIColor.systemRedColor action:@selector(requestClose) x:0];
         _minimize=[self button:@"minus" label:@"最小化" color:UIColor.systemOrangeColor action:@selector(requestMinimize) x:28];
         _maximize=[self button:@"arrow.up.left.and.arrow.down.right" label:@"最大化或恢复" color:UIColor.systemGreenColor action:@selector(toggleMaximize) x:56];
+        _parkButton=[self button:@"pip.enter" label:@"挂起到右上角小窗" color:UIColor.systemBlueColor action:@selector(requestPark) x:84];
         _spinner=[[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleMedium];
         [_content addSubview:_spinner];
         _message=[UILabel new]; _message.numberOfLines=0; _message.textAlignment=NSTextAlignmentCenter;
@@ -99,6 +106,14 @@ static NSArray *MWRectFields(CGRect r) { return @[@(r.origin.x),@(r.origin.y),@(
         [_resize addGestureRecognizer:resize];
         UIPanGestureRecognizer *freeResize=[[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(resize:)];
         freeResize.maximumNumberOfTouches=1; freeResize.delegate=self; [_freeResize addGestureRecognizer:freeResize];
+        _parkedShield=[UIControl new]; _parkedShield.hidden=YES;
+        _parkedShield.backgroundColor=[UIColor.blackColor colorWithAlphaComponent:0.02];
+        _parkedShield.accessibilityLabel=@"还原挂起窗口"; _parkedShield.accessibilityTraits=UIAccessibilityTraitButton;
+        [_parkedShield addTarget:self action:@selector(requestRestore) forControlEvents:UIControlEventTouchUpInside];
+        [self addSubview:_parkedShield];
+        _restoreMark=[[UIImageView alloc] initWithImage:[UIImage systemImageNamed:@"pip.exit"]];
+        _restoreMark.tintColor=UIColor.whiteColor; _restoreMark.backgroundColor=[UIColor.blackColor colorWithAlphaComponent:0.35];
+        _restoreMark.layer.cornerRadius=4; [_parkedShield addSubview:_restoreMark];
         [self setActive:YES]; [self updateStatus:nil];
     }
     return self;
@@ -114,20 +129,24 @@ static NSArray *MWRectFields(CGRect r) { return @[@(r.origin.x),@(r.origin.y),@(
     [super layoutSubviews];
     _surface.frame=self.bounds;
     CGFloat titleInset=0;
-    if(_model.snapTarget==MWSnapTop && !_model.maximized)
+    if(!_model.maximized && !self.isParked)
         titleInset=MAX(0,self.window.safeAreaInsets.top-self.frame.origin.y);
-    _surface.layer.cornerRadius=_model.maximized ? 0 : 18;
-    _surface.layer.borderWidth=_model.maximized ? 0 : 1;
-    _bar.hidden=_model.maximized;
+    BOOL full=_model.maximized && !self.isParked;
+    _surface.layer.cornerRadius=full ? 0 : (self.isParked ? 12 : 18);
+    _surface.layer.borderWidth=full ? 0 : 1;
+    _bar.hidden=full || self.isParked;
     CGFloat leading=MAX(0,self.window.safeAreaInsets.left-self.frame.origin.x);
     CGFloat trailing=MAX(0,CGRectGetMaxX(self.frame)-(CGRectGetMaxX(_viewport)-self.window.safeAreaInsets.right));
     _bar.frame=CGRectMake(leading,titleInset,MAX(1,self.bounds.size.width-leading-trailing),MWTitleHeight);
-    _title.frame=CGRectMake(92,0,MAX(0,_bar.bounds.size.width-96-MWCornerTouchSize),MWTitleHeight);
-    _content.frame=MWToCGRect(MWWindowContentRect(MWFromCGRect(self.bounds),titleInset,_model.maximized));
-    _inputRail.frame=MWToCGRect(MWWindowRailRect(MWFromCGRect(self.bounds),_model.maximized));
-    _inputRail.hidden=_model.maximized || _model.state!=MWWindowVisible;
-    if(_model.maximized || _model.resizeMode==MWResizeFree) _logicalSize=_content.bounds.size;
-    else _logicalSize=_proportionalSize;
+    _title.frame=CGRectMake(120,0,MAX(0,_bar.bounds.size.width-124-MWCornerTouchSize),MWTitleHeight);
+    _content.frame=MWToCGRect(MWWindowContentRect(MWFromCGRect(self.bounds),titleInset,full || self.isParked));
+    _inputRail.frame=MWToCGRect(MWWindowRailRect(MWFromCGRect(self.bounds),full || self.isParked));
+    _inputRail.hidden=full || _model.state!=MWWindowVisible;
+    CGSize systemSize=_compatibleCanvas ? [self systemCanvasSize] : _proportionalSize;
+    MWRect canvas=MWGuestCanvas(MWFromCGRect(_content.bounds),(MWRect){0,0,systemSize.width,systemSize.height},
+        _model.resizeMode==MWResizeProportional,_model.maximized,_compatibleCanvas);
+    _logicalSize=CGSizeMake(canvas.width,canvas.height);
+    if(self.isParked) _logicalSize=_parkedLogicalSize;
     _guestHost.frame=_content.bounds;
     _guestHost.logicalSize=_logicalSize;
     [_guestHost layoutIfNeeded];
@@ -139,10 +158,13 @@ static NSArray *MWRectFields(CGRect r) { return @[@(r.origin.x),@(r.origin.y),@(
     _resize.hidden=_freeResize.hidden=_model.maximized || _model.state!=MWWindowVisible;
     [_surface bringSubviewToFront:_inputRail];
     [_surface bringSubviewToFront:_resize]; [_surface bringSubviewToFront:_freeResize];
+    _parkedShield.hidden=!self.isParked; _parkedShield.frame=self.bounds;
+    _restoreMark.frame=CGRectMake(MAX(0,self.bounds.size.width-24),4,20,20);
     if(!CGSizeEqualToSize(_shadowSize,self.bounds.size) || _shadowMaximized!=_model.maximized) {
         _shadowSize=self.bounds.size; _shadowMaximized=_model.maximized;
-        self.layer.shadowPath=[UIBezierPath bezierPathWithRoundedRect:self.bounds cornerRadius:_model.maximized ? 0 : 18].CGPath;
+        self.layer.shadowPath=[UIBezierPath bezierPathWithRoundedRect:self.bounds cornerRadius:full ? 0 : (self.isParked ? 12 : 18)].CGPath;
     }
+    if(self.isParked) return; // Thumbnail scaling must not resize the guest scene.
     UIInterfaceOrientation orientation=self.window.windowScene.interfaceOrientation;
     if(!CGSizeEqualToSize(_lastSize,_logicalSize) || _lastOrientation!=orientation ||
        !UIEdgeInsetsEqualToEdgeInsets(_lastSafeInsets,[self guestSafeInsets])) {
@@ -194,6 +216,7 @@ static NSArray *MWRectFields(CGRect r) { return @[@(r.origin.x),@(r.origin.y),@(
     [self submitSceneGeometry];
 }
 - (void)submitSceneGeometry {
+    if(self.isParked) return;
     UIInterfaceOrientation orientation=self.window.windowScene.interfaceOrientation;
     UIEdgeInsets insets=[self guestSafeInsets];
     if(CGSizeEqualToSize(_lastSize,_logicalSize) && _lastOrientation==orientation && UIEdgeInsetsEqualToEdgeInsets(_lastSafeInsets,insets)) return;
@@ -231,12 +254,14 @@ static NSArray *MWRectFields(CGRect r) { return @[@(r.origin.x),@(r.origin.y),@(
         [view setNeedsLayout]; [view layoutIfNeeded];
         [view logContentGeometry:@"attached"];
         [view updateStatus:nil];
+        if(view->_parkWhenReady) { view->_parkWhenReady=NO; [view park]; }
         if(view.stateHandler) view.stateHandler();
         if(view.active && !view->_hostHidden && !view.hidden && !view.window.rootViewController.presentedViewController)
             [view.session requestKeyboardFocusInWindow:view.window];
     }];
 }
 - (void)failed:(NSError *)error {
+    [self unpark];
     [self cancelInteractions];
     if(!MWWindowApply(&_model,MWEventFailed)) return;
     _guestHost.guestView=nil; [_guestView removeFromSuperview]; _guestView=nil;
@@ -257,7 +282,7 @@ static NSArray *MWRectFields(CGRect r) { return @[@(r.origin.x),@(r.origin.y),@(
     _message.hidden=!loading && _model.state!=MWWindowFailed;
     _retry.hidden=_model.state!=MWWindowFailed;
     if(loading) [_spinner startAnimating]; else [_spinner stopAnimating];
-    _minimize.enabled=_maximize.enabled=(_model.state==MWWindowVisible);
+    _minimize.enabled=_maximize.enabled=_parkButton.enabled=(_model.state==MWWindowVisible);
     _resize.hidden=_freeResize.hidden=_model.maximized || _model.state!=MWWindowVisible;
     _inputRail.hidden=_model.maximized || _model.state!=MWWindowVisible;
 }
@@ -285,7 +310,7 @@ static NSArray *MWRectFields(CGRect r) { return @[@(r.origin.x),@(r.origin.y),@(
 }
 - (BOOL)gestureRecognizerShouldBegin:(UIGestureRecognizer *)gesture {
     (void)gesture;
-    return !_dragging && !_resizing && _model.state!=MWWindowClosed && _model.state!=MWWindowMinimized;
+    return !_dragging && !_resizing && !self.isParked && _model.state!=MWWindowClosed && _model.state!=MWWindowMinimized;
 }
 - (void)drag:(UIPanGestureRecognizer *)gesture {
     if(_model.maximized || _model.state==MWWindowClosed || _model.state==MWWindowMinimized) return;
@@ -341,29 +366,43 @@ static NSArray *MWRectFields(CGRect r) { return @[@(r.origin.x),@(r.origin.y),@(
     if(gesture.state==UIGestureRecognizerStateBegan) {
         [self layoutIfNeeded];
         _gestureModel=_model; _gestureLogicalSize=_proportionalSize;
+        _gestureFrame=self.frame; _resizing=YES; _resizeActivated=NO;
+        _resizeStartedAt=CACurrentMediaTime(); _resizeSceneUpdates=0;
+    }
+    if(!_resizing) return;
+    CGPoint delta=[gesture translationInView:self.superview];
+    BOOL terminal=gesture.state==UIGestureRecognizerStateEnded || gesture.state==UIGestureRecognizerStateCancelled || gesture.state==UIGestureRecognizerStateFailed;
+    if(!_resizeActivated) {
+        if(gesture.state==UIGestureRecognizerStateCancelled || gesture.state==UIGestureRecognizerStateFailed ||
+           (!free && !MWResizeDragActivated(delta.x,delta.y))) {
+            if(terminal) {
+                _resizing=NO;
+                MWTrace(@"window.resize_ignored",@{@"bundle":_application.bundleIdentifier,@"reason":@"below_drag_threshold_or_cancelled"});
+            }
+            return;
+        }
+        _resizeActivated=YES;
         [self detachFromSnap];
         [self setNeedsLayout]; [self layoutIfNeeded];
-        _gestureFrame=self.frame; _resizing=YES; [self focus];
-        _resizeStartedAt=CACurrentMediaTime(); _resizeSceneUpdates=0;
+        _gestureFrame=self.frame; [self focus];
         _freeResize.dragging=free; _resize.dragging=!free;
         _model.resizeMode=free ? MWResizeFree : MWResizeProportional;
         if(!free) {
             _proportionalSize=[self systemCanvasSize];
             _model.aspectRatio=_proportionalSize.width/_proportionalSize.height;
-            _model.frame=MWFitAspectRect(MWFromCGRect(_gestureFrame),MWFromCGRect(_viewport),_model.aspectRatio);
+            _model.frame=MWBeginProportionalResize(MWFromCGRect(_gestureFrame),MWFromCGRect(_viewport),_model.aspectRatio,self.window.safeAreaInsets.top);
             self.frame=MWToCGRect(_model.frame); _gestureFrame=self.frame;
         }
         MWLog(@"window.resize_begin",@{@"bundle":_application.bundleIdentifier,@"mode":free ? @"free" : @"proportional"});
     }
-    if(!_resizing) return;
-    CGPoint delta=[gesture translationInView:self.superview];
+    MWRect usable=MWProportionalViewport(MWFromCGRect(_viewport),self.window.safeAreaInsets.top);
     _model.frame=free ? MWResizeTopRightRect(MWFromCGRect(_gestureFrame),delta.x,delta.y,MWFromCGRect(_viewport)) :
-        MWResizeAspectRect(MWFromCGRect(_gestureFrame),delta.x,delta.y,MWFromCGRect(_viewport),_model.aspectRatio);
+        MWResizeAspectRect(MWFromCGRect(_gestureFrame),delta.x,delta.y,usable,_model.aspectRatio);
     self.frame=MWToCGRect(_model.frame);
     if(gesture.state==UIGestureRecognizerStateEnded || gesture.state==UIGestureRecognizerStateCancelled || gesture.state==UIGestureRecognizerStateFailed) {
         BOOL cancelled=gesture.state!=UIGestureRecognizerStateEnded;
         if(cancelled) { _model=_gestureModel; _proportionalSize=_gestureLogicalSize; self.frame=MWToCGRect(_model.frame); }
-        _resizing=NO; _freeResize.dragging=NO; _resize.dragging=NO;
+        _resizing=NO; _resizeActivated=NO; _freeResize.dragging=NO; _resize.dragging=NO;
         [self commitSceneGeometry]; if(!cancelled) [self geometryChanged];
         MWLog(@"window.resize_finished",@{@"bundle":_application.bundleIdentifier,@"mode":free ? @"free" : @"system_proportional",@"duration":@(CACurrentMediaTime()-_resizeStartedAt),@"sceneUpdates":@(_resizeSceneUpdates),@"cancelled":@(cancelled)});
         if(self.stateHandler) self.stateHandler();
@@ -386,6 +425,7 @@ static NSArray *MWRectFields(CGRect r) { return @[@(r.origin.x),@(r.origin.y),@(
 }
 - (NSString *)touchRegionForView:(UIView *)view {
     if(!view) return @"none";
+    if(self.isParked && [view isDescendantOfView:_parkedShield]) return @"parked_restore";
     if([view isDescendantOfView:_resize]) return @"resize_rail";
     if([view isDescendantOfView:_freeResize]) return @"free_resize";
     if([view isDescendantOfView:_bar]) return @"title";
@@ -422,6 +462,8 @@ static NSArray *MWRectFields(CGRect r) { return @[@(r.origin.x),@(r.origin.y),@(
 }
 - (NSDictionary *)inputDiagnosticSnapshotWithCapabilities:(BOOL)capabilities {
     return @{@"bundle":self.application.bundleIdentifier,@"state":@(_model.state),@"selected":@(self.active),
+        @"compatibleCanvas":@(_compatibleCanvas),
+        @"parked":@(self.isParked),
         @"attached":@(self.window!=nil),@"hidden":@(self.hidden),@"hostHidden":@(_hostHidden),
         @"deliveredTouchStarts":@(_deliveredTouchStarts),@"geometry":[_guestHost geometrySnapshot],
         @"contentFrame":MWRectFields(_content.frame),@"railFrame":MWRectFields(_resize.frame),
@@ -431,6 +473,7 @@ static NSArray *MWRectFields(CGRect r) { return @[@(r.origin.x),@(r.origin.y),@(
         @"session":_session ? [_session inputDiagnosticSnapshotWithCapabilities:capabilities] : @{}};
 }
 - (void)toggleMaximize {
+    [self unpark];
     [self cancelInteractions];
     BOOL wasMaximized=_model.maximized;
     if(!MWWindowToggleMaximize(&_model,MWFromCGRect(_viewport))) return;
@@ -453,7 +496,9 @@ static NSArray *MWRectFields(CGRect r) { return @[@(r.origin.x),@(r.origin.y),@(
     if(_model.resizeMode==MWResizeProportional) {
         _proportionalSize=[self systemCanvasSize]; _model.aspectRatio=_proportionalSize.width/_proportionalSize.height;
         if(_model.maximized) _restoreLogicalSize=_proportionalSize;
+        if(self.isParked) _parking.saved.aspectRatio=_model.aspectRatio;
     }
+    if(self.isParked) { _viewport=viewport; return; }
     _viewport=viewport; MWWindowReflow(&_model,MWFromCGRect(viewport)); self.frame=MWToCGRect(_model.frame);
     [self setNeedsLayout];
 }
@@ -461,7 +506,7 @@ static NSArray *MWRectFields(CGRect r) { return @[@(r.origin.x),@(r.origin.y),@(
     if(!_dragging && !_resizing) return;
     MWWindowState state=_model.state;
     _model=_gestureModel; _model.state=state; _proportionalSize=_gestureLogicalSize;
-    _dragging=NO; _resizing=NO; _geometryGeneration++; _geometryUpdatePending=NO;
+    _dragging=NO; _resizing=NO; _resizeActivated=NO; _geometryGeneration++; _geometryUpdatePending=NO;
     _freeResize.dragging=NO; _resize.dragging=NO;
     [self updateSnapCandidate:MWSnapNone]; self.frame=MWToCGRect(_model.frame);
     [self commitSceneGeometry];
@@ -473,6 +518,39 @@ static NSArray *MWRectFields(CGRect r) { return @[@(r.origin.x),@(r.origin.y),@(
     _proportionalSize=[self systemCanvasSize];
     _model.aspectRatio=_proportionalSize.width/_proportionalSize.height;
 }
+- (void)setInitialCompatibleCanvas:(BOOL)enabled {
+    if(_session) return;
+    _compatibleCanvas=enabled; [self setNeedsLayout];
+}
+- (void)setInitialModel:(MWWindowModel)model {
+    if(_session) return;
+    _model=model; _model.state=MWWindowLoading; self.frame=MWToCGRect(model.frame);
+    _proportionalSize=[self systemCanvasSize]; _restoreLogicalSize=_proportionalSize;
+    [self updateStatus:nil]; [self setNeedsLayout];
+}
+- (void)setInitiallyParked:(BOOL)parked { if(!_session) _parkWhenReady=parked; }
+- (BOOL)isParked { return _parking.parked && _model.state==MWWindowParked; }
+- (CGFloat)parkedContentRatio { return _parkedLogicalSize.width/MAX(1,_parkedLogicalSize.height); }
+- (MWWindowModel)restorableModel { return self.isParked ? _parking.saved : _model; }
+- (void)park {
+    [self cancelInteractions]; [self layoutIfNeeded];
+    if(!MWWindowPark(&_model,&_parking)) return;
+    _parkedLogicalSize=_logicalSize; self.active=NO;
+    _geometryUpdatePending=NO; _geometryDisplayLink.paused=YES;
+    [self updateStatus:nil]; [self setNeedsLayout];
+    MWLog(@"window.parked",@{@"bundle":_application.bundleIdentifier,@"width":@(_parking.saved.frame.width),
+        @"height":@(_parking.saved.frame.height),@"mode":@(_parking.saved.resizeMode)});
+}
+- (void)placeParkedInFrame:(CGRect)frame {
+    if(!self.isParked) return;
+    if(!CGRectEqualToRect(self.frame,frame)) self.frame=frame;
+    [self setNeedsLayout];
+}
+- (void)unpark {
+    if(!MWWindowUnpark(&_model,&_parking,MWFromCGRect(_viewport))) return;
+    self.frame=MWToCGRect(_model.frame); [self updateStatus:nil]; [self commitSceneGeometry];
+    MWLog(@"window.unparked",@{@"bundle":_application.bundleIdentifier,@"width":@(_model.frame.width),@"height":@(_model.frame.height)});
+}
 - (CGSize)systemCanvasSize {
     UIScreen *screen=self.window.windowScene.screen ?: UIScreen.mainScreen;
     CGSize reference=screen.fixedCoordinateSpace.bounds.size;
@@ -483,17 +561,22 @@ static NSArray *MWRectFields(CGRect r) { return @[@(r.origin.x),@(r.origin.y),@(
     return CGSizeMake(canvas.width,canvas.height);
 }
 - (void)logContentGeometry:(NSString *)reason {
-    MWLog(@"window.content_geometry",@{@"bundle":_application.bundleIdentifier,@"reason":reason,@"geometry":[_guestHost geometrySnapshot]});
+    MWLog(@"window.content_geometry",@{@"bundle":_application.bundleIdentifier,@"reason":reason,
+        @"compatibleCanvas":@(_compatibleCanvas),@"geometry":[_guestHost geometrySnapshot]});
 }
 - (void)requestClose { if(self.closeHandler) self.closeHandler(); }
+- (void)requestPark { if(self.parkHandler) self.parkHandler(); }
+- (void)requestRestore { if(self.restoreHandler) self.restoreHandler(); }
 - (void)requestMinimize { if(self.minimizeHandler) self.minimizeHandler(); }
 - (void)minimize {
+    [self unpark];
     [self cancelInteractions];
     if(!MWWindowApply(&_model,MWEventMinimize)) return;
     MWLog(@"window.minimize",@{@"bundle":_application.bundleIdentifier});
     self.hidden=YES; [_session setVisible:NO];
 }
 - (void)restore {
+    if(self.isParked) { [self unpark]; return; }
     if(!MWWindowApply(&_model,MWEventRestore)) return;
     MWLog(@"window.restore",@{@"bundle":_application.bundleIdentifier});
     self.hidden=NO; [_session setVisible:!_hostHidden]; [self updateStatus:nil];
