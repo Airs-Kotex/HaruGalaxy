@@ -285,6 +285,7 @@ static id MWKeyboardBool(id object,NSString *name) {
             @"registeredGuests":@(_guests.count)};
     } @catch(NSException *exception) { return @{@"snapshotUnavailable":@YES}; }
 }
+- (BOOL)hasPendingCleanup { return _bindingNeedsCleanup || _preparationNeedsCleanup; }
 - (void)keyboardEvent:(NSNotification *)notification {
     MWLog(@"keyboard.visibility",@{@"notification":notification.name,@"state":[self snapshot]});
 }

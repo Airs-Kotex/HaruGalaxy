@@ -9,6 +9,7 @@
 #import "MWKeyboardFocus.h"
 #import "MWSceneInputEnvironment.h"
 #import "../Core/MWRuntimeTypes.h"
+#import "../Core/MWNativeHandoff.h"
 #import <objc/runtime.h>
 #import <objc/message.h>
 #include <string.h>
@@ -39,6 +40,9 @@ static BOOL MWGuestMethod(id object,SEL selector,char result,const char *args) {
     NSUInteger _generation;
     CGSize _size;
     UIInterfaceOrientation _orientation;
+    MWNativeHandoff _nativeHandoff;
+    void (^_nativeCompletion)(NSError *);
+    BOOL _cleanupFailed;
 }
 
 - (instancetype)initWithBundleIdentifier:(NSString *)bundleIdentifier {
@@ -193,7 +197,7 @@ static BOOL MWGuestMethod(id object,SEL selector,char result,const char *args) {
 }
 
 - (void)updateSize:(CGSize)size orientation:(UIInterfaceOrientation)orientation {
-    if(_closed || !isfinite(size.width) || !isfinite(size.height) || size.width<1 || size.height<1) return;
+    if(_closed || _nativeCompletion || !isfinite(size.width) || !isfinite(size.height) || size.width<1 || size.height<1) return;
     _size=size;
     if(orientation!=UIInterfaceOrientationUnknown) _orientation=orientation;
     if(!_scene) return;
@@ -209,7 +213,7 @@ static BOOL MWGuestMethod(id object,SEL selector,char result,const char *args) {
 }
 
 - (void)setVisible:(BOOL)visible {
-    if(_closed) return;
+    if(_closed || _nativeCompletion) return;
     _visible=visible;
     if(!visible) [self releaseKeyboardFocus];
     MWTrace(@"guest.visibility",@{@"bundle":self.bundleIdentifier,@"visible":@(visible)});
@@ -241,13 +245,84 @@ static BOOL MWGuestMethod(id object,SEL selector,char result,const char *args) {
 
 - (void)close {
     if(_closed) return;
+    void (^nativeCompletion)(NSError *)=_nativeCompletion; _nativeCompletion=nil;
+    MWNativeHandoffCancel(&_nativeHandoff);
     MWLog(@"guest.close",@{@"bundle":self.bundleIdentifier,@"scene":self.sceneIdentifier});
     _closed=YES; ++_generation; _completion=nil; self.failureHandler=nil; self.inputRequestHandler=nil;
     [self tearDown];
+    if(nativeCompletion) nativeCompletion(MWError(63,@"原应用切换已取消，未发送打开请求。"));
 }
 
-- (void)tearDown {
+- (void)closeForOriginalApplication:(void (^)(NSError *))completion {
+    if(_nativeCompletion) { completion(MWError(63,@"该窗口正在关闭。")); return; }
+    if(_closed) {
+        completion((_cleanupFailed || [MWKeyboardFocus.shared hasPendingCleanup]) ?
+            MWError(66,@"小窗输入清理未完成，未打开原应用。请导出诊断并重启初春星河。") : nil);
+        return;
+    }
+    _nativeCompletion=[completion copy]; _visible=NO; _generation++;
+    _completion=nil; self.failureHandler=nil; self.inputRequestHandler=nil;
+    [self releaseKeyboardFocus];
+    uint64_t generation=MWNativeHandoffBegin(&_nativeHandoff,NSProcessInfo.processInfo.systemUptime);
+    if(!_scene) {
+        MWNativeHandoffDeactivated(&_nativeHandoff,generation);
+        [self pollNativeHandoff:generation]; return;
+    }
+    SEL deactivate=NSSelectorFromString(@"deactivate:");
+    if(!MWGuestMethod(_scene,deactivate,'v',"@")) {
+        [self finishNativeHandoff:MWError(64,@"当前系统不支持安全交接，已结束小窗；请从主屏幕打开原应用。")]; return;
+    }
+    MWLog(@"native_handoff.deactivating",@{@"bundle":self.bundleIdentifier,@"scene":self.sceneIdentifier});
+    __weak typeof(self) weakSelf=self;
+    @try {
+        SEL active=NSSelectorFromString(@"isActive");
+        if((MWGuestMethod(_scene,active,'B',"") || MWGuestMethod(_scene,active,'c',"")) &&
+           !((BOOL(*)(id,SEL))objc_msgSend)(_scene,active)) {
+            MWNativeHandoffDeactivated(&_nativeHandoff,generation);
+            [self pollNativeHandoff:generation]; return;
+        }
+        ((void(*)(id,SEL,id))objc_msgSend)(_scene,deactivate,[^{
+            dispatch_async(dispatch_get_main_queue(),^{
+                MWSceneSession *session=weakSelf;
+                if(session && session->_nativeCompletion && MWNativeHandoffDeactivated(&session->_nativeHandoff,generation))
+                    MWLog(@"native_handoff.deactivated",@{@"scene":session.sceneIdentifier});
+            });
+        } copy]);
+    } @catch(NSException *exception) {
+        [self finishNativeHandoff:MWError(64,@"场景交接失败，已结束小窗；请从主屏幕打开原应用。")]; return;
+    }
+    [self pollNativeHandoff:generation];
+}
+- (void)pollNativeHandoff:(uint64_t)generation {
+    if(!_nativeCompletion) return;
+    MWNativeAction action=MWNativeHandoffObserve(&_nativeHandoff,generation,NSProcessInfo.processInfo.systemUptime);
+    if(action==MWNativeAbort) {
+        [self finishNativeHandoff:MWError(65,@"场景交接超时，已结束小窗；请从主屏幕打开原应用。")]; return;
+    }
+    if(action==MWNativeRelease) {
+        BOOL released=[self tearDown];
+        MWNativeAction result=MWNativeHandoffReleased(&_nativeHandoff,generation,released);
+        MWLog(@"native_handoff.released",@{@"bundle":self.bundleIdentifier,@"localReleaseConfirmed":@(released)});
+        [self finishNativeHandoff:result==MWNativeOpen ? nil :
+            MWError(66,@"小窗未能完全释放，未打开原应用。请导出诊断并重启初春星河。")];
+        return;
+    }
+    if(action!=MWNativeWait) return;
+    __weak typeof(self) weakSelf=self;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(0.05*NSEC_PER_SEC)),dispatch_get_main_queue(),^{
+        [weakSelf pollNativeHandoff:generation];
+    });
+}
+- (void)finishNativeHandoff:(NSError *)error {
+    void (^completion)(NSError *)=_nativeCompletion; _nativeCompletion=nil;
+    MWLog(@"native_handoff.finished",@{@"bundle":self.bundleIdentifier,@"error":MWErrorFields(error)});
+    [self close];
+    if(completion) completion(error);
+}
+- (BOOL)tearDown {
+    BOOL released=YES;
     [MWKeyboardFocus.shared unregisterGuest:self.sceneIdentifier];
+    if([MWKeyboardFocus.shared hasPendingCleanup]) released=NO;
     if(_observingInput) {
         @try {
             ((void(*)(id,SEL,id))objc_msgSend)(_scene,NSSelectorFromString(@"removeObserver:"),self);
@@ -257,15 +332,27 @@ static BOOL MWGuestMethod(id object,SEL selector,char result,const char *args) {
     if(_monitor) { dispatch_source_cancel(_monitor); _monitor=nil; }
     @try { [_transaction setCompletionBlock:nil]; } @catch(NSException *exception) { (void)exception; }
     _transaction=nil;
-    @try { [_presenter deactivate]; } @catch(NSException *exception) { (void)exception; }
-    @try { [_presenter invalidate]; } @catch(NSException *exception) { (void)exception; }
+    @try { [_presenter deactivate]; } @catch(NSException *exception) { released=NO; }
+    @try { [_presenter invalidate]; } @catch(NSException *exception) { released=NO; }
     _presenter=nil;
     if(_scene) {
-        @try { [[PrivClass(FBSceneManager) sharedInstance] destroyScene:self.sceneIdentifier withTransitionContext:nil]; }
-        @catch(NSException *exception) { MWLog(@"guest.cleanup_failed",@{@"scene":self.sceneIdentifier,@"reason":exception.reason ?: @"unknown"}); }
+        @try {
+            id manager=[PrivClass(FBSceneManager) sharedInstance];
+            [manager destroyScene:self.sceneIdentifier withTransitionContext:nil];
+            SEL lookup=NSSelectorFromString(@"sceneWithIdentifier:");
+            // A returned destroy request alone is not a handoff guarantee.
+            if(!MWGuestMethod(manager,lookup,'@',"@") ||
+               ((id(*)(id,SEL,id))objc_msgSend)(manager,lookup,self.sceneIdentifier)) released=NO;
+        }
+        @catch(NSException *exception) {
+            released=NO;
+            MWLog(@"guest.cleanup_failed",@{@"scene":self.sceneIdentifier,@"reason":exception.reason ?: @"unknown"});
+        }
     }
     _scene=nil; _process=nil;
     [_inputEnvironment invalidate]; _inputEnvironment=nil;
+    _cleanupFailed=_cleanupFailed || !released;
+    return !_cleanupFailed;
 }
 
 - (void)dealloc { [self tearDown]; }

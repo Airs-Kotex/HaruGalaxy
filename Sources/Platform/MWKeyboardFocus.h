@@ -12,4 +12,5 @@
 - (void)setSuspended:(BOOL)suspended;
 - (void)releaseForWindow:(UIWindow *)window;
 - (NSDictionary *)snapshot;
+- (BOOL)hasPendingCleanup;
 @end

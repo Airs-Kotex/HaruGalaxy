@@ -10,8 +10,6 @@
 @property(nonatomic,copy) void (^activateHandler)(void);
 @property(nonatomic,copy) void (^minimizeHandler)(void);
 @property(nonatomic,copy) void (^closeHandler)(void);
-@property(nonatomic,copy) void (^inputHandler)(void);
-@property(nonatomic,copy) void (^openOriginalHandler)(void);
 @property(nonatomic,copy) void (^geometryHandler)(CGRect frame);
 @property(nonatomic,copy) void (^stateHandler)(void);
 @property(nonatomic,copy) void (^snapPreviewHandler)(CGRect frame, BOOL visible);
@@ -27,5 +25,6 @@
 - (void)setInitialResizeMode:(MWResizeMode)mode;
 - (void)cancelInteractions;
 - (void)prepareKeyboardFocus;
+- (void)releaseForOriginalApplication:(void (^)(NSError *error))completion;
 @end
 

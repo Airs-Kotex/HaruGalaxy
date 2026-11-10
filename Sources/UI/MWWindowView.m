@@ -22,8 +22,8 @@ static CGRect MWToCGRect(MWRect r) { return CGRectMake(r.x,r.y,r.width,r.height)
 @implementation MWWindowView {
     UIView *_surface, *_content;
     MWGlassSurface *_bar, *_inputRail;
-    UILabel *_title, *_message, *_resizeHint;
-    UIButton *_minimize, *_maximize, *_retry, *_inputButton, *_originalButton;
+    UILabel *_title, *_message;
+    UIButton *_minimize, *_maximize, *_retry;
     MWCornerHandle *_resize, *_freeResize;
     UIActivityIndicatorView *_spinner;
     MWWindowModel _model;
@@ -66,27 +66,13 @@ static CGRect MWToCGRect(MWRect r) { return CGRectMake(r.x,r.y,r.width,r.height)
         _bar=[[MWGlassSurface alloc] initWithCornerRadius:0];
         [_surface addSubview:_bar];
         _inputRail=[[MWGlassSurface alloc] initWithCornerRadius:0]; [_surface addSubview:_inputRail];
-        _inputButton=[UIButton buttonWithType:UIButtonTypeSystem];
-        [_inputButton setImage:[UIImage systemImageNamed:@"keyboard"] forState:UIControlStateNormal];
-        _inputButton.accessibilityLabel=@"输入板：输入并复制到小窗";
-        [_inputButton addTarget:self action:@selector(requestInput) forControlEvents:UIControlEventTouchUpInside];
-        [_inputRail.contentView addSubview:_inputButton];
-        _originalButton=[UIButton buttonWithType:UIButtonTypeSystem];
-        [_originalButton setImage:[UIImage systemImageNamed:@"arrow.up.forward.app"] forState:UIControlStateNormal];
-        _originalButton.accessibilityLabel=@"在原应用中输入";
-        [_originalButton addTarget:self action:@selector(requestOriginal) forControlEvents:UIControlEventTouchUpInside];
-        [_inputRail.contentView addSubview:_originalButton];
-        _resizeHint=[UILabel new]; _resizeHint.text=@"拖动等比 ↘";
-        _resizeHint.font=[UIFont systemFontOfSize:11 weight:UIFontWeightMedium];
-        _resizeHint.textColor=UIColor.secondaryLabelColor; _resizeHint.textAlignment=NSTextAlignmentCenter;
-        [_inputRail.contentView addSubview:_resizeHint];
         _title=[UILabel new]; _title.text=application.name;
-        _title.font=[UIFont systemFontOfSize:14 weight:UIFontWeightSemibold];
+        _title.font=[UIFont systemFontOfSize:12 weight:UIFontWeightSemibold];
         _title.lineBreakMode=NSLineBreakByTruncatingTail;
         [_bar.contentView addSubview:_title];
         [self button:@"xmark" label:@"关闭小窗" color:UIColor.systemRedColor action:@selector(requestClose) x:0];
-        _minimize=[self button:@"minus" label:@"最小化" color:UIColor.systemOrangeColor action:@selector(requestMinimize) x:44];
-        _maximize=[self button:@"arrow.up.left.and.arrow.down.right" label:@"最大化或恢复" color:UIColor.systemGreenColor action:@selector(toggleMaximize) x:88];
+        _minimize=[self button:@"minus" label:@"最小化" color:UIColor.systemOrangeColor action:@selector(requestMinimize) x:28];
+        _maximize=[self button:@"arrow.up.left.and.arrow.down.right" label:@"最大化或恢复" color:UIColor.systemGreenColor action:@selector(toggleMaximize) x:56];
         _spinner=[[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleMedium];
         [_content addSubview:_spinner];
         _message=[UILabel new]; _message.numberOfLines=0; _message.textAlignment=NSTextAlignmentCenter;
@@ -114,8 +100,8 @@ static CGRect MWToCGRect(MWRect r) { return CGRectMake(r.x,r.y,r.width,r.height)
 }
 - (UIButton *)button:(NSString *)symbol label:(NSString *)label color:(UIColor *)color action:(SEL)action x:(CGFloat)x {
     UIButton *button=[UIButton buttonWithType:UIButtonTypeSystem];
-    button.frame=CGRectMake(x,0,44,48); button.tintColor=color;
-    [button setImage:[UIImage systemImageNamed:symbol withConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:13 weight:UIImageSymbolWeightBold]] forState:UIControlStateNormal];
+    button.frame=CGRectMake(x,0,28,MWTitleHeight); button.tintColor=color;
+    [button setImage:[UIImage systemImageNamed:symbol withConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:11 weight:UIImageSymbolWeightBold]] forState:UIControlStateNormal];
     button.accessibilityLabel=label; [button addTarget:self action:action forControlEvents:UIControlEventTouchUpInside];
     [_bar.contentView addSubview:button]; return button;
 }
@@ -131,13 +117,10 @@ static CGRect MWToCGRect(MWRect r) { return CGRectMake(r.x,r.y,r.width,r.height)
     CGFloat leading=MAX(0,self.window.safeAreaInsets.left-self.frame.origin.x);
     CGFloat trailing=MAX(0,CGRectGetMaxX(self.frame)-(CGRectGetMaxX(_viewport)-self.window.safeAreaInsets.right));
     _bar.frame=CGRectMake(leading,titleInset,MAX(1,self.bounds.size.width-leading-trailing),MWTitleHeight);
-    _title.frame=CGRectMake(140,0,MAX(0,_bar.bounds.size.width-152),MWTitleHeight);
+    _title.frame=CGRectMake(92,0,MAX(0,_bar.bounds.size.width-96-MWCornerTouchSize),MWTitleHeight);
     _content.frame=MWToCGRect(MWWindowContentRect(MWFromCGRect(self.bounds),titleInset,_model.maximized));
     _inputRail.frame=MWToCGRect(MWWindowRailRect(MWFromCGRect(self.bounds),_model.maximized));
     _inputRail.hidden=_model.maximized || _model.state!=MWWindowVisible;
-    _inputButton.frame=CGRectMake(0,0,44,MWResizeRailHeight);
-    _originalButton.frame=CGRectMake(44,0,44,MWResizeRailHeight);
-    _resizeHint.frame=CGRectMake(88,0,MAX(0,self.bounds.size.width-88-MWCornerTouchSize),MWResizeRailHeight);
     if(_model.maximized || _model.resizeMode==MWResizeFree) _logicalSize=_content.bounds.size;
     else _logicalSize=_proportionalSize;
     _guestHost.frame=_content.bounds;
@@ -146,8 +129,8 @@ static CGRect MWToCGRect(MWRect r) { return CGRectMake(r.x,r.y,r.width,r.height)
     _spinner.center=CGPointMake(CGRectGetMidX(_content.bounds),CGRectGetMidY(_content.bounds)-32);
     _message.frame=CGRectMake(16,MAX(12,CGRectGetMidY(_content.bounds)-16),MAX(1,_content.bounds.size.width-32),72);
     _retry.frame=CGRectMake(20,MIN(_content.bounds.size.height-48,CGRectGetMaxY(_message.frame)),MAX(1,_content.bounds.size.width-40),44);
-    _resize.frame=CGRectMake(self.bounds.size.width-MWCornerTouchSize,self.bounds.size.height-MWCornerTouchSize,MWCornerTouchSize,MWCornerTouchSize);
-    _freeResize.frame=CGRectMake(self.bounds.size.width-MWCornerTouchSize,0,MWCornerTouchSize,MWCornerTouchSize);
+    _resize.frame=_inputRail.frame;
+    _freeResize.frame=CGRectMake(CGRectGetMaxX(_bar.frame)-MWCornerTouchSize,titleInset,MWCornerTouchSize,MWCornerTouchSize);
     _resize.hidden=_freeResize.hidden=_model.maximized || _model.state!=MWWindowVisible;
     [_surface bringSubviewToFront:_inputRail];
     [_surface bringSubviewToFront:_resize]; [_surface bringSubviewToFront:_freeResize];
@@ -435,8 +418,6 @@ static CGRect MWToCGRect(MWRect r) { return CGRectMake(r.x,r.y,r.width,r.height)
     MWLog(@"window.content_geometry",@{@"bundle":_application.bundleIdentifier,@"reason":reason,@"geometry":[_guestHost geometrySnapshot]});
 }
 - (void)requestClose { if(self.closeHandler) self.closeHandler(); }
-- (void)requestInput { if(self.inputHandler) self.inputHandler(); }
-- (void)requestOriginal { if(self.openOriginalHandler) self.openOriginalHandler(); }
 - (void)requestMinimize { if(self.minimizeHandler) self.minimizeHandler(); }
 - (void)minimize {
     [self cancelInteractions];
@@ -450,12 +431,22 @@ static CGRect MWToCGRect(MWRect r) { return CGRectMake(r.x,r.y,r.width,r.height)
     self.hidden=NO; [_session setVisible:!_hostHidden]; [self updateStatus:nil];
 }
 - (void)close {
-    if(!MWWindowApply(&_model,MWEventClose)) return;
+    if(!MWWindowApply(&_model,MWEventClose)) { [_session close]; return; }
     _snapGeneration++; _geometryGeneration++;
     [_geometryDisplayLink invalidate]; _geometryDisplayLink=nil;
     _dragging=NO; _resizing=NO;
     if(self.snapPreviewHandler) self.snapPreviewHandler(CGRectZero,NO);
     _guestHost.guestView=nil; [_guestView removeFromSuperview]; _guestView=nil; [_session close]; [self removeFromSuperview];
+}
+- (void)releaseForOriginalApplication:(void (^)(NSError *))completion {
+    [self cancelInteractions];
+    if(!MWWindowApply(&_model,MWEventClose)) { completion([NSError errorWithDomain:@"HaruGalaxy" code:63 userInfo:@{NSLocalizedDescriptionKey:@"该窗口已结束。"}]); return; }
+    _snapGeneration++; _geometryGeneration++;
+    [_geometryDisplayLink invalidate]; _geometryDisplayLink=nil;
+    if(self.snapPreviewHandler) self.snapPreviewHandler(CGRectZero,NO);
+    _guestHost.guestView=nil; [_guestView removeFromSuperview]; _guestView=nil;
+    [self removeFromSuperview];
+    if(_session) [_session closeForOriginalApplication:completion]; else completion(nil);
 }
 - (void)setHostVisible:(BOOL)visible {
     if(!visible) [self cancelInteractions];

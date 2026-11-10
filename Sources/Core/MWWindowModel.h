@@ -4,12 +4,12 @@
 #include <stdbool.h>
 
 typedef struct { double x, y, width, height; } MWRect;
-#define MWTitleHeight 48.0
-#define MWResizeRailHeight 44.0
+#define MWTitleHeight 28.0
+#define MWResizeRailHeight 18.0
 #define MWWindowChromeHeight (MWTitleHeight + MWResizeRailHeight)
 #define MWEdgeTouchWidth 56.0
 #define MWEdgeTouchHeight 76.0
-#define MWCornerTouchSize 44.0
+#define MWCornerTouchSize 28.0
 typedef enum { MWWindowLoading, MWWindowVisible, MWWindowMinimized, MWWindowFailed, MWWindowClosed } MWWindowState;
 typedef enum { MWEventReady, MWEventFailed, MWEventRetry, MWEventMinimize, MWEventRestore, MWEventClose } MWWindowEvent;
 typedef enum { MWResizeFree, MWResizeProportional } MWResizeMode;

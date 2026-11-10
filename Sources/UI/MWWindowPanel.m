@@ -25,7 +25,7 @@
         _minimize=[self action:@"minus" label:@"最小化到面板" handler:^{if(weakPanel.minimizeHandler) weakPanel.minimizeHandler(bundle);}];
         _fullscreen=[self action:@"arrow.up.left.and.arrow.down.right" label:@"铺满屏幕" handler:^{if(weakPanel.fullscreenHandler) weakPanel.fullscreenHandler(bundle);}];
         UIButton *close=[self action:@"xmark" label:@"关闭窗口" handler:^{if(weakPanel.closeHandler) weakPanel.closeHandler(bundle);}];
-        UIButton *input=[self action:@"keyboard" label:@"输入板或在原应用中输入" handler:^{if(weakPanel.inputHandler) weakPanel.inputHandler(bundle);}];
+        UIButton *input=[self action:@"arrow.up.forward.app" label:@"结束小窗并打开原应用" handler:^{if(weakPanel.openOriginalHandler) weakPanel.openOriginalHandler(bundle);}];
         close.tintColor=UIColor.systemRedColor;
         _actions=[[UIStackView alloc] initWithArrangedSubviews:@[_minimize,_fullscreen,input,close]];
         _actions.axis=UILayoutConstraintAxisHorizontal; _actions.distribution=UIStackViewDistributionFillEqually;
@@ -81,12 +81,12 @@
 - (instancetype)init {
     if((self=[super initWithCornerRadius:24])) {
         _title=[UILabel new]; _title.text=@"窗口面板"; _title.font=[UIFont systemFontOfSize:18 weight:UIFontWeightSemibold]; [self.contentView addSubview:_title];
-        _hint=[UILabel new]; _hint.text=@"收纳后不占底部 · 轻点窗口恢复"; _hint.font=[UIFont systemFontOfSize:11]; _hint.textColor=UIColor.secondaryLabelColor; [self.contentView addSubview:_hint];
+        _hint=[UILabel new]; _hint.text=@"↗ 结束小窗并打开原应用"; _hint.font=[UIFont systemFontOfSize:11]; _hint.textColor=UIColor.secondaryLabelColor; [self.contentView addSubview:_hint];
         _open=[UIButton buttonWithType:UIButtonTypeSystem]; [_open setTitle:@"＋ 打开应用" forState:UIControlStateNormal];
         [_open addTarget:self action:@selector(openApplication) forControlEvents:UIControlEventTouchUpInside]; [self.contentView addSubview:_open];
         _input=[UIButton buttonWithType:UIButtonTypeSystem];
         [_input setImage:[UIImage systemImageNamed:@"keyboard"] forState:UIControlStateNormal];
-        [_input setTitle:@" 输入板" forState:UIControlStateNormal];
+        [_input setTitle:@" 复制输入板" forState:UIControlStateNormal];
         [_input addTarget:self action:@selector(inputBoard) forControlEvents:UIControlEventTouchUpInside];
         [self.contentView addSubview:_input];
         _settings=[UIButton buttonWithType:UIButtonTypeSystem]; [_settings setImage:[UIImage systemImageNamed:@"slider.horizontal.3"] forState:UIControlStateNormal];

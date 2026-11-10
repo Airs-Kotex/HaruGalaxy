@@ -39,9 +39,7 @@
     NSString *_inputQuery;
     void (^_inputSelection)(MWApplication *);
     BOOL _inputBoardMode, _inputSuspendedOverlay;
-    NSString *_inputBoardName;
     void (^_inputBoardCompletion)(BOOL);
-    dispatch_block_t _inputOriginalApplication;
     MWSearchHandoff _inputState;
     BOOL _inputPending;
 }
@@ -121,12 +119,12 @@
     _inputQuery=[query copy]; _inputSelection=[selection copy];
     [self beginNormalInput];
 }
-- (void)presentInputBoardForApplication:(MWApplication *)application completion:(void (^)(BOOL))completion openOriginal:(void (^)(void))openOriginal {
+- (void)presentInputBoardWithCompletion:(void (^)(BOOL))completion {
     if(_inputPending || MWFloatingHost.shared.isLocked) return;
     if(_floatingWindow && !MWFloatingHost.shared.ready) return;
     if(!_floatingWindow && !_applicationWindow) return;
-    _inputBoardMode=YES; _inputBoardName=[application.name copy];
-    _inputBoardCompletion=[completion copy]; _inputOriginalApplication=[openOriginal copy];
+    _inputBoardMode=YES;
+    _inputBoardCompletion=[completion copy];
     [self beginNormalInput];
 }
 - (void)beginNormalInput {
@@ -209,7 +207,7 @@
     [_applicationWindow makeKeyAndVisible];
     __weak typeof(self) weakSelf=self;
     if(_inputBoardMode) {
-        MWInputBoardController *board=[MWInputBoardController new]; board.applicationName=_inputBoardName;
+        MWInputBoardController *board=[MWInputBoardController new];
         __weak MWInputBoardController *weakBoard=board;
         board.completionHandler=^(BOOL copied) {
             MWWorkspaceCoordinator *coordinator=weakSelf;
@@ -218,14 +216,6 @@
             void (^completion)(BOOL)=coordinator->_inputBoardCompletion;
             [coordinator finishApplicationSearch:nil];
             if(completion) completion(copied);
-        };
-        if(_inputOriginalApplication) board.originalApplicationHandler=^{
-            MWWorkspaceCoordinator *coordinator=weakSelf;
-            if(!coordinator || !coordinator->_inputPending || !MWSearchHandoffCurrent(&coordinator->_inputState,generation) ||
-               coordinator->_inputNavigation.viewControllers.firstObject!=weakBoard) return;
-            dispatch_block_t original=coordinator->_inputOriginalApplication;
-            [coordinator finishApplicationSearch:nil];
-            if(original) original();
         };
         [self presentNormalInputController:board presenter:presenter generation:generation];
         return;
@@ -250,7 +240,7 @@
         [picker invalidateSearch]; picker.selectionHandler=nil; picker.cancellationHandler=nil; picker.searchFallbackHandler=nil;
     } else if([controller isKindOfClass:MWInputBoardController.class]) {
         MWInputBoardController *board=(MWInputBoardController *)controller;
-        [board invalidateInput]; board.completionHandler=nil; board.originalApplicationHandler=nil;
+        [board invalidateInput]; board.completionHandler=nil;
     }
 }
 - (void)presentNormalInputController:(UIViewController *)controller presenter:(UIViewController *)presenter generation:(uint64_t)generation {
@@ -280,7 +270,7 @@
     if(!_inputPending) return;
     _inputPending=NO; MWSearchHandoffFinish(&_inputState);
     void (^selection)(MWApplication *)=_inputSelection; _inputSelection=nil; _inputQuery=nil;
-    _inputBoardCompletion=nil; _inputOriginalApplication=nil; _inputBoardName=nil; _inputBoardMode=NO;
+    _inputBoardCompletion=nil; _inputBoardMode=NO;
     UINavigationController *navigation=_inputNavigation; _inputNavigation=nil;
     [self invalidateNormalInput:navigation.viewControllers.firstObject];
     if(navigation) [MWKeyboardFocus.shared releaseForWindow:_applicationWindow];

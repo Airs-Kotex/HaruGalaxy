@@ -76,6 +76,16 @@ def summarize(bundle):
             "the keyboard frame intersection in the normal app. finished.copied means an explicit clipboard "
             "write, not insertion into the guest. original_open.accepted is request acceptance, not proof "
             "of foreground visibility or transfer of the guest's form. Draft text is not recorded.")}
+    native_trace = [row for row in records if row["event"].startswith("native_handoff.")]
+    native_stages = {
+        "counts": dict(sorted(Counter(row["event"] for row in native_trace).items())),
+        "recent_events": native_trace[-80:],
+        "interpretation": (
+            "deactivated is a scene deactivation callback; released.localReleaseConfirmed requires presenter "
+            "cleanup, input cleanup and absence from the local scene manager. open_requested.accepted means "
+            "LaunchServices accepted the request, not that the ordinary app rendered or has a usable keyboard. "
+            "The target hosted session ends and is not automatically recreated. cancelled and timeouts must "
+            "not be interpreted as successful handoffs.")}
     return {"environment": environment, "events": len(records), "sessions": sorted({str(row.get("session", "unknown")) for row in records}),
             "counts": dict(sorted(counts.items())), "malformed_lines": malformed,
             "dropped": bundle.get("dropped"), "storage": bundle.get("storage"), "important_events": important[-80:],
@@ -85,6 +95,7 @@ def summarize(bundle):
             "search_pipeline": search_stages,
             "keyboard_pipeline": keyboard_stages,
             "input_board_pipeline": board_stages,
+            "native_handoff_pipeline": native_stages,
             "interpretation": "A heartbeat gap is an observation, not proof of a crash. Assertion valid is not proof of rendering or input."}
 
 

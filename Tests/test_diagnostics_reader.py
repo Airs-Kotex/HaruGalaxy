@@ -102,5 +102,17 @@ class DiagnosticsReaderTests(unittest.TestCase):
         self.assertIn("not insertion into the guest",board["interpretation"])
         self.assertEqual(reader.summarize({"schema":1,"logs":{}})["input_board_pipeline"]["counts"],{})
 
+    def test_native_release_and_launch_are_not_rendering_evidence(self):
+        events=[("native_handoff.deactivating",{}),
+                ("native_handoff.deactivated",{}),
+                ("native_handoff.released",{"localReleaseConfirmed":True}),
+                ("native_handoff.open_requested",{"accepted":False})]
+        text="\n".join(json.dumps({"time":i,"sequence":i,"event":event,"fields":fields}) for i,(event,fields) in enumerate(events))
+        data=reader.summarize({"schema":1,"logs":{"events":text}})["native_handoff_pipeline"]
+        self.assertEqual(len(data["recent_events"]),4)
+        self.assertFalse(data["recent_events"][-1]["fields"]["accepted"])
+        self.assertIn("not that the ordinary app rendered",data["interpretation"])
+        self.assertEqual(reader.summarize({"schema":1,"logs":{}})["native_handoff_pipeline"]["counts"],{})
+
 
 if __name__=="__main__": unittest.main()

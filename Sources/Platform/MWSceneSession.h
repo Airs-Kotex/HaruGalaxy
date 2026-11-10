@@ -14,5 +14,6 @@
 - (void)refreshKeyboardFocusInWindow:(UIWindow *)window;
 - (void)releaseKeyboardFocus;
 - (void)close;
+- (void)closeForOriginalApplication:(void (^)(NSError *error))completion;
 @end
 

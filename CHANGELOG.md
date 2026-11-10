@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.3.8 — Compact controls and scene handoff
+
+### Fixed
+
+- Ordinary-app switching previously detached the view while retaining the target's hosted scene. End that session, wait for deactivation and verify local presenter/scene cleanup before requesting the ordinary app.
+- Guard delayed handoff callbacks against lock, background, workspace changes, timeout and cancellation. Do not automatically recreate a target session after a rejected launch.
+
+### Changed
+
+- Reduce the title bar from48 to28 points and footer from44 to18 points; total chrome is halved.
+- Make the entire bottom strip start original-aspect resizing while keeping it separate from guest content. Keep free resizing in the compact top-right corner.
+- Move ordinary-app switching to the panel with an explicit “End window and open original app” label. Keep the copy board as an optional panel tool.
+
+### Added
+
+- Bounded native-scene handoff stages and diagnostic events distinguishing deactivation, local release and launch-request acceptance.
+
+### Removed
+
+- Footer keyboard/open-original buttons and resize text.
+- The input board's original-app shortcut and the old behavior that kept the target scene alive during ordinary-app launch.
+
+Direct guest keyboard presentation remains unresolved. The scene-conflict fix and reduced touch strip still need device feedback.
+
 ## 0.3.7 — Separate resize area and input board
 
 - Move the bottom-right proportional handle into a dedicated 44-point footer outside guest content, use its full square touch target, and account for both title and footer in original-aspect geometry.

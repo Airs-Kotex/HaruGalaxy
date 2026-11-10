@@ -1,6 +1,6 @@
 # HaruGalaxy · 初春星河
 
-[简体中文](README.md) · [Download 0.3.7](https://github.com/Airs-Kotex/HaruGalaxy/releases/tag/v0.3.7) · [Issues](https://github.com/Airs-Kotex/HaruGalaxy/issues)
+[简体中文](README.md) · [Download 0.3.8](https://github.com/Airs-Kotex/HaruGalaxy/releases/tag/v0.3.8) · [Issues](https://github.com/Airs-Kotex/HaruGalaxy/issues)
 
 A native multi-window workspace for TrollStore. HaruGalaxy hosts installed apps in movable windows with an edge panel, free or original-aspect resizing, half-screen snapping and local diagnostic exports.
 
@@ -9,7 +9,7 @@ The edge entry, title bars and window panel now use translucent glass controls, 
 ## Install
 
 1. Install [TrollStore](https://github.com/opa334/TrollStore) on a supported device.
-2. Download [HaruGalaxy-0.3.7.tipa](https://github.com/Airs-Kotex/HaruGalaxy/releases/download/v0.3.7/HaruGalaxy-0.3.7.tipa).
+2. Download [HaruGalaxy-0.3.8.tipa](https://github.com/Airs-Kotex/HaruGalaxy/releases/download/v0.3.8/HaruGalaxy-0.3.8.tipa).
 3. Open the file in TrollStore and install it over an existing 0.3.1 or later installation.
 4. Open HaruGalaxy and enable the floating workspace in Settings.
 
@@ -27,14 +27,15 @@ Bundle identifier: `io.github.airskotex.harugalaxy`. Versions 0.3.0 and earlier 
 | Tap outside the panel | Close it without activating the app underneath |
 | Drag a title bar | Move the window |
 | Top-right arc | Resize width and height freely |
-| Bottom-right arc | Resize using the system's original logical aspect ratio |
+| Entire bottom strip | Resize using the system's original logical aspect ratio |
 | Drag a free window near an edge, dwell, release | Snap to top/bottom in portrait or left/right in landscape |
 | Minimize | Store the window in the edge panel |
 | Maximize / double-tap the title | Fill the screen; restore through the edge panel |
+| ↗ on an app's panel row | End that hosted window and open the ordinary app |
 
 Each app has one window, with up to four sessions at a time. Entry position is saved across launches and adapted on rotation. An undocked entry stays expanded. Drag it away from frequently used app controls; the previous inward-pull opening gesture now moves the entry, while a tap opens its panel.
 
-The bottom-right resize control occupies a full 44-point square in a separate footer. Guest content ends above this footer, keeping the handle away from app buttons. The top-right free-resize arc remains in the title area. Title-bar buttons can also start a window drag: a stationary tap activates the button, movement pans the window.
+The title bar is now28 points high and the footer18 points, reducing combined chrome from92 to46 points. The entire bottom strip starts proportional resizing; guest content ends above it. The small top-right arc handles free resizing. Footer keyboard/open-app buttons and text are removed. Title-bar buttons can also start a drag: a stationary tap activates the button, movement pans the window.
 
 ## Search
 
@@ -44,11 +45,9 @@ If iOS rejects the foreground request, the floating workspace returns with a mes
 
 ## Input board
 
-Tap the keyboard icon in a window's footer, or **“输入板”** in the edge panel. In full screen, use the keyboard action on that app's panel row. Enter text with the system keyboard, tap **“复制并返回”** (“Copy and return”), then long-press the target text field and choose Paste. Copies remain on this device and expire after ten minutes; cancelling discards the draft.
+Direct keyboard presentation inside hosted apps remains unresolved. The edge panel's **“复制输入板”** is an optional copy/paste tool: enter text, tap **“复制并返回”**, then long-press the target text field and choose Paste. Copies remain on this device and expire after ten minutes; cancelling discards the draft.
 
-For fields that reject pasting, use **“在原应用中输入”** (“Type in the original app”) or the footer's open-app icon. HaruGalaxy collects its windows into the panel and opens the app normally. Restore windows through the panel afterward. The ordinary app scene may show a different form or document.
-
-Direct keyboard presentation inside hosted apps remains unresolved. Version 0.3.7 provides the input board and ordinary-app workflow; it does not inject text automatically.
+To switch to the ordinary app, use **↗** on that app's panel row. This ends its hosted window, waits for scene deactivation and local cleanup, then requests an ordinary launch. Other windows are collected into the panel. The target is not automatically recreated; use Open App to create another hosted window. Forms and cursor positions may differ. Timeouts show a message, and cancelled handoffs do not launch the app.
 
 On iOS 14–17, the Liquid Glass-inspired appearance uses existing UIKit blur and custom edge layers. It does not provide iOS 26+'s native glass API. Guest content remains clear; Reduce Transparency switches controls to opaque backgrounds.
 

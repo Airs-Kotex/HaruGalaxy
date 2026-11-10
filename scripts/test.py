@@ -43,6 +43,11 @@ subprocess.run([cc, "-std=c11", "-Wall", "-Wextra", "-Werror", "-pedantic",
 subprocess.run([str(build / "search_handoff_test")], check=True)
 subprocess.run([cc, "-std=c11", "-Wall", "-Wextra", "-Werror", "-pedantic",
                 "-fsanitize=undefined", "-I" + str(ROOT / "Sources/Core"),
+                str(ROOT / "Sources/Core/MWNativeHandoff.c"), str(ROOT / "Tests/native_handoff_test.c"),
+                "-o", str(build / "native_handoff_test")], check=True)
+subprocess.run([str(build / "native_handoff_test")], check=True)
+subprocess.run([cc, "-std=c11", "-Wall", "-Wextra", "-Werror", "-pedantic",
+                "-fsanitize=undefined", "-I" + str(ROOT / "Sources/Core"),
                 str(ROOT / "Sources/Core/MWKeyboardFocusState.c"), str(ROOT / "Tests/keyboard_focus_test.c"),
                 "-o", str(build / "keyboard_focus_test")], check=True)
 subprocess.run([str(build / "keyboard_focus_test")], check=True)

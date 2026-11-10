@@ -151,7 +151,7 @@ static void proportional_scaling(void) {
     assert(tiny.width<=100 && tiny.height<=120);
     assert(isfinite(MWFitAspectRect(initial,viewport,NAN).width));
     equal_rect(MWResizeAspectRect(initial,100,100,(MWRect){0,0,20,30},ratio),(MWRect){0,0,20,30});
-    for(int height=91;height<100;height++) {
+    for(int height=(int)MWWindowChromeHeight-1;height<MWWindowChromeHeight+8;height++) {
         const double ratios[]={0.02,0.1,0.25,0.5,2,8};
         for(unsigned i=0;i<sizeof(ratios)/sizeof(ratios[0]);i++) {
             MWRect r=MWResizeAspectRect(initial,300,300,(MWRect){0,0,100,height},ratios[i]);
@@ -216,6 +216,7 @@ static void free_entry_placement(void) {
 }
 
 static void isolated_resize_rail(void) {
+    assert(MWWindowChromeHeight<=46);
     for(int height=200;height<=950;height+=23) for(int width=220;width<=900;width+=61) {
         MWRect bounds={0,0,width,height};
         MWRect content=MWWindowContentRect(bounds,0,false);
@@ -223,7 +224,9 @@ static void isolated_resize_rail(void) {
         assert(content.y==MWTitleHeight);
         assert(content.y+content.height<=rail.y+0.001);
         assert(rail.height==MWResizeRailHeight && rail.y+rail.height==height);
-        assert(MWCornerTouchSize<=rail.height);
+        assert(rail.width==width); // The entire thin strip starts proportional resize.
+        assert(MWCornerTouchSize<=MWTitleHeight);
+        assert(content.height>=height-46);
         equal_rect(MWWindowContentRect(bounds,0,true),bounds);
         assert(MWWindowRailRect(bounds,true).height==0);
     }

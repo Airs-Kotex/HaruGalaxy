@@ -15,7 +15,7 @@
         _arc.lineCap=kCALineCapRound; _arc.lineWidth=2.5; [self.layer addSublayer:_arc];
         self.tintColor=top ? UIColor.systemOrangeColor : UIColor.systemTealColor;
         self.isAccessibilityElement=YES; self.accessibilityTraits=UIAccessibilityTraitButton;
-        self.accessibilityLabel=top ? @"右上弧线：自由缩放" : @"右下弧线：系统原始比例缩放";
+        self.accessibilityLabel=top ? @"右上弧线：自由缩放" : @"底部细条：系统原始比例缩放";
         [self updateColor];
     }
     return self;
@@ -27,8 +27,13 @@
 }
 - (void)layoutSubviews {
     [super layoutSubviews];
-    CGPoint center=CGPointMake(self.bounds.size.width-16,_top ? 16 : self.bounds.size.height-16);
-    UIBezierPath *path=[UIBezierPath bezierPathWithArcCenter:center radius:12 startAngle:_top ? -M_PI_2 : 0 endAngle:_top ? 0 : M_PI_2 clockwise:YES];
+    CGPoint center=CGPointMake(self.bounds.size.width-11,_top ? 11 : self.bounds.size.height-11);
+    UIBezierPath *path=[UIBezierPath bezierPathWithArcCenter:center radius:7 startAngle:_top ? -M_PI_2 : 0 endAngle:_top ? 0 : M_PI_2 clockwise:YES];
+    if(!_top) {
+        CGFloat middle=CGRectGetMidX(self.bounds),half=MIN(16,self.bounds.size.width/4);
+        [path moveToPoint:CGPointMake(middle-half,CGRectGetMidY(self.bounds))];
+        [path addLineToPoint:CGPointMake(middle+half,CGRectGetMidY(self.bounds))];
+    }
     [CATransaction begin]; [CATransaction setDisableActions:YES]; _arc.frame=self.bounds; _arc.path=path.CGPath; [CATransaction commit];
 }
 - (void)setDragging:(BOOL)dragging { _dragging=dragging; _arc.lineWidth=dragging ? 3.5 : 2.5; [self updateColor]; }
@@ -47,7 +52,7 @@
     _arc.lineWidth=(_dragging || _contact) ? 3.5 : 2.5;
     if(!_top) {
         self.backgroundColor=[self.tintColor colorWithAlphaComponent:(_dragging || _contact) ? 0.22 : 0.09];
-        self.layer.cornerRadius=10;
+        self.layer.cornerRadius=6;
     }
     _arc.strokeColor=[[self.tintColor colorWithAlphaComponent:(_dragging || _contact) ? 1 : 0.8] resolvedColorWithTraitCollection:self.traitCollection].CGColor;
 }
