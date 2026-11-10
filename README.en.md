@@ -1,12 +1,12 @@
 # HaruGalaxy · 初春星河
 
-[简体中文](README.md) · [Download 0.3.13](https://github.com/Airs-Kotex/HaruGalaxy/releases/tag/v0.3.13) · [Issues](https://github.com/Airs-Kotex/HaruGalaxy/issues)
+[简体中文](README.md) · [Download 0.3.14](https://github.com/Airs-Kotex/HaruGalaxy/releases/tag/v0.3.14) · [Issues](https://github.com/Airs-Kotex/HaruGalaxy/issues)
 
 A native multi-window workspace for TrollStore. HaruGalaxy hosts installed apps in movable windows with an edge panel, free or original-aspect resizing, half-screen snapping and local diagnostic exports.
 
 The edge entry, title bars and window panel now use translucent glass controls, with dark/light appearance, Reduce Transparency and contrast adaptations.
 
-The0.3.13 assets are now **build19**, adding minimized execution choices, physical orientation following, iPad layouts and explicit guest-process closing. Install this release over0.3.12; the settings title shows the installed build.
+The0.3.14 assets are **build20**, correcting legacy landscape scene coordinates and presentation rotation, and resetting the selected app before a new hosted scene to prevent overlapping native playback. Install over0.3.13; Settings should show **0.3.14 (20)**.
 
 ## Illustrated guides
 
@@ -19,7 +19,7 @@ These are **operation illustrations, not simulator or physical-device screenshot
 ## Install
 
 1. Install [TrollStore](https://github.com/opa334/TrollStore) on a supported device.
-2. Download [HaruGalaxy-0.3.13.tipa](https://github.com/Airs-Kotex/HaruGalaxy/releases/download/v0.3.13/HaruGalaxy-0.3.13.tipa).
+2. Download [HaruGalaxy-0.3.14.tipa](https://github.com/Airs-Kotex/HaruGalaxy/releases/download/v0.3.14/HaruGalaxy-0.3.14.tipa).
 3. Open the file in TrollStore and install it over an existing 0.3.1 or later installation.
 4. Open HaruGalaxy and enable the floating workspace in Settings.
 
@@ -59,7 +59,7 @@ When guest content reaches a system edge exclusion, the workspace passes the ove
 
 ## Parking
 
-Use the fourth blue top button or panel's **“挂起”** text action, then tap the top-right thumbnail to restore. Its icon is drawn by the app rather than relying on an SF Symbols name. **Panel → 挂起设置** jumps directly to size(18%–50%) and aspect settings(original,1:1,4:3,3:4,16:9,9:16). Settings title shows version/build: **0.3.13 (19)**. Multiple thumbnails stack in the safe area; their appearance does not change restored geometry. Parking keeps sessions alive, not process suspension.
+Use the fourth blue top button or panel's **“挂起”** text action, then tap the top-right thumbnail to restore. Its icon is drawn by the app rather than relying on an SF Symbols name. **Panel → 挂起设置** jumps directly to size(18%–50%) and aspect settings(original,1:1,4:3,3:4,16:9,9:16). Settings title shows version/build: **0.3.14 (20)**. Multiple thumbnails stack in the safe area; their appearance does not change restored geometry. Parking keeps sessions alive, not process suspension.
 
 ![Illustrated parking workflow and thumbnail size/aspect settings](docs/images/03-parking-guide.png)
 
@@ -142,3 +142,9 @@ The workspace and guests follow physical orientation, including both landscape d
 Explicit Close cleans up the guest scene and asks RunningBoard to terminate the original hosted process instance. Unsaved state and other pages in that same process may be lost. Native seamless handoff cannot currently be guaranteed, so this is the requested process-exit fallback. Exit is observed separately from request acceptance; failures are reported. Minimize, parking and automatic host teardown do not terminate guest processes.
 
 Keyboard layer changes trigger bounded automatic diagnostics while guests are present. The reader defaults to the export session; use `--session all` to include historical launches. No pixels, text, keys or clipboard are collected.
+
+## Entering a new window
+
+Opening a new hosted window first ends the selected app's original process, waits for confirmed exit, and then launches a fresh scene. This prevents the previous native player from sharing the process with a second hosted player. Unsaved state and playback position may be lost. If the OS rejects termination, window creation stops with an error; pending requests can be completed by manually ending the app from the system app switcher. Restoring an existing minimized or parked window does not restart it. Switching canvas modes creates a new window and therefore also resets the app.
+
+Build20 corrects native versus oriented scene dimensions and normalizes UIKit's existing presentation transform on an app-owned parent. Low-rate gravity updates supplement orientation notifications while visible windows exist; hiding/locking the workspace stops them. Device feedback for this build is still needed to confirm landscape touch and media behavior.

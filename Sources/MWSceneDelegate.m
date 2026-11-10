@@ -109,6 +109,7 @@
 - (void)windowScene:(UIWindowScene *)windowScene didUpdateCoordinateSpace:(id<UICoordinateSpace>)previous interfaceOrientation:(UIInterfaceOrientation)orientation traitCollection:(UITraitCollection *)traits {
     (void)previous; (void)orientation; (void)traits;
     MWLog(@"host_scene.geometry",@{@"session":_sceneIdentifier ?: @"none",@"orientation":@(windowScene.interfaceOrientation),@"width":@(windowScene.coordinateSpace.bounds.size.width),@"height":@(windowScene.coordinateSpace.bounds.size.height)});
+    [self.window.rootViewController.viewIfLoaded setNeedsLayout];
 }
 - (void)dealloc { [[NSNotificationCenter defaultCenter] removeObserver:self]; }
 @end

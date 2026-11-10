@@ -25,6 +25,7 @@ def verify(path):
         assert info["MinimumOSVersion"] == expected_info["MinimumOSVersion"]
         assert info["CFBundleShortVersionString"] == expected_info["CFBundleShortVersionString"]
         assert info["CFBundleVersion"] == expected_info["CFBundleVersion"]
+        assert isinstance(info.get("NSMotionUsageDescription"), str) and info["NSMotionUsageDescription"].strip()
         assert info["UIDeviceFamily"] == [1, 2]
         assert "UIInterfaceOrientationPortrait" in info["UISupportedInterfaceOrientations"]
         assert set(info["UISupportedInterfaceOrientations~ipad"]) == {
@@ -80,6 +81,7 @@ def verify(path):
     assert entitlements.get("com.apple.runningboard.terminateprocess") is True
     assert "com.apple.runningboard.terminatemanagedprocesses" not in entitlements
     assert any("UIKit.framework" in dependency for dependency in dependencies)
+    assert any("CoreMotion.framework" in dependency for dependency in dependencies)
     print(f"PASS: {path.name}: package layout, plist, arm64/iOS {info['MinimumOSVersion']}, signature structure, entitlements and resources")
     print("Offline checks do not prove installation, entitlements being granted, or runtime compatibility.")
 

@@ -22,3 +22,5 @@ Links: https://github.com/straight-tamago/UiharuX · https://github.com/YuriDevT
 
 Build19 additionally consults the pinned RunningBoardServices `RBSTerminateRequest`, `RBSTerminateContext` and `RBSProcessPredicate` method declarations for explicitly user-requested, original-process-instance termination. Full runtime headers are not distributed.
 The `com.apple.runningboard.terminateprocess` entitlement name is also present in FrontBoardAppLauncher’s pinned `entitlements.xml`; OS authorization is still checked through the request result.
+
+Build20 uses the legacy native-axis landscape frame convention observed in the pinned FrontBoardAppLauncher and the consulted LiveContainer AppSceneViewController. Presenter normalization, launch/reset state and tests are original project code. CoreMotion is an Apple system framework; no framework binary is distributed.

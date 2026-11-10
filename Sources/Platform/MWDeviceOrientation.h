@@ -5,4 +5,6 @@ FOUNDATION_EXPORT NSString *const MWDeviceOrientationDidChangeNotification;
 @property(nonatomic,readonly) UIInterfaceOrientation orientation;
 - (void)start;
 - (void)stop;
+- (void)setMotionEnabled:(BOOL)enabled;
+- (NSDictionary *)diagnosticSnapshot;
 @end

@@ -71,4 +71,15 @@ subprocess.run([cc, "-std=c11", "-Wall", "-Wextra", "-Werror", "-pedantic",
                 str(ROOT / "Sources/Core/MWGuestCloseState.c"), str(ROOT / "Tests/guest_close_test.c"),
                 "-o", str(build / "guest_close_test")], check=True)
 subprocess.run([str(build / "guest_close_test")], check=True)
+subprocess.run([cc, "-std=c11", "-Wall", "-Wextra", "-Werror", "-pedantic",
+                "-fsanitize=undefined", "-I" + str(ROOT / "Sources/Core"),
+                str(ROOT / "Sources/Core/MWSceneGeometry.c"), str(ROOT / "Sources/Core/MWWindowModel.c"),
+                str(ROOT / "Tests/scene_geometry_test.c"), "-lm",
+                "-o", str(build / "scene_geometry_test")], check=True)
+subprocess.run([str(build / "scene_geometry_test")], check=True)
+subprocess.run([cc, "-std=c11", "-Wall", "-Wextra", "-Werror", "-pedantic",
+                "-fsanitize=undefined", "-I" + str(ROOT / "Sources/Core"),
+                str(ROOT / "Sources/Core/MWGuestLaunchGate.c"), str(ROOT / "Tests/guest_launch_test.c"),
+                "-o", str(build / "guest_launch_test")], check=True)
+subprocess.run([str(build / "guest_launch_test")], check=True)
 subprocess.run([os.environ.get("PYTHON", "python3"), "-m", "unittest", "discover", "-s", str(ROOT / "Tests"), "-p", "test_*.py", "-v"], check=True)

@@ -10,6 +10,17 @@ spec.loader.exec_module(reader)
 
 
 class DiagnosticsReaderTests(unittest.TestCase):
+    def test_entry_reset_does_not_imply_new_presenter_or_stopped_audio(self):
+        events=[("guest.launch_reset_begin",{}),
+                ("guest.user_close_requested",{"accepted":True,"purpose":"before_hosting"}),
+                ("guest.launch_reset_pending",{})]
+        rows=[json.dumps({"time":i,"sequence":i,"event":e,"fields":f,"session":"reset"}) for i,(e,f) in enumerate(events)]
+        result=reader.summarize({"schema":1,"logs":{"events":"\n".join(rows)}})
+        self.assertEqual(len(result["execution_pipeline"]["recent_events"]),3)
+        self.assertNotIn("guest.launch_reset_finished",result["execution_pipeline"]["counts"])
+        self.assertNotIn("guest.presenter_ready",result["render_pipeline"]["counts"])
+        self.assertIn("purpose=before_hosting",result["execution_pipeline"]["interpretation"])
+
     def test_latest_session_does_not_attribute_old_keyboard_capture_to_new_build(self):
         rows=[
             {"time":1,"sequence":1,"session":"old","event":"session.start","fields":{"version":"0.3.9","build":"14"}},

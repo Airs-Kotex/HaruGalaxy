@@ -35,6 +35,7 @@ static BOOL MWTerminateMethod(id object,SEL selector,char result,const char *arg
 @public MWGuestCloseState state;
 }
 @property(nonatomic) pid_t pid;
+@property(nonatomic,copy) NSString *purpose;
 @property(nonatomic,copy) void (^pending)(void);
 @property(nonatomic,copy) void (^completion)(NSError *);
 - (void)poll;
@@ -54,11 +55,11 @@ static BOOL MWTerminateMethod(id object,SEL selector,char result,const char *arg
     errno=0; int exists=kill(self.pid,0); int status=errno;
     MWGuestCloseAction action=MWGuestCloseObserve(&state,CACurrentMediaTime(),MWGuestProcessAbsent(exists,status));
     if(action==MWGuestCloseCompleteExit) {
-        MWLog(@"guest.user_close_exited",@{@"pid":@(self.pid),@"confirmed":@YES});
+        MWLog(@"guest.user_close_exited",@{@"pid":@(self.pid),@"confirmed":@YES,@"purpose":self.purpose});
         [self finish:nil]; return;
     }
     if(action==MWGuestCloseReportPending) {
-        MWLog(@"guest.user_close_request_pending",@{@"pid":@(self.pid),@"cancelled":@NO});
+        MWLog(@"guest.user_close_request_pending",@{@"pid":@(self.pid),@"cancelled":@NO,@"purpose":self.purpose});
         if(self.pending) self.pending();
     }
     // Continue observing a late exit even if execute is still blocked. A
@@ -67,7 +68,7 @@ static BOOL MWTerminateMethod(id object,SEL selector,char result,const char *arg
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(delay*NSEC_PER_SEC)),dispatch_get_main_queue(),^{[self poll];});
 }
 @end
-void MWEndOwnedGuest(id process,void (^pending)(void),void (^completion)(NSError *)) {
+static void MWEndApplicationProcess(id process,NSString *purpose,void (^pending)(void),void (^completion)(NSError *)) {
     NSCAssert(NSThread.isMainThread,@"Guest termination is initiated on the main thread");
     Class handleClass=NSClassFromString(@"RBSProcessHandle");
     if(!process) { completion(nil); return; }
@@ -75,7 +76,7 @@ void MWEndOwnedGuest(id process,void (^pending)(void),void (^completion)(NSError
     if(pid<=1 || pid==getpid()) { completion(MWError(70,@"未能核实小窗应用的进程，未发送结束请求。")); return; }
     errno=0; int exists=kill(pid,0); int status=errno;
     if(MWGuestProcessAbsent(exists,status)) {
-        MWLog(@"guest.user_close_exited",@{@"pid":@(pid),@"confirmed":@YES,@"beforeRequest":@YES});
+        MWLog(@"guest.user_close_exited",@{@"pid":@(pid),@"confirmed":@YES,@"beforeRequest":@YES,@"purpose":purpose});
         completion(nil); return;
     }
     // The predicate binds the original process instance (including its
@@ -89,22 +90,23 @@ void MWEndOwnedGuest(id process,void (^pending)(void),void (^completion)(NSError
            !MWTerminateMethod(contextClass,@selector(defaultContextWithExplanation:),'@',"@") ||
            !MWTerminateMethod(request,@selector(initWithPredicate:context:),'@',"@@") ||
            (!MWTerminateMethod(request,@selector(execute:),'B',"^") && !MWTerminateMethod(request,@selector(execute:),'c',"^"))) {
-            completion(MWError(70,@"系统缺少精确结束应用的接口。小窗已释放，请从系统多任务界面关闭该应用。")); return;
+            completion(MWError(70,@"系统缺少精确结束应用的接口。请从系统多任务界面关闭该应用后重试。")); return;
         }
         id predicate=[predicateClass predicateMatchingHandle:process];
-        id context=[contextClass defaultContextWithExplanation:@"User closed hosted application in HaruGalaxy"];
+        NSString *explanation=[purpose isEqual:@"before_hosting"] ? @"User requested exclusive hosted app in HaruGalaxy" : @"User closed hosted application in HaruGalaxy";
+        id context=[contextClass defaultContextWithExplanation:explanation];
         if(!predicate || !context) { completion(MWError(70,@"无法建立应用结束请求。")); return; }
         if(MWTerminateMethod(context,@selector(setExplanation:),'v',"@"))
-            [context setExplanation:@"User closed hosted application in HaruGalaxy"];
+            [context setExplanation:explanation];
         request=[request initWithPredicate:predicate context:context];
         if(!request) { completion(MWError(70,@"系统未创建应用结束请求。")); return; }
         id all=MWRuntimeBoolValue(request,@"targetsAllManagedProcesses");
         if(![all isKindOfClass:NSNumber.class] || [all boolValue]) {
             completion(MWError(70,@"无法确认结束请求只针对所选应用，未执行请求。")); return;
         }
-        MWLog(@"guest.user_close_termination",@{@"pid":@(pid),@"target":@"original_process_handle"});
+        MWLog(@"guest.user_close_termination",@{@"pid":@(pid),@"target":@"original_process_handle",@"purpose":purpose});
         MWGuestExitObservation *observation=[MWGuestExitObservation new];
-        observation.pid=pid; MWGuestCloseBegin(&observation->state,CACurrentMediaTime());
+        observation.pid=pid; observation.purpose=purpose; MWGuestCloseBegin(&observation->state,CACurrentMediaTime());
         observation.pending=pending; observation.completion=completion;
         [observation poll];
         if(MWGuestCloseDone(&observation->state)) return;
@@ -115,7 +117,7 @@ void MWEndOwnedGuest(id process,void (^pending)(void),void (^completion)(NSError
             if(error && ![error isKindOfClass:NSError.class]) error=MWError(70,@"系统返回了无法识别的结束结果。");
             dispatch_async(dispatch_get_main_queue(),^{
                 if(MWGuestCloseDone(&observation->state)) return;
-                MWLog(@"guest.user_close_requested",@{@"pid":@(pid),@"accepted":@(accepted),@"error":MWErrorFields(error)});
+                MWLog(@"guest.user_close_requested",@{@"pid":@(pid),@"accepted":@(accepted),@"error":MWErrorFields(error),@"purpose":purpose});
                 if(!accepted) {
                     errno=0; int result=kill(pid,0); int probeError=errno;
                     if(MWGuestProcessAbsent(result,probeError)) { [observation poll]; return; }
@@ -125,4 +127,27 @@ void MWEndOwnedGuest(id process,void (^pending)(void),void (^completion)(NSError
             });
         });
     } @catch(NSException *exception) { completion(MWError(70,exception.reason ?: @"应用结束请求失败。")); }
+}
+void MWEndOwnedGuest(id process,void (^pending)(void),void (^completion)(NSError *)) {
+    MWEndApplicationProcess(process,@"user_close",pending,completion);
+}
+static NSMutableSet<NSString *> *MWPendingResets;
+BOOL MWGuestResetPending(NSString *bundle) {
+    NSCAssert(NSThread.isMainThread,@"Process reset registry is main-thread owned");
+    return bundle.length && [MWPendingResets containsObject:bundle];
+}
+void MWResetGuestForHosting(NSString *bundle,id process,void (^pending)(void),void (^completion)(NSError *)) {
+    NSCAssert(NSThread.isMainThread,@"Process reset registry is main-thread owned");
+    if(!bundle.length || MWGuestResetPending(bundle)) { completion(MWError(73,@"该应用仍在结束旧进程，请稍后再打开。")); return; }
+    if(!MWPendingResets) MWPendingResets=[NSMutableSet set];
+    [MWPendingResets addObject:bundle];
+    MWLog(@"guest.launch_reset_begin",@{@"bundle":bundle});
+    MWEndApplicationProcess(process,@"before_hosting",^{
+        MWLog(@"guest.launch_reset_pending",@{@"bundle":bundle});
+        if(pending) pending();
+    },^(NSError *error) {
+        [MWPendingResets removeObject:bundle];
+        MWLog(@"guest.launch_reset_finished",@{@"bundle":bundle,@"exitConfirmed":@(error==nil),@"error":MWErrorFields(error)});
+        completion(error);
+    });
 }

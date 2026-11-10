@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.3.14 — Landscape scene coordinates and exclusive app entry (build20)
+
+### Fixed
+
+- Convert landscape content sizes into legacy FrontBoard native axes on creation and resize; stop overwriting UIKit-owned presenter bounds. Normalize the existing presenter rotation/offset on a separate parent before proportional scaling.
+- Reset the exact selected app process before creating a new hosted scene, preventing the old native page and new hosted page from sharing active playback. Confirm process exit before relaunch; reject failed reset and stale same-PID results.
+- Guard reset/relaunch against cancelled windows and explicit Close; keep pending resets registered until the process operation completes.
+
+### Added
+
+- Low-rate CoreMotion gravity direction updates while the workspace has visible windows, with flat/diagonal rejection, stable readings and stop-on-hide/lock lifecycle.
+- Requested/native/reported scene geometry, client orientation, presenter normalization and reset/relaunch-stage diagnostics. No audio, pixels, text or raw sensor traces are recorded.
+- App-picker notice explaining that entering a new window resets the original app and may discard unsaved state. Existing minimize/parking restoration does not restart it.
+
+Device evidence is iPad7,5/iPadOS16.3 on0.3.13; this release has offline verification, not new device confirmation. Guest keyboards and unrelated app rendering remain unresolved.
+
 ## 0.3.13 — Minimized execution, orientation and guest closing (build19)
 
 ### Added

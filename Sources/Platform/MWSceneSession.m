@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Scene lifecycle adapted from FrontBoardAppLauncher; redesigned cancellation,
-// identity, cleanup and failure handling. No guest process termination.
+// identity, cleanup and failure handling. Explicit entry resets the selected
+// process before hosting; ordinary teardown does not terminate other apps.
 #import "MWSceneSession.h"
 #import "MWPrivate.h"
 #include <signal.h>
@@ -14,6 +15,8 @@
 #import "MWSceneLayerDiagnostics.h"
 #import "MWGuestTermination.h"
 #import "../Core/MWGuestPolicy.h"
+#import "../Core/MWSceneGeometry.h"
+#import "../Core/MWGuestLaunchGate.h"
 #import "../Core/MWRuntimeTypes.h"
 #import "../Core/MWNativeHandoff.h"
 #import <objc/runtime.h>
@@ -68,6 +71,8 @@ static id MWSceneForeground(UIApplicationSceneSettings *settings) {
     CFTimeInterval _lastInputLayerTime;
     void (^_userCloseAfterLaunch)(NSError *);
     RBSProcessHandle *_ownedProcessForUserClose;
+    MWGuestLaunchGate _launchGate;
+    BOOL _resetInProgress;
 }
 
 - (instancetype)initWithBundleIdentifier:(NSString *)bundleIdentifier {
@@ -84,12 +89,18 @@ static id MWSceneForeground(UIApplicationSceneSettings *settings) {
 - (void)startWithSize:(CGSize)size completion:(void (^)(NSError *))completion {
     NSAssert(NSThread.isMainThread,@"Scene sessions are main-thread owned");
     if(_started || _closed) { completion(MWError(10,@"该窗口会话已结束，请重新打开。")); return; }
+    if(MWGuestResetPending(self.bundleIdentifier)) { completion(MWError(73,@"该应用的旧进程尚未结束，请稍后重新打开。")); return; }
     _started=YES; _size=size; _completion=[completion copy];
     MWLog(@"guest.application_profile",MWApplicationProfile(self.bundleIdentifier));
     MWLog(@"guest.launch_requested",@{@"bundle":self.bundleIdentifier,@"scene":self.sceneIdentifier,@"width":@(size.width),@"height":@(size.height)});
     NSString *issue=MWSceneCapabilityIssue();
     if(issue) { [self fail:MWError(11,issue)]; return; }
+    [self beginProcessLaunch];
+}
+- (void)beginProcessLaunch {
+    if(_closed || !_completion) return;
     NSUInteger generation=++_generation;
+    MWLog(@"guest.process_launch_phase",@{@"bundle":self.bundleIdentifier,@"phase":@(_launchGate.phase),@"generation":@(generation)});
     __weak typeof(self) weakSelf=self;
     @try {
         RBSProcessIdentity *identity=[PrivClass(RBSProcessIdentity) identityForEmbeddedApplicationIdentifier:self.bundleIdentifier];
@@ -130,6 +141,10 @@ static id MWSceneForeground(UIApplicationSceneSettings *settings) {
             void (^closed)(NSError *)=_userCloseAfterLaunch; _userCloseAfterLaunch=nil;
             [self closeAfterUserRequest:closed]; return;
         }
+        MWGuestLaunchAction action=MWGuestLaunchResolved(&_launchGate,_process.pid);
+        if(action==MWGuestLaunchReset) { [self resetBeforeHosting]; return; }
+        if(action==MWGuestLaunchFail) { [self fail:MWError(74,@"系统仍返回旧应用进程，未创建重复小窗。请手动结束原应用后重试。")]; return; }
+        if(action!=MWGuestLaunchAttach) return;
         [[PrivClass(FBProcessManager) sharedInstance] registerProcessForAuditToken:_process.auditToken];
         FBSMutableSceneDefinition *definition=[PrivClass(FBSMutableSceneDefinition) definition];
         definition.identity=[PrivClass(FBSSceneIdentity) identityForIdentifier:self.sceneIdentifier];
@@ -139,7 +154,7 @@ static id MWSceneForeground(UIApplicationSceneSettings *settings) {
         UIMutableApplicationSceneSettings *settings=[PrivClass(UIMutableApplicationSceneSettings) new];
         settings.displayConfiguration=UIScreen.mainScreen.displayConfiguration;
         settings.foreground=_visible;
-        settings.frame=(CGRect){CGPointZero,_size};
+        settings.frame=[self nativeSceneFrame];
         settings.interfaceOrientation=_orientation;
         [self applyDeviceOrientation:settings];
         settings.level=1;
@@ -185,6 +200,32 @@ static id MWSceneForeground(UIApplicationSceneSettings *settings) {
         [self fail:MWError(17,[NSString stringWithFormat:@"建立小窗失败：%@",exception.reason])];
     }
 }
+- (void)resetBeforeHosting {
+    _resetInProgress=YES; ++_generation; // Invalidate the first launch deadline.
+    [_transaction setCompletionBlock:nil]; _transaction=nil;
+    if(self.startupStatusHandler) self.startupStatusHandler(@"正在结束原应用播放…\n随后重新打开小窗");
+    __weak typeof(self) weakSelf=self;
+    MWResetGuestForHosting(self.bundleIdentifier,_process,^{
+        MWSceneSession *session=weakSelf;
+        if(!session || session->_closed) return;
+        if(session.startupStatusHandler) session.startupStatusHandler(@"系统仍在结束旧进程\n可从系统多任务界面手动结束原应用");
+        if(session.closeProgressHandler) session.closeProgressHandler();
+    },^(NSError *error) {
+        MWSceneSession *session=weakSelf;
+        if(!session) return;
+        session->_resetInProgress=NO;
+        if(session->_userCloseAfterLaunch) {
+            void (^closed)(NSError *)=session->_userCloseAfterLaunch; session->_userCloseAfterLaunch=nil;
+            [session close]; closed(error); return;
+        }
+        MWGuestLaunchAction action=MWGuestLaunchResetFinished(&session->_launchGate,error==nil);
+        if(session->_closed || action==MWGuestLaunchIgnore) return;
+        if(action==MWGuestLaunchFail) { [session fail:error ?: MWError(74,@"无法结束旧进程，已停止创建小窗。")]; return; }
+        session->_process=nil;
+        if(session.startupStatusHandler) session.startupStatusHandler(@"原应用已结束，正在打开小窗…");
+        [session beginProcessLaunch];
+    });
+}
 - (void)observeGuestInput {
     SEL add=NSSelectorFromString(@"addObserver:"),remove=NSSelectorFromString(@"removeObserver:");
     if(!MWGuestMethod(_scene,add,'v',"@") || !MWGuestMethod(_scene,remove,'v',"@")) {
@@ -202,7 +243,20 @@ static id MWSceneForeground(UIApplicationSceneSettings *settings) {
     __weak typeof(self) weakSelf=self;
     dispatch_async(dispatch_get_main_queue(),^{
         MWSceneSession *session=weakSelf;
-        if(session && !session->_closed && session->_scene==scene) [session readGuestInputState];
+        if(session && !session->_closed && session->_scene==scene) {
+            [session readGuestInputState];
+            if(session.presentationGeometryHandler) session.presentationGeometryHandler();
+        }
+    });
+}
+- (void)scene:(id)scene didCompleteUpdateWithContext:(id)context error:(NSError *)error {
+    (void)context;
+    __weak typeof(self) weakSelf=self;
+    dispatch_async(dispatch_get_main_queue(),^{
+        MWSceneSession *session=weakSelf;
+        if(!session || session->_closed || session->_scene!=scene) return;
+        if(error) MWLog(@"guest.geometry_update_failed",@{@"scene":session.sceneIdentifier,@"error":MWErrorFields(error)});
+        if(session.presentationGeometryHandler) session.presentationGeometryHandler();
     });
 }
 - (void)scene:(id)scene clientDidConnect:(id)client {
@@ -302,6 +356,10 @@ static id MWSceneForeground(UIApplicationSceneSettings *settings) {
         @"presenterActive":MWRuntimeBoolValue(_presenter,@"isActive"),@"presenterHosting":MWRuntimeBoolValue(_presenter,@"isHosting"),
         @"safeAreaRequested":@[@(_safeInsets.top),@(_safeInsets.left),@(_safeInsets.bottom),@(_safeInsets.right)],
         @"safeAreaReported":MWRuntimeInsetsValue(settings,safeSelector),@"orientation":@(_orientation),
+        @"nativeFrameReported":MWRuntimeRectValue(settings,@"frame"),
+        @"orientationReported":MWRuntimeIntegerValue(settings,@"interfaceOrientation"),
+        @"clientOrientation":MWRuntimeIntegerValue(client,@"interfaceOrientation"),
+        @"clientSupportedOrientations":MWRuntimeIntegerValue(client,@"supportedInterfaceOrientations"),
         @"render":[self renderDiagnosticSnapshot],
         @"inputLayers":MWSceneLayerSnapshot(_scene,_presenter),
         @"inputEnvironment":_inputEnvironment ? [_inputEnvironment diagnosticSnapshot] : @{@"registered":@NO}} mutableCopy];
@@ -354,17 +412,22 @@ static id MWSceneForeground(UIApplicationSceneSettings *settings) {
     if(orientation!=UIInterfaceOrientationUnknown) _orientation=orientation;
     if(!_scene) return;
     MWTrace(@"guest.logical_geometry",@{@"bundle":self.bundleIdentifier,@"width":@(size.width),@"height":@(size.height),@"orientation":@(orientation),
+        @"nativeFrame":NSStringFromCGRect([self nativeSceneFrame]),
         @"safeInsets":@[@(insets.top),@(insets.left),@(insets.bottom),@(insets.right)]});
     @try {
         UIInterfaceOrientation resolved=_orientation;
         [_scene updateSettingsWithBlock:^(UIMutableApplicationSceneSettings *settings) {
-            settings.frame=(CGRect){CGPointZero,size}; settings.interfaceOrientation=resolved;
+            settings.frame=[self nativeSceneFrame]; settings.interfaceOrientation=resolved;
             [self applyDeviceOrientation:settings];
             [self applySafeInsets:settings];
         }];
     } @catch(NSException *exception) {
         [self fail:MWError(19,[NSString stringWithFormat:@"更新小窗尺寸失败：%@",exception.reason])];
     }
+}
+- (CGRect)nativeSceneFrame {
+    MWRect native=MWSceneFrameForInterface((MWRect){0,0,_size.width,_size.height},(int)_orientation);
+    return CGRectMake(native.x,native.y,native.width,native.height);
 }
 
 - (void)setVisible:(BOOL)visible {
@@ -430,13 +493,19 @@ static id MWSceneForeground(UIApplicationSceneSettings *settings) {
     if(_closed) return;
     void (^nativeCompletion)(NSError *)=_nativeCompletion; _nativeCompletion=nil;
     MWNativeHandoffCancel(&_nativeHandoff);
+    MWGuestLaunchCancel(&_launchGate);
     MWLog(@"guest.close",@{@"bundle":self.bundleIdentifier,@"scene":self.sceneIdentifier});
     _closed=YES; ++_generation; _completion=nil; self.failureHandler=nil; self.inputRequestHandler=nil;
+    self.presentationGeometryHandler=nil; self.startupStatusHandler=nil;
     [self tearDown];
     if(nativeCompletion) nativeCompletion(MWError(63,@"原应用切换已取消，未发送打开请求。"));
 }
 - (void)closeAfterUserRequest:(void (^)(NSError *))completion {
     if(_userCloseAfterLaunch) { completion(MWError(72,@"该应用正在关闭。")); return; }
+    if(_resetInProgress) {
+        _userCloseAfterLaunch=[completion copy]; MWGuestLaunchCancel(&_launchGate);
+        self.failureHandler=nil; self.inputRequestHandler=nil; return;
+    }
     if(!_process && _transaction && _completion && !_closed) {
         // Do not cancel launch bookkeeping before learning its exact handle:
         // otherwise a late launch could survive the user's Close action.
@@ -467,6 +536,9 @@ static id MWSceneForeground(UIApplicationSceneSettings *settings) {
     return MWNativeHandoffChoose(MWGuestMethod(_scene,NSSelectorFromString(@"deactivate:"),'v',"@"),settingsRoute,cleanup);
 }
 - (NSError *)originalApplicationHandoffIssue {
+    if(MWGuestResetPending(self.bundleIdentifier) ||
+       (_started && !_closed && !MWGuestLaunchAllowsHandoff(&_launchGate,_resetInProgress)))
+        return MWError(73,@"该应用正在重建小窗，请等待完成后再切回原应用。");
     if(_nativeCompletion) return MWError(63,@"该窗口正在切换，请稍后再试。");
     if(_cleanupFailed || [MWKeyboardFocus.shared hasPendingCleanup])
         return MWError(66,@"小窗输入清理未完成，已保留当前窗口。请导出诊断并重启初春星河。");

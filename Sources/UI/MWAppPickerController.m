@@ -226,6 +226,11 @@
 - (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
     (void)tableView; return _recent.count && section==0 ? @"最近使用" : @"所有应用";
 }
+- (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
+    (void)tableView;
+    if(_recent.count && section==0) return nil;
+    return @"打开新小窗会先结束该应用原来的运行，以免两边同时播放；未保存内容可能丢失。恢复已存在的小窗不会重启。";
+}
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
     UITableViewCell *cell=[tableView dequeueReusableCellWithIdentifier:@"app"];
     if(!cell) cell=[[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:@"app"];

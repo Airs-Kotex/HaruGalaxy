@@ -19,7 +19,7 @@
 }
 - (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
     (void)tableView; (void)section;
-    return @"原始画布使用手机原始画布，再缩放到小窗中。切换会重新打开该小窗，当前页面或表单可能重置。外窗位置和比例会保留；仅调整布局，不能修复键盘或未提交画面的应用。";
+    return @"原始画布使用设备原始画布，再缩放到小窗中。切换会结束该应用进程并重新打开小窗，当前页面或表单可能重置。外窗位置和比例会保留；仅调整布局，不能修复键盘或未提交画面的应用。";
 }
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
     (void)tableView;

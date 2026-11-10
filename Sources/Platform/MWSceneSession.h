@@ -7,6 +7,8 @@
 @property(nonatomic,copy) void (^failureHandler)(NSError *error);
 @property(nonatomic,copy) void (^inputRequestHandler)(void);
 @property(nonatomic,copy) void (^closeProgressHandler)(void);
+@property(nonatomic,copy) void (^presentationGeometryHandler)(void);
+@property(nonatomic,copy) void (^startupStatusHandler)(NSString *status);
 - (instancetype)initWithBundleIdentifier:(NSString *)bundleIdentifier;
 - (void)startWithSize:(CGSize)size completion:(void (^)(NSError *error))completion;
 - (void)updateSize:(CGSize)size orientation:(UIInterfaceOrientation)orientation safeAreaInsets:(UIEdgeInsets)insets;

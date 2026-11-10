@@ -96,7 +96,7 @@ def main():
     run([linker, "-arch", "arm64", "-platform_version", "ios", deployment, str(sdk_version),
          "-syslibroot", sdk, "-pie", "-o", executable, *objects, "-lSystem", "-lobjc",
          "-framework", "Foundation", "-framework", "UIKit", "-framework", "QuartzCore",
-         "-framework", "CoreFoundation", "-framework", "CoreGraphics"])
+         "-framework", "CoreFoundation", "-framework", "CoreGraphics", "-framework", "CoreMotion"])
     executable.chmod(0o755)
     for resource in (ROOT / "Resources").iterdir():
         if resource.name == "entitlements.plist" or resource.suffix == ".svg":

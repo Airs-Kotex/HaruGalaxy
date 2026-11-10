@@ -257,6 +257,15 @@ static NSArray *MWRectFields(CGRect r) { return @[@(r.origin.x),@(r.origin.y),@(
     [self applyExecutionPolicy];
     __weak typeof(self) weakSelf=self;
     _session.failureHandler=^(NSError *error) { [weakSelf failed:error]; };
+    _session.presentationGeometryHandler=^{
+        MWWindowView *view=weakSelf;
+        if(!view || view->_model.state==MWWindowClosed) return;
+        [view->_guestHost setNeedsLayout]; [view->_guestHost layoutIfNeeded];
+    };
+    _session.startupStatusHandler=^(NSString *status) {
+        MWWindowView *view=weakSelf;
+        if(view && view->_model.state==MWWindowLoading) view->_message.text=status;
+    };
     _session.inputRequestHandler=^{
         MWWindowView *view=weakSelf;
         // Guest notifications can be delayed or caused by autofocus. They may

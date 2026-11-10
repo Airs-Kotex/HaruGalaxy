@@ -196,6 +196,7 @@
 }
 - (void)updateChrome {
     if(!self.isViewLoaded) return;
+    [_deviceOrientation setMotionEnabled:!_hostHidden && _windows.count>0];
     self.view.backgroundColor=_floating ? UIColor.clearColor : UIColor.systemGroupedBackgroundColor;
     self.view.opaque=!_floating; self.view.layer.opaque=!_floating;
     _canvas.passThrough=_floating;
@@ -530,6 +531,7 @@
 - (void)setHostVisible:(BOOL)visible {
     MWLog(@"workspace.visibility",@{@"visible":@(visible),@"floating":@(_floating),@"windows":@(_windows.count)});
     _hostHidden=!visible;
+    [_deviceOrientation setMotionEnabled:visible && _windows.count>0];
     if(!visible) { [self cancelNativeOpen]; [_bubble cancelInteraction]; [self closePanel]; }
     for(MWWindowView *window in _windows.allValues) [window setHostVisible:visible && window.superview==_canvas];
 }
@@ -579,6 +581,7 @@
         }
     }
     MWLog(@"keyboard.diagnostic_sample",@{@"context":notification.userInfo ?: @{},@"floating":@(_floating),@"hostHidden":@(_hostHidden),
+        @"orientationSource":[_deviceOrientation diagnosticSnapshot],
         @"panelVisible":@(!_panel.hidden),@"modalVisible":@(self.presentedViewController!=nil),
         @"focus":[MWKeyboardFocus.shared diagnosticSnapshotWithCapabilities:capabilities],@"guests":guests,@"windows":windows});
 }

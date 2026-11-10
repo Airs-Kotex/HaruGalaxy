@@ -154,7 +154,7 @@ def summarize(bundle, session=None):
             "LaunchServices accepted the request, not that the ordinary app rendered or has a usable keyboard. "
             "The target hosted session ends and is not automatically recreated. cancelled and timeouts must "
             "not be interpreted as successful handoffs.")}
-    execution_trace = [row for row in records if row["event"].startswith(("guest.keepalive", "guest.user_close", "orientation."))]
+    execution_trace = [row for row in records if row["event"].startswith(("guest.keepalive", "guest.user_close", "guest.launch_reset", "guest.process_launch_phase", "orientation."))]
     return {"environment": environment, "events": len(records), "selected_session": selected,
             "available_sessions": sessions, "total_events": len(all_records),
             "sessions": sorted({str(row.get("session", "unknown")) for row in records}),
@@ -172,7 +172,7 @@ def summarize(bundle, session=None):
             "native_handoff_pipeline": native_stages,
             "execution_pipeline": {"counts":dict(sorted(Counter(r["event"] for r in execution_trace).items())),
                 "recent_events":execution_trace[-80:],
-                "interpretation":"Keepalive requested is not a grant. Termination accepted is not process exit; require guest.user_close_exited. Orientation requests are not proof that a guest honors the requested layout."},
+                "interpretation":"Keepalive requested is not a grant. Termination accepted is not process exit; require guest.user_close_exited. purpose=before_hosting distinguishes entry reset from user Close. An exit-confirmed reset precedes a fresh process launch and presenter attachment. Orientation requests are not proof that a guest honors the requested layout."},
             "interpretation": "A heartbeat gap is an observation, not proof of a crash. Assertion valid is not proof of rendering or input."}
 
 

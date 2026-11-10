@@ -1,0 +1,20 @@
+# iPad landscape and single playback session
+
+**Goal:** Correct legacy FrontBoard scene geometry and prevent a hosted scene from sharing a still-playing native app process. Publish a normal0.3.14/build20 release after verification, retaining0.3.13.
+
+**Evidence:** User diagnostic3BEF has7385 events/four launches; latest475 events are0.3.13(19),iPad7,5/iPadOS16.3(20D47). Interface/host orientation=3,1024×768. Presenter transform=[0,1,-1,0,0,0]. At creation our wrapper writes bounds1024×768; later UIKit writes547.19×850.92 for requested850.92×547.19. This is a coordinate-space mismatch. UIDevice updates cease after startup in this trace; cannot infer device attitude between missing callbacks. App PID9424 is reused for a new scene; no prior termination path exists. Two audible players are user evidence, not recorded audio.
+
+**Architecture:** Convert oriented logical size to native scene frame on both creation and resize. Preserve UIKit-owned bounds/center/transform; normalize that transform using a separate app-owned parent, then uniformly scale. Add low-rate CoreMotion gravity direction updates only while workspace is visible, with flat/diagonal rejection, stability threshold, lifecycle cancellation and metadata-only diagnostics. Reset the exact resolved app process once before attaching a scene, wait for confirmed exit and relaunch; pending resets block same-app reopening. Cancellation/Close while resetting must never relaunch. No termination by broad bundle/PID signal and no global audio pause.
+
+**Tech stack:** UIKit, CoreMotion, existing checked FrontBoard/RunningBoard calls, portableC regression tests, Python tooling.
+
+- [x] Add portable scene-frame conversion, affine normalization and gravity direction selection in `MWSceneGeometry.{h,c}`; tests reproduce3BEF width/height mismatch, both landscape rotations, portrait/upside-down, arbitrary center/translation, touch-coordinate inverse, invalid transform and sensor jitter.
+- [x] Integrate conversion in `MWSceneSession`, normalization in `MWGuestContentView`, and orientation freshness diagnostics. Do not reset guest transform directly or infer successful rendered layout from a submitted scene request.
+- [x] Extend `MWDeviceOrientation` with5Hz CoreMotion gravity, two stable readings, stale callback generations and stop on invisible/lock; linkCoreMotion and declare usage purpose. Host scene geometry callbacks request layout even on180-degree turns.
+- [x] Add `MWGuestLaunchGate` with exact lifecycle tests. Launch transaction resolves handle, old process reset completes before a second launch attaches a scene. Registry keeps bundle blocked during pending termination even if original view/session closes. Explicit Close during reset consumes completion without a relaunch. A new process reusing the samePID is conservatively refused before scene creation.
+- [x] Add visible startup/reset messages and requested/reported scene geometry diagnostics, plus first-process/second-process stage records without audio or text capture.
+- [ ] Independently review code, run tests/native build/static analysis/exported-source build, update concise release notes and tutorials, then publish0.3.14 and verify public artifacts/CI.
+
+**Limits:** No physical device or simulator. A fresh process can restore its own app state; this does not promise every app has only one internal player. CoreMotion may be unavailable or stopped by OS and must log that rather than fabricate updates. The normal app is reset when entering a new hosted session, so unsaved state/playback position may be lost; restoring an existing minimized/parked window does not reset it.
+
+**Review:** Independent reviewer identified logical-bounds clipping after inverse rotation and a nil-scene handoff that could open the original process while reset was pending. Both fixed: native transformed bounds plus child hit mapping, and handoff guard before the no-scene fast path. Follow-up found no remaining blockers; no device claim. Final publication is recorded in ignored dist reports.
