@@ -115,7 +115,7 @@ static NSArray *MWRectFields(CGRect r) { return @[@(r.origin.x),@(r.origin.y),@(
         _restoreMark.tintColor=UIColor.whiteColor; _restoreMark.backgroundColor=[UIColor.blackColor colorWithAlphaComponent:0.35];
         _restoreMark.layer.cornerRadius=4; [_parkedShield addSubview:_restoreMark];
         [self setActive:YES]; [self updateStatus:nil];
-        MWLog(@"window.controls_installed",@{@"bundle":application.bundleIdentifier,@"layout":@"four_corners_center_controls_v1",
+        MWLog(@"window.controls_installed",@{@"bundle":application.bundleIdentifier,@"layout":@"four_corners_flush_snap_v2",
             @"parkButton":@(_parkButton!=nil),@"parkImage":@([_parkButton imageForState:UIControlStateNormal]!=nil),@"applicationTitle":@NO});
     }
     return self;
@@ -129,16 +129,17 @@ static NSArray *MWRectFields(CGRect r) { return @[@(r.origin.x),@(r.origin.y),@(
 }
 - (void)layoutSubviews {
     [super layoutSubviews];
-    if(!_model.maximized && !self.isParked && self.window && self.superview) {
-        MWRect reachable=MWKeepShortTitleReachable(MWFromCGRect(self.frame),MWFromCGRect(_viewport),self.window.safeAreaInsets.top);
-        if(!CGRectEqualToRect(self.frame,MWToCGRect(reachable))) {
-            _model.frame=reachable; self.frame=MWToCGRect(reachable);
+    CGFloat titleInset=0;
+    if(self.window && self.superview) {
+        MWWindowModel layoutModel=_model;
+        layoutModel.frame=MWFromCGRect(self.frame);
+        MWWindowTitleLayout title=MWWindowTitlePlacement(layoutModel,MWFromCGRect(_viewport),self.window.safeAreaInsets.top);
+        if(!CGRectEqualToRect(self.frame,MWToCGRect(title.frame))) {
+            _model.frame=title.frame; self.frame=MWToCGRect(title.frame);
         }
+        titleInset=title.titleInset;
     }
     _surface.frame=self.bounds;
-    CGFloat titleInset=0;
-    if(!_model.maximized && !self.isParked)
-        titleInset=MAX(0,self.window.safeAreaInsets.top-self.frame.origin.y);
     BOOL full=_model.maximized && !self.isParked;
     _surface.layer.cornerRadius=full ? 0 : (self.isParked ? 12 : 18);
     _surface.layer.borderWidth=full ? 0 : 1;
@@ -426,10 +427,9 @@ static NSArray *MWRectFields(CGRect r) { return @[@(r.origin.x),@(r.origin.y),@(
 }
 - (void)detachFromSnap {
     if(_model.snapTarget==MWSnapNone) return;
-    // Remove only the extra top chrome, translating the frame by the same
-    // amount. The guest origin, visible dimensions and title stay in place.
-    MWRect frame=MWUnpinFrame(MWFromCGRect(self.frame),MAX(0,_content.frame.origin.y-MWTitleHeight));
-    _model.snapTarget=MWSnapNone; _model.frame=frame; self.frame=MWToCGRect(frame);
+    // Snapped chrome has no extra top spacer. Free-window title safety is
+    // applied on the following layout without changing the snap's outer size.
+    _model.snapTarget=MWSnapNone; _model.frame=MWFromCGRect(self.frame);
     [self setNeedsLayout]; [self layoutIfNeeded];
 }
 - (void)focus { if(self.activateHandler) self.activateHandler(); }
@@ -482,6 +482,7 @@ static NSArray *MWRectFields(CGRect r) { return @[@(r.origin.x),@(r.origin.y),@(
     return @{@"bundle":self.application.bundleIdentifier,@"state":@(_model.state),@"selected":@(self.active),
         @"compatibleCanvas":@(_compatibleCanvas),
         @"parked":@(self.isParked),
+        @"snapTarget":@(_model.snapTarget),@"titleOriginY":@(_bar.frame.origin.y),
         @"attached":@(self.window!=nil),@"hidden":@(self.hidden),@"hostHidden":@(_hostHidden),
         @"deliveredTouchStarts":@(_deliveredTouchStarts),@"geometry":[_guestHost geometrySnapshot],
         @"contentFrame":MWRectFields(_content.frame),@"railFrame":MWRectFields(_inputRail.frame),
@@ -581,7 +582,8 @@ static NSArray *MWRectFields(CGRect r) { return @[@(r.origin.x),@(r.origin.y),@(
 }
 - (void)logContentGeometry:(NSString *)reason {
     MWLog(@"window.content_geometry",@{@"bundle":_application.bundleIdentifier,@"reason":reason,
-        @"compatibleCanvas":@(_compatibleCanvas),@"geometry":[_guestHost geometrySnapshot]});
+        @"compatibleCanvas":@(_compatibleCanvas),@"snapTarget":@(_model.snapTarget),
+        @"titleOriginY":@(_bar.frame.origin.y),@"geometry":[_guestHost geometrySnapshot]});
 }
 - (void)requestClose { if(self.closeHandler) self.closeHandler(); }
 - (void)requestPark { if(self.parkHandler) self.parkHandler(); }

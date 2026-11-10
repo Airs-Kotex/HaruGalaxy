@@ -1,24 +1,26 @@
 # Changelog
 
-## 0.3.12 — Four-corner resizing and explicit parking controls
+## 0.3.12 — Four-corner resizing, flush halves and visible controls (build18)
+
+This updated0.3.12 replaces the original build17 assets at the user's request. It combines all0.3.12 changes; no0.3.13 release is created.
 
 ### Fixed
 
-- Reproduced0.3.11's half-screen-to-aspect expansion: retaining the wide frame inflated its height. Fit aspect conversion inside the previous footprint, reset initial drag translation, and preserve small sizes on reflow/save/restore.
-- Allow proportional resizing from either top-left or bottom-right, including shrinking when the opposite edge touches the display boundary.
+- Fit aspect conversion inside the previous half-screen footprint instead of expanding a wide half to full height. Reset initial drag translation and preserve compact sizes on reflow/save/restore.
+- Allow proportional shrinking from top-left or bottom-right; unify header/button geometry for very short windows so controls are not clipped.
 
 ### Changed
 
-- Top-left/bottom-right use system-proportional scaling; top-right/bottom-left use free scaling. The bottom8-point strip has separate left/right halves.
-- Center Close, Minimize, Maximize and Park in the top bar and remove the app title.
-- All resize controls wait for14 points of movement; touch rectangles remain in host chrome.
+- Top-left/bottom-right use system-proportional scaling; top-right/bottom-left use free scaling. Center Close, Minimize, Maximize and Park, remove the App name, and keep28-point top/8-point bottom chrome.
+- Snapped headers now sit directly on the half-screen top edge, without an extra safe-top spacer. Ordinary free-window reachability protection returns after leaving snap.
+- Add a direct **兼容显示** panel button and explicit App list; retain the per-App ellipsis menu.
 
 ### Added
 
-- Custom parking/restore glyphs independent of system symbol availability, explicit panel “挂起/还原” text actions and a “挂起设置” shortcut.
-- Version/build in the settings title and UI-installation diagnostics to identify which controls the running app created.
+- Custom parking glyphs, panel **挂起/还原** text actions and **挂起设置** shortcut. Settings shows **0.3.12 (18)** for build identification.
+- Four reproducible README operation illustrations covering the workspace, controls, parking and compatibility entry. Each is labelled **not a simulator/device screenshot**.
 
-Version0.3.11 remains withdrawn. Missing controls on that device were not reproduced locally; compiled presence is not device visibility. Existing iOS15 display compatibility options and keyboard limitations remain.
+Version0.3.11 remains withdrawn. Device visibility, system cutouts/gestures,870/Telegram rendering and direct guest keyboard input remain unverified or unresolved; no illustration or offline check is presented as device evidence.
 
 ## 0.3.11 — Withdrawn
 

@@ -3,6 +3,7 @@
 #import "MWWindowView.h"
 #import "MWAppPickerController.h"
 #import "MWSettingsController.h"
+#import "MWDisplayOptionsController.h"
 #import "MWPreferences.h"
 #import "MWEdgeHandle.h"
 #import "MWWindowPanel.h"
@@ -82,6 +83,7 @@
     _panel.openApplicationHandler=^{[weakSelf closePanel]; [weakSelf openPicker];};
     _panel.settingsHandler=^{[weakSelf closePanel]; [weakSelf openSettings];};
     _panel.parkingSettingsHandler=^{[weakSelf closePanel]; [weakSelf openSettingsAtParking:YES];};
+    _panel.displayOptionsHandler=^{[weakSelf openDisplayOptions];};
     _panel.openOriginalHandler=^(NSString *bundle){[weakSelf openOriginalBundle:bundle];};
     _panel.compatibleCanvasHandler=^(NSString *bundle,BOOL enabled){[weakSelf reopenBundle:bundle compatibleCanvas:enabled];};
     _panel.parkHandler=^(NSString *bundle){[weakSelf closePanel]; [weakSelf toggleParkBundle:bundle];};
@@ -348,6 +350,25 @@
         [controller openApplication:owned.application restoringModel:&savedModel initiallyParked:wasParked];
     }];
     [self updateChrome];
+}
+- (void)openDisplayOptions {
+    [self closePanel];
+    if(_nativeOpeningTarget || self.presentedViewController || _hostHidden || MWFloatingHost.shared.isLocked) return;
+    NSMutableArray *rows=[NSMutableArray array]; NSMutableDictionary *targets=[NSMutableDictionary dictionary];
+    for(NSString *bundle in _order.reverseObjectEnumerator) {
+        MWWindowView *window=_windows[bundle]; if(!window) continue;
+        [rows addObject:@{@"bundle":bundle,@"name":window.application.name ?: bundle,@"compatible":@(window.compatibleCanvas)}];
+        targets[bundle]=window;
+    }
+    [MWKeyboardFocus.shared focusHostWindow:self.view.window reason:@"display_options"];
+    MWDisplayOptionsController *options=[MWDisplayOptionsController new]; options.windows=rows;
+    __weak typeof(self) weakSelf=self;
+    options.selectionHandler=^(NSString *bundle,BOOL compatible) {
+        MWWorkspaceController *controller=weakSelf;
+        if(controller && controller->_windows[bundle]==targets[bundle]) [controller reopenBundle:bundle compatibleCanvas:compatible];
+    };
+    MWLog(@"workspace.display_options",@{@"windows":@(rows.count)});
+    [self presentViewController:[[UINavigationController alloc] initWithRootViewController:options] animated:!MWPreferences.shared.reduceMotion completion:nil];
 }
 - (void)openApplication:(MWApplication *)application {
     [self openApplication:application restoringModel:NULL initiallyParked:NO];

@@ -6,6 +6,16 @@ A native multi-window workspace for TrollStore. HaruGalaxy hosts installed apps 
 
 The edge entry, title bars and window panel now use translucent glass controls, with dark/light appearance, Reduce Transparency and contrast adaptations.
 
+The0.3.12 assets are now **build18**, combining flush half-screen headers, the visible compatibility entry and illustrated guides. Re-download and install the same-named package over build17; the settings title shows the installed build.
+
+## Illustrated guides
+
+These are **operation illustrations, not simulator or physical-device screenshots**. App content is abstract sample content; the images do not demonstrate device compatibility.
+
+![Illustration of half-screen layout, four resize handles, parked thumbnails and edge management](docs/images/01-workspace-overview.png)
+
+![Illustration: top-left/bottom-right proportional, top-right/bottom-left free, and four centered controls](docs/images/02-window-controls.png)
+
 ## Install
 
 1. Install [TrollStore](https://github.com/opa334/TrollStore) on a supported device.
@@ -33,6 +43,7 @@ Bundle identifier: `io.github.airskotex.harugalaxy`. Versions0.3.0 and earlier u
 | Maximize / double-tap the title | Fill the screen; restore through the edge panel |
 | Fourth blue top button / panel “挂起” | Park a live thumbnail at the top right |
 | Panel “挂起设置” | Jump to thumbnail size and aspect settings |
+| Panel “兼容显示” | Open a visible list of windows and select one to change display mode |
 | Tap a parked thumbnail | Restore prior position, dimensions, resize and snap/full-screen state |
 | App row → … → open original app | End that hosted window and open the ordinary app |
 
@@ -42,17 +53,25 @@ The top bar is28 points high and the bottom edge8 points. Four centered top cont
 
 All four resize handles require14 points of movement. Entering aspect mode first fits inside the previous window footprint, so a wide half-screen window does not expand to full height. Top-left and bottom-right allow shrinking from opposite directions. A tap leaves the window unchanged.
 
+Snapped windows place their header at the top of the complete half-screen rectangle without a separate safe-top spacer. Ordinary-window header protection returns after leaving the snap. Physical cutouts and system gestures still apply.
+
 When guest content reaches a system edge exclusion, the workspace passes the overlapping safe-area insets to the app, converted into its logical coordinates when scaled. Apps must honor these insets in their own layout. The footer remains8 points.
 
 ## Parking
 
-Use the fourth blue top button or panel's **“挂起”** text action, then tap the top-right thumbnail to restore. Its icon is drawn by the app rather than relying on an SF Symbols name. **Panel → 挂起设置** jumps directly to size(18%–50%) and aspect settings(original,1:1,4:3,3:4,16:9,9:16). Settings title shows version/build: **0.3.12 (17)**. Multiple thumbnails stack in the safe area; their appearance does not change restored geometry. Parking keeps sessions alive, not process suspension.
+Use the fourth blue top button or panel's **“挂起”** text action, then tap the top-right thumbnail to restore. Its icon is drawn by the app rather than relying on an SF Symbols name. **Panel → 挂起设置** jumps directly to size(18%–50%) and aspect settings(original,1:1,4:3,3:4,16:9,9:16). Settings title shows version/build: **0.3.12 (18)**. Multiple thumbnails stack in the safe area; their appearance does not change restored geometry. Parking keeps sessions alive, not process suspension.
+
+![Illustrated parking workflow and thumbnail size/aspect settings](docs/images/03-parking-guide.png)
 
 ## Display compatibility
 
-Choose **App row → … → 兼容显示并重新打开** to reopen with the system's native logical canvas. The outer window can still resize freely; content scales instead of repeatedly changing the app's layout size. Choose ordinary display in the same menu to revert.
+Use **Edge entry → panel top “兼容显示” → select an app**. The list explicitly offers compatibility reopening or returning a compatible window to ordinary display. If empty, open a guest window first. The previous per-app ellipsis menu remains available.
+
+Compatibility mode reopens with the system's native logical canvas. The outer window can still resize freely; content scales instead of repeatedly changing the app's layout size.
 
 The choice is saved per app. Switching recreates that hosted session and may lose form state, while preserving outer layout, snap/full-screen and parked state. The reported iOS15 issues in870 Game Box andTelegram are not device-confirmed fixed; layer registration does not establish correct images or media loading.
+
+![Illustrated direct compatibility entry and app selection list](docs/images/04-compatibility-entry.png)
 
 ## Search
 

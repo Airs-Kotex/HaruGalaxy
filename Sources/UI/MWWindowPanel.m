@@ -104,7 +104,7 @@
 
 @implementation MWWindowPanel {
     UILabel *_title, *_hint, *_empty;
-    UIButton *_open, *_settings, *_parkingSettings;
+    UIButton *_open, *_settings, *_parkingSettings, *_displayOptions;
     UIScrollView *_scroll;
     NSArray<MWPanelRow *> *_rows;
     NSDictionary<NSString *,MWPanelRow *> *_rowsByBundle;
@@ -116,13 +116,19 @@
     if((self=[super initWithCornerRadius:24])) {
         _title=[UILabel new]; _title.text=@"窗口面板"; _title.font=[UIFont systemFontOfSize:18 weight:UIFontWeightSemibold]; [self.contentView addSubview:_title];
         _hint=[UILabel new]; _hint.text=@"挂起保留缩略窗 · 更多选项见 …"; _hint.font=[UIFont systemFontOfSize:11]; _hint.textColor=UIColor.secondaryLabelColor; [self.contentView addSubview:_hint];
-        _open=[UIButton buttonWithType:UIButtonTypeSystem]; [_open setTitle:@"＋ 打开应用" forState:UIControlStateNormal];
+        _open=[UIButton buttonWithType:UIButtonTypeSystem]; [_open setTitle:@"打开应用" forState:UIControlStateNormal];
         [_open addTarget:self action:@selector(openApplication) forControlEvents:UIControlEventTouchUpInside]; [self.contentView addSubview:_open];
         _parkingSettings=[UIButton buttonWithType:UIButtonTypeSystem];
         [_parkingSettings setTitle:@"挂起设置" forState:UIControlStateNormal];
         _parkingSettings.accessibilityIdentifier=@"harugalaxy.panel.parkingSettings";
         [_parkingSettings addTarget:self action:@selector(parkingSettings) forControlEvents:UIControlEventTouchUpInside];
         [self.contentView addSubview:_parkingSettings];
+        _displayOptions=[UIButton buttonWithType:UIButtonTypeSystem];
+        [_displayOptions setTitle:@"兼容显示" forState:UIControlStateNormal];
+        _displayOptions.accessibilityIdentifier=@"harugalaxy.panel.displayOptions";
+        [_displayOptions addTarget:self action:@selector(displayOptions) forControlEvents:UIControlEventTouchUpInside];
+        [self.contentView addSubview:_displayOptions];
+        for(UIButton *button in @[_open,_parkingSettings,_displayOptions]) button.titleLabel.font=[UIFont systemFontOfSize:14];
         _settings=[UIButton buttonWithType:UIButtonTypeSystem]; [_settings setImage:[UIImage systemImageNamed:@"slider.horizontal.3"] forState:UIControlStateNormal];
         _settings.accessibilityLabel=@"设置"; [_settings addTarget:self action:@selector(settings) forControlEvents:UIControlEventTouchUpInside]; [self.contentView addSubview:_settings];
         _scroll=[UIScrollView new]; [self.contentView addSubview:_scroll];
@@ -135,6 +141,7 @@
 - (void)openApplication { if(self.openApplicationHandler) self.openApplicationHandler(); }
 - (void)settings { if(self.settingsHandler) self.settingsHandler(); }
 - (void)parkingSettings { if(self.parkingSettingsHandler) self.parkingSettingsHandler(); }
+- (void)displayOptions { if(self.displayOptionsHandler) self.displayOptionsHandler(); }
 - (void)updateWindows:(NSArray<MWWindowView *> *)windows {
     NSMutableArray *snapshot=[NSMutableArray arrayWithCapacity:windows.count];
     for(MWWindowView *window in windows) [snapshot addObject:@[
@@ -166,8 +173,10 @@
     _settings.frame=CGRectMake(width-56,compact ? 0 : 8,44,44);
     _hint.hidden=compact;
     _hint.frame=CGRectMake(16,43,width-32,18);
-    _open.frame=CGRectMake(12,compact ? 42 : 68,(width-24)/2,44);
-    _parkingSettings.frame=CGRectMake(CGRectGetMaxX(_open.frame),compact ? 42 : 68,(width-24)/2,44);
+    CGFloat actionWidth=(width-24)/3;
+    _open.frame=CGRectMake(12,compact ? 42 : 68,actionWidth,44);
+    _parkingSettings.frame=CGRectMake(CGRectGetMaxX(_open.frame),compact ? 42 : 68,actionWidth,44);
+    _displayOptions.frame=CGRectMake(CGRectGetMaxX(_parkingSettings.frame),compact ? 42 : 68,actionWidth,44);
     _scroll.frame=CGRectMake(12,compact ? 90 : 118,width-24,MAX(1,self.bounds.size.height-(compact ? 102 : 130)));
     CGFloat y=0;
     for(MWPanelRow *row in _rows) { row.frame=CGRectMake(0,y,_scroll.bounds.size.width,98); y+=108; }

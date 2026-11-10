@@ -65,6 +65,8 @@ MWRect MWResizeFreeCornerRect(MWRect start,double dx,double dy,MWRect viewport,b
 typedef struct { MWRect topLeft,topRight,bottomLeft,bottomRight,buttons[4]; } MWWindowControls;
 MWWindowControls MWWindowControlRects(MWRect bounds,double titleInset,double leadingInset,double trailingInset);
 MWRect MWKeepShortTitleReachable(MWRect frame,MWRect viewport,double safeTop);
+typedef struct { MWRect frame; double titleInset; } MWWindowTitleLayout;
+MWWindowTitleLayout MWWindowTitlePlacement(MWWindowModel model,MWRect viewport,double safeTop);
 MWWindowModel MWWindowRestoreForLaunch(MWWindowModel saved,MWRect viewport);
 bool MWWindowPark(MWWindowModel *model,MWWindowParking *parking);
 bool MWWindowUnpark(MWWindowModel *model,MWWindowParking *parking,MWRect viewport);

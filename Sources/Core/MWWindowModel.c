@@ -277,6 +277,15 @@ MWRect MWKeepShortTitleReachable(MWRect frame,MWRect viewport,double safeTop) {
     }
     return frame;
 }
+MWWindowTitleLayout MWWindowTitlePlacement(MWWindowModel model,MWRect viewport,double safeTop) {
+    MWWindowTitleLayout result={model.frame,0};
+    // Snapped windows deliberately occupy their complete half-screen rectangle.
+    // Reachability padding belongs to free windows, not the snap layout.
+    if(model.maximized || model.state==MWWindowParked || model.snapTarget!=MWSnapNone) return result;
+    result.frame=MWKeepShortTitleReachable(model.frame,viewport,safeTop);
+    result.titleInset=fmax(0,viewport.y+fmax(0,finite_or(safeTop,0))-result.frame.y);
+    return result;
+}
 MWWindowModel MWWindowRestoreForLaunch(MWWindowModel saved,MWRect viewport) {
     saved.state=MWWindowLoading; MWWindowReflow(&saved,viewport); return saved;
 }

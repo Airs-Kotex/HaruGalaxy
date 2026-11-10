@@ -401,9 +401,43 @@ static void parked_roundtrip_and_placement(void) {
             }
         }
 }
+static void flush_snapped_title(void) {
+    const MWRect screens[]={{0,0,430,932},{0,0,390,844},{0,0,932,430}};
+    const double safeTops[]={59,47,0};
+    for(unsigned i=0;i<3;i++) for(int target=MWSnapTop;target<=MWSnapRight;target++) {
+        MWRect viewport=screens[i];
+        MWWindowModel m=MWWindowCreate((MWRect){20,100,300,400}); MWWindowApply(&m,MWEventReady);
+        assert(MWWindowSnap(&m,(MWSnapTarget)target,viewport));
+        MWRect snapped=m.frame;
+        MWWindowTitleLayout layout=MWWindowTitlePlacement(m,viewport,safeTops[i]);
+        equal_rect(layout.frame,snapped); assert(layout.titleInset==0);
+        MWRect bounds={0,0,snapped.width,snapped.height};
+        MWWindowControls controls=MWWindowControlRects(bounds,layout.titleInset,0,0);
+        assert(controls.topLeft.y==0 && controls.topRight.y==0);
+        MWRect content=MWWindowContentRect(bounds,layout.titleInset,false);
+        assert(content.y==MWTitleHeight && content.height==snapped.height-MWWindowChromeHeight);
+        assert(MWWindowToggleMaximize(&m,viewport)); assert(MWWindowToggleMaximize(&m,viewport));
+        layout=MWWindowTitlePlacement(m,viewport,safeTops[i]); equal_rect(layout.frame,snapped); assert(layout.titleInset==0);
+        MWWindowParking p={0}; assert(MWWindowPark(&m,&p) && MWWindowUnpark(&m,&p,viewport));
+        layout=MWWindowTitlePlacement(m,viewport,safeTops[i]); equal_rect(layout.frame,snapped); assert(layout.titleInset==0);
+        MWRect rotated=screens[(i+1)%3]; MWWindowReflow(&m,rotated);
+        layout=MWWindowTitlePlacement(m,rotated,safeTops[(i+1)%3]);
+        equal_rect(layout.frame,MWHalfScreenRect(rotated,m.snapTarget)); assert(layout.titleInset==0);
+    }
+    MWRect viewport={0,0,390,844};
+    MWWindowModel ordinary=MWWindowCreate((MWRect){20,0,300,400});
+    MWWindowTitleLayout layout=MWWindowTitlePlacement(ordinary,viewport,47);
+    equal_rect(layout.frame,ordinary.frame); assert(layout.titleInset==47);
+    ordinary.frame=(MWRect){20,0,112,54}; layout=MWWindowTitlePlacement(ordinary,viewport,47);
+    assert(layout.frame.y==47 && layout.titleInset==0); // Retain free-window reachability.
+    ordinary.maximized=true; ordinary.frame=viewport; layout=MWWindowTitlePlacement(ordinary,viewport,47);
+    equal_rect(layout.frame,viewport); assert(layout.titleInset==0);
+    ordinary.maximized=false; ordinary.state=MWWindowParked;
+    layout=MWWindowTitlePlacement(ordinary,viewport,47); assert(layout.titleInset==0);
+}
 
 int main(void) {
-    lifecycle(); bounds(); maximize_restore(); proportional_scaling(); free_resize_and_snap(); original_canvas_and_reachable_snap(); free_entry_placement(); isolated_resize_rail(); guest_safe_insets(); compatible_guest_canvas(); deliberate_resize_and_layout_restore(); parked_roundtrip_and_placement(); four_corner_controls_and_resize();
+    lifecycle(); bounds(); maximize_restore(); proportional_scaling(); free_resize_and_snap(); original_canvas_and_reachable_snap(); free_entry_placement(); isolated_resize_rail(); guest_safe_insets(); compatible_guest_canvas(); deliberate_resize_and_layout_restore(); parked_roundtrip_and_placement(); four_corner_controls_and_resize(); flush_snapped_title();
     puts("PASS: lifecycle, free/proportional resize, full/half-screen, top inset continuity, rotation and edge handle");
     return 0;
 }
