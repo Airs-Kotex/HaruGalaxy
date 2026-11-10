@@ -284,6 +284,8 @@ static void deliberate_resize_and_layout_restore(void) {
     MWRect r=MWBeginProportionalResize(half,viewport,430.0/932,59);
     assert(r.y>=59 && fabs(r.width/(r.height-MWWindowChromeHeight)-430.0/932)<0.00001);
     assert(fabs(r.x-(430-r.width)/2)<0.001); // Do not pin the smaller result to the left.
+    assert(r.width<=half.width && r.height<=half.height);
+    assert(r.y+r.height<=half.y+half.height+0.001); // No full-height expansion from halfscreen.
     MWWindowModel m=MWWindowCreate((MWRect){20,10,300,500}); MWWindowApply(&m,MWEventReady);
     MWWindowModel next=MWWindowRestoreForLaunch(m,viewport);
     equal_rect(next.frame,m.frame); assert(next.state==MWWindowLoading && next.resizeMode==m.resizeMode);
@@ -292,6 +294,71 @@ static void deliberate_resize_and_layout_restore(void) {
     assert(next.snapTarget==MWSnapBottom); equal_rect(next.frame,m.frame);
     MWWindowToggleMaximize(&m,viewport); next=MWWindowRestoreForLaunch(m,viewport);
     assert(next.maximized && next.restoreSnapTarget==MWSnapBottom); equal_rect(next.restoreFrame,m.restoreFrame);
+}
+static bool intersects(MWRect a,MWRect b) {
+    return a.x<b.x+b.width && b.x<a.x+a.width && a.y<b.y+b.height && b.y<a.y+a.height;
+}
+static void four_corner_controls_and_resize(void) {
+    MWRect screen={0,0,390,844},usable=MWProportionalViewport(screen,47);
+    MWRect half={0,47,390,375}; // Top half after removing extra title inset.
+    MWRect fit=MWBeginProportionalResize(half,screen,390.0/844,47);
+    assert(fit.width<220 && fit.height<=375 && fit.y>=47);
+    equal_rect(MWResizeAspectCornerRect(fit,0,0,usable,390.0/844,false),fit);
+    equal_rect(MWResizeAspectCornerRect(fit,0,0,usable,390.0/844,true),fit);
+    MWRect br=MWResizeAspectCornerRect(fit,-10,-20,usable,390.0/844,false);
+    MWRect tl=MWResizeAspectCornerRect(fit,10,20,usable,390.0/844,true);
+    assert(br.width<fit.width && tl.width<fit.width);
+    assert(br.x==fit.x && br.y==fit.y);
+    assert(fabs(tl.x+tl.width-fit.x-fit.width)<0.001 && fabs(tl.y+tl.height-fit.y-fit.height)<0.001);
+    MWRect left=MWResizeFreeCornerRect(fit,12,-12,screen,true);
+    assert(left.width<fit.width && left.height<fit.height && left.y==fit.y);
+    assert(fabs(left.x+left.width-fit.x-fit.width)<0.001);
+    MWRect right=MWResizeFreeCornerRect(fit,-12,12,screen,false);
+    assert(right.width<fit.width && right.height<fit.height && right.x==fit.x);
+    assert(fabs(right.y+right.height-fit.y-fit.height)<0.001);
+    for(int dx=-800;dx<800;dx+=37) for(int dy=-800;dy<800;dy+=41) for(int top=0;top<2;top++) {
+        MWRect resized=MWResizeAspectCornerRect(fit,dx,dy,usable,390.0/844,top);
+        assert(resized.x>=usable.x-0.001 && resized.y>=usable.y-0.001);
+        assert(resized.x+resized.width<=usable.x+usable.width+0.001 && resized.y+resized.height<=844.001);
+        assert(fabs(resized.width/(resized.height-MWWindowChromeHeight)-390.0/844)<0.00001);
+    }
+    for(int width=80;width<=900;width+=13) {
+        MWRect bounds={0,0,width,300};
+        MWWindowControls c=MWWindowControlRects(bounds,47,0,0);
+        MWRect parts[]={c.topLeft,c.topRight,c.bottomLeft,c.bottomRight,c.buttons[0],c.buttons[1],c.buttons[2],c.buttons[3]};
+        MWRect content=MWWindowContentRect(bounds,47,false);
+        for(unsigned i=0;i<8;i++) {
+            assert(parts[i].x>=0 && parts[i].y>=0 && parts[i].x+parts[i].width<=width+0.001 && parts[i].y+parts[i].height<=300);
+            assert(!intersects(parts[i],content));
+            for(unsigned j=i+1;j<8;j++) assert(!intersects(parts[i],parts[j]));
+        }
+        assert(c.bottomLeft.width+c.bottomRight.width==width);
+        assert(fabs((c.buttons[0].x+c.buttons[3].x+c.buttons[3].width)/2-width/2.0)<0.001);
+    }
+    MWWindowModel m=MWWindowCreate(fit); m.resizeMode=MWResizeProportional; m.aspectRatio=390.0/844;
+    MWWindowReflow(&m,screen); equal_rect(m.frame,fit); // Restore/reflow must not re-expand below220pt.
+    m.resizeMode=MWResizeFree; m.frame=(MWRect){20,70,135,150}; MWRect small=m.frame;
+    MWWindowReflow(&m,screen); equal_rect(m.frame,small);
+    equal_rect(MWConstrainExistingRect(small,screen),small); // Saved free windows also remain small.
+    equal_rect(MWConstrainExistingRect((MWRect){10,30,112,235},screen),(MWRect){10,30,112,235});
+    equal_rect(MWResizeFreeCornerRect((MWRect){10,30,112,235},0,0,screen,true),(MWRect){10,30,112,235});
+    // Reviewed regression: rotation makes a compact aspect window only54pt high.
+    MWRect shortWindow={20,0,38.815,53.936};
+    MWRect reachable=MWKeepShortTitleReachable(shortWindow,screen,47);
+    assert(reachable.y>=47 && reachable.width==shortWindow.width && reachable.height==shortWindow.height);
+    MWWindowControls shortControls=MWWindowControlRects((MWRect){0,0,reachable.width,reachable.height},0,0,0);
+    assert(reachable.y+shortControls.topLeft.y>=47);
+    for(unsigned i=0;i<4;i++) {
+        assert(shortControls.buttons[i].y==shortControls.topLeft.y);
+        assert(shortControls.buttons[i].y+shortControls.buttons[i].height<=reachable.height-MWResizeRailHeight);
+    }
+    for(int height=37;height<=170;height+=7) {
+        MWRect frame=MWKeepShortTitleReachable((MWRect){0,0,120,height},screen,59);
+        double inset=fmax(0,59-frame.y);
+        MWWindowControls c=MWWindowControlRects((MWRect){0,0,120,height},inset,0,0);
+        assert(frame.y+c.topLeft.y>=59);
+        for(unsigned i=0;i<4;i++) assert(c.buttons[i].y==c.topLeft.y && c.buttons[i].height==c.topLeft.height);
+    }
 }
 static void parked_roundtrip_and_placement(void) {
     MWRect viewport={0,0,430,932}; MWWindowModel m=MWWindowCreate((MWRect){20,100,300,500});
@@ -336,7 +403,7 @@ static void parked_roundtrip_and_placement(void) {
 }
 
 int main(void) {
-    lifecycle(); bounds(); maximize_restore(); proportional_scaling(); free_resize_and_snap(); original_canvas_and_reachable_snap(); free_entry_placement(); isolated_resize_rail(); guest_safe_insets(); compatible_guest_canvas(); deliberate_resize_and_layout_restore(); parked_roundtrip_and_placement();
+    lifecycle(); bounds(); maximize_restore(); proportional_scaling(); free_resize_and_snap(); original_canvas_and_reachable_snap(); free_entry_placement(); isolated_resize_rail(); guest_safe_insets(); compatible_guest_canvas(); deliberate_resize_and_layout_restore(); parked_roundtrip_and_placement(); four_corner_controls_and_resize();
     puts("PASS: lifecycle, free/proportional resize, full/half-screen, top inset continuity, rotation and edge handle");
     return 0;
 }

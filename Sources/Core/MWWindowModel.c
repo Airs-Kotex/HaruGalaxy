@@ -32,6 +32,13 @@ MWRect MWConstrainRect(MWRect r, MWRect viewport) {
     r.y=clamp(finite_or(r.y,v.y),v.y,v.y+v.height-r.height);
     return r;
 }
+MWRect MWConstrainExistingRect(MWRect r,MWRect viewport) {
+    MWRect v=safe_viewport(viewport);
+    r.width=clamp(finite_or(r.width,240),1,v.width);
+    r.height=clamp(finite_or(r.height,360),1,v.height);
+    r.x=clamp(finite_or(r.x,v.x),v.x,v.x+v.width-r.width);
+    r.y=clamp(finite_or(r.y,v.y),v.y,v.y+v.height-r.height); return r;
+}
 
 MWRect MWWindowRailRect(MWRect bounds,bool maximized) {
     MWRect v=safe_viewport(bounds);
@@ -82,7 +89,7 @@ bool MWWindowToggleMaximize(MWWindowModel *m, MWRect viewport) {
     if(m->maximized) {
         m->resizeMode=m->restoreResizeMode; m->snapTarget=MWReorientedSnapTarget(viewport,m->restoreSnapTarget);
         m->frame=m->snapTarget!=MWSnapNone ? MWHalfScreenRect(viewport,m->snapTarget) :
-            (m->resizeMode==MWResizeProportional ? MWFitAspectRect(m->restoreFrame,viewport,m->aspectRatio) : MWConstrainRect(m->restoreFrame,viewport));
+            (m->resizeMode==MWResizeProportional ? MWFitAspectRect(m->restoreFrame,viewport,m->aspectRatio) : MWConstrainExistingRect(m->restoreFrame,viewport));
     } else {
         m->restoreFrame=m->frame; m->restoreResizeMode=m->resizeMode; m->restoreSnapTarget=m->snapTarget;
         m->snapTarget=MWSnapNone; m->frame=safe_viewport(viewport);
@@ -98,7 +105,7 @@ void MWWindowReflow(MWWindowModel *m, MWRect viewport) {
         m->snapTarget=MWReorientedSnapTarget(viewport,m->snapTarget);
         m->frame=MWHalfScreenRect(viewport,m->snapTarget);
     }
-    else m->frame=m->resizeMode==MWResizeProportional ? MWFitAspectRect(m->frame,viewport,m->aspectRatio) : MWConstrainRect(m->frame,viewport);
+    else m->frame=m->resizeMode==MWResizeProportional ? MWFitAspectRect(m->frame,viewport,m->aspectRatio) : MWConstrainExistingRect(m->frame,viewport);
 }
 
 MWRect MWResizeFreeRect(MWRect start,double dx,double dy,MWRect viewport,bool leftHandle) {
@@ -204,11 +211,71 @@ MWRect MWProportionalViewport(MWRect viewport,double safeTop) {
     v.y+=inset; v.height-=inset; return v;
 }
 MWRect MWBeginProportionalResize(MWRect start,MWRect viewport,double ratio,double safeTop) {
-    MWRect usable=MWProportionalViewport(viewport,safeTop);
-    MWRect fit=MWFitAspectRect(start,usable,ratio);
-    fit.x=start.x+(start.width-fit.width)/2;
-    fit.y=start.y+(start.height-fit.height)/2;
-    return MWFitAspectRect(fit,usable,ratio);
+    MWRect v=MWProportionalViewport(viewport,safeTop); ratio=safe_ratio(ratio);
+    // Enter aspect mode inside the old footprint, never grow a wide halfscreen
+    // window to full height just to retain its width.
+    double left=clamp(finite_or(start.x,v.x),v.x,v.x+v.width);
+    double top=clamp(finite_or(start.y,v.y),v.y,v.y+v.height);
+    double right=clamp(finite_or(start.x+start.width,v.x+v.width),left,v.x+v.width);
+    double bottom=clamp(finite_or(start.y+start.height,v.y+v.height),top,v.y+v.height);
+    if(right-left<1 || bottom-top<=MWWindowChromeHeight+1) return MWFitAspectRect(start,v,ratio);
+    double width=fmin(right-left,(bottom-top-MWWindowChromeHeight)*ratio),height=width/ratio+MWWindowChromeHeight;
+    return (MWRect){left+(right-left-width)/2,top+(bottom-top-height)/2,width,height};
+}
+MWRect MWResizeAspectCornerRect(MWRect start,double dx,double dy,MWRect viewport,double ratio,bool topLeft) {
+    MWRect v=safe_viewport(viewport); ratio=safe_ratio(ratio);
+    if(v.height<=MWWindowChromeHeight+1) return v;
+    start=MWFitAspectRect(start,v,ratio);
+    double anchorX=topLeft ? start.x+start.width : start.x;
+    double anchorY=topLeft ? start.y+start.height : start.y;
+    double maxWidth=topLeft ? anchorX-v.x : v.x+v.width-anchorX;
+    double maxHeight=topLeft ? anchorY-v.y : v.y+v.height-anchorY;
+    double maximum=fmax(0,fmin(maxWidth,(maxHeight-MWWindowChromeHeight)*ratio));
+    double content=fmax(1,start.height-MWWindowChromeHeight),sign=topLeft ? -1 : 1;
+    double scale=1+sign*(finite_or(dx,0)*start.width+finite_or(dy,0)*content)/(start.width*start.width+content*content);
+    double minimum=fmin(maximum,fmin(start.width,fmax(120,(120-MWWindowChromeHeight)*ratio)));
+    double width=clamp(start.width*scale,minimum,maximum),height=width/ratio+MWWindowChromeHeight;
+    return (MWRect){topLeft ? anchorX-width : anchorX,topLeft ? anchorY-height : anchorY,width,height};
+}
+MWRect MWResizeFreeCornerRect(MWRect start,double dx,double dy,MWRect viewport,bool bottomLeft) {
+    MWRect v=safe_viewport(viewport);
+    start.width=clamp(finite_or(start.width,240),1,v.width);
+    start.height=clamp(finite_or(start.height,360),1,v.height);
+    start.x=clamp(finite_or(start.x,v.x),v.x,v.x+v.width-start.width);
+    start.y=clamp(finite_or(start.y,v.y),v.y,v.y+v.height-start.height);
+    double right=start.x+start.width,bottom=start.y+start.height;
+    double maxWidth=bottomLeft ? right-v.x : v.x+v.width-start.x;
+    double maxHeight=bottomLeft ? v.y+v.height-start.y : bottom-v.y;
+    start.width=clamp(start.width+(bottomLeft ? -1 : 1)*finite_or(dx,0),fmin(start.width,fmin(120,maxWidth)),maxWidth);
+    start.height=clamp(start.height+(bottomLeft ? 1 : -1)*finite_or(dy,0),fmin(start.height,fmin(120,maxHeight)),maxHeight);
+    if(bottomLeft) start.x=right-start.width; else start.y=bottom-start.height;
+    return start;
+}
+MWWindowControls MWWindowControlRects(MWRect bounds,double titleInset,double leadingInset,double trailingInset) {
+    MWRect b=safe_viewport(bounds),rail=MWWindowRailRect(b,false);
+    double leading=clamp(finite_or(leadingInset,0),0,fmax(0,b.width-1));
+    double trailing=clamp(finite_or(trailingInset,0),0,fmax(0,b.width-leading-1));
+    double width=b.width-leading-trailing,left=b.x+leading;
+    double top=b.y+clamp(finite_or(titleInset,0),0,fmax(0,rail.y-b.y-MWTitleHeight));
+    double height=fmin(MWTitleHeight,rail.y-top),corner=fmin(MWCornerTouchSize,width/6);
+    double gap=fmin(2,width/20);
+    double button=fmin(28,(width-2*corner-5*gap)/4),buttonX=left+(width-4*button-3*gap)/2;
+    MWWindowControls c={.topLeft={left,top,corner,height},.topRight={left+width-corner,top,corner,height},
+        .bottomLeft={rail.x,rail.y,rail.width/2,rail.height},
+        .bottomRight={rail.x+rail.width/2,rail.y,rail.width/2,rail.height}};
+    for(unsigned i=0;i<4;i++) c.buttons[i]=(MWRect){buttonX+i*(button+gap),top,button,height};
+    return c;
+}
+MWRect MWKeepShortTitleReachable(MWRect frame,MWRect viewport,double safeTop) {
+    MWRect v=safe_viewport(viewport);
+    double top=v.y+clamp(finite_or(safeTop,0),0,fmax(0,v.height-MWWindowChromeHeight-1));
+    double inset=fmax(0,top-frame.y);
+    if(inset>0 && frame.height<inset+MWWindowChromeHeight+1) {
+        // Keep dimensions/proportion; move only undersized windows that cannot
+        // fit their controls below the system top exclusion.
+        frame.y=clamp(top,v.y,v.y+fmax(0,v.height-frame.height));
+    }
+    return frame;
 }
 MWWindowModel MWWindowRestoreForLaunch(MWWindowModel saved,MWRect viewport) {
     saved.state=MWWindowLoading; MWWindowReflow(&saved,viewport); return saved;
@@ -236,7 +303,8 @@ MWRect MWFitAspectRect(MWRect r, MWRect viewport, double ratio) {
     MWRect v=safe_viewport(viewport); ratio=safe_ratio(ratio);
     if(v.height<=MWWindowChromeHeight+1) return v; // No positive content height can fit.
     double maximum=fmin(v.width,(v.height-MWWindowChromeHeight)*ratio);
-    double minimum=fmin(maximum,fmax(220,(200-MWWindowChromeHeight)*ratio));
+    double desired=finite_or(r.width,220);
+    double minimum=fmin(maximum,fmin(fmax(1,desired),fmax(120,(120-MWWindowChromeHeight)*ratio)));
     r.width=clamp(finite_or(r.width,minimum),minimum,maximum);
     r.height=r.width/ratio+MWWindowChromeHeight;
     r.x=clamp(finite_or(r.x,v.x),v.x,v.x+v.width-r.width);

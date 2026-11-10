@@ -4,6 +4,7 @@
 #import "MWGuestContentView.h"
 #import "MWCornerHandle.h"
 #import "MWGlassSurface.h"
+#import "MWWindowControlImages.h"
 #import "../Diagnostics/MWDiagnostics.h"
 
 static MWRect MWFromCGRect(CGRect r) { return (MWRect){r.origin.x,r.origin.y,r.size.width,r.size.height}; }
@@ -23,11 +24,11 @@ static NSArray *MWRectFields(CGRect r) { return @[@(r.origin.x),@(r.origin.y),@(
 @implementation MWWindowView {
     UIView *_surface, *_content;
     MWGlassSurface *_bar, *_inputRail;
-    UILabel *_title, *_message;
-    UIButton *_minimize, *_maximize, *_retry, *_parkButton;
+    UILabel *_message;
+    UIButton *_closeButton, *_minimize, *_maximize, *_retry, *_parkButton;
     UIControl *_parkedShield;
     UIImageView *_restoreMark;
-    MWCornerHandle *_resize, *_freeResize;
+    MWCornerHandle *_resize, *_freeResize, *_aspectTopLeft, *_freeBottomLeft;
     UIActivityIndicatorView *_spinner;
     MWWindowModel _model;
     CGRect _viewport, _gestureFrame;
@@ -77,14 +78,12 @@ static NSArray *MWRectFields(CGRect r) { return @[@(r.origin.x),@(r.origin.y),@(
         _bar=[[MWGlassSurface alloc] initWithCornerRadius:0];
         [_surface addSubview:_bar];
         _inputRail=[[MWGlassSurface alloc] initWithCornerRadius:0]; [_surface addSubview:_inputRail];
-        _title=[UILabel new]; _title.text=application.name;
-        _title.font=[UIFont systemFontOfSize:12 weight:UIFontWeightSemibold];
-        _title.lineBreakMode=NSLineBreakByTruncatingTail;
-        [_bar.contentView addSubview:_title];
-        [self button:@"xmark" label:@"关闭小窗" color:UIColor.systemRedColor action:@selector(requestClose) x:0];
+        _closeButton=[self button:@"xmark" label:@"关闭小窗" color:UIColor.systemRedColor action:@selector(requestClose) x:0];
         _minimize=[self button:@"minus" label:@"最小化" color:UIColor.systemOrangeColor action:@selector(requestMinimize) x:28];
         _maximize=[self button:@"arrow.up.left.and.arrow.down.right" label:@"最大化或恢复" color:UIColor.systemGreenColor action:@selector(toggleMaximize) x:56];
         _parkButton=[self button:@"pip.enter" label:@"挂起到右上角小窗" color:UIColor.systemBlueColor action:@selector(requestPark) x:84];
+        [_parkButton setImage:MWParkingControlImage(NO) forState:UIControlStateNormal];
+        _parkButton.accessibilityIdentifier=@"harugalaxy.window.park";
         _spinner=[[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleMedium];
         [_content addSubview:_spinner];
         _message=[UILabel new]; _message.numberOfLines=0; _message.textAlignment=NSTextAlignmentCenter;
@@ -93,28 +92,31 @@ static NSArray *MWRectFields(CGRect r) { return @[@(r.origin.x),@(r.origin.y),@(
         _retry=[UIButton buttonWithType:UIButtonTypeSystem]; [_retry setTitle:@"重试打开" forState:UIControlStateNormal];
         [_retry addTarget:self action:@selector(retry) forControlEvents:UIControlEventTouchUpInside];
         [_content addSubview:_retry];
-        _resize=[[MWCornerHandle alloc] initAtTop:NO]; [_surface addSubview:_resize];
-        _freeResize=[[MWCornerHandle alloc] initAtTop:YES]; [_surface addSubview:_freeResize];
+        _resize=[[MWCornerHandle alloc] initWithCorner:MWResizeBottomRight]; [_surface addSubview:_resize];
+        _freeResize=[[MWCornerHandle alloc] initWithCorner:MWResizeTopRight]; [_surface addSubview:_freeResize];
+        _aspectTopLeft=[[MWCornerHandle alloc] initWithCorner:MWResizeTopLeft]; [_surface addSubview:_aspectTopLeft];
+        _freeBottomLeft=[[MWCornerHandle alloc] initWithCorner:MWResizeBottomLeft]; [_surface addSubview:_freeBottomLeft];
         UIPanGestureRecognizer *drag=[[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(drag:)];
         drag.delegate=self; drag.maximumNumberOfTouches=1; [_bar addGestureRecognizer:drag];
         UITapGestureRecognizer *doubleTap=[[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(toggleMaximize)];
         doubleTap.numberOfTapsRequired=2; doubleTap.delegate=self; [_bar addGestureRecognizer:doubleTap];
         UITapGestureRecognizer *focus=[[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(focus)];
         focus.delegate=self; [focus requireGestureRecognizerToFail:doubleTap]; [_bar addGestureRecognizer:focus];
-        UIPanGestureRecognizer *resize=[[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(resize:)];
-        resize.maximumNumberOfTouches=1; resize.delegate=self;
-        [_resize addGestureRecognizer:resize];
-        UIPanGestureRecognizer *freeResize=[[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(resize:)];
-        freeResize.maximumNumberOfTouches=1; freeResize.delegate=self; [_freeResize addGestureRecognizer:freeResize];
+        for(MWCornerHandle *handle in @[_resize,_freeResize,_aspectTopLeft,_freeBottomLeft]) {
+            UIPanGestureRecognizer *pan=[[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(resize:)];
+            pan.maximumNumberOfTouches=1; pan.delegate=self; [handle addGestureRecognizer:pan];
+        }
         _parkedShield=[UIControl new]; _parkedShield.hidden=YES;
         _parkedShield.backgroundColor=[UIColor.blackColor colorWithAlphaComponent:0.02];
         _parkedShield.accessibilityLabel=@"还原挂起窗口"; _parkedShield.accessibilityTraits=UIAccessibilityTraitButton;
         [_parkedShield addTarget:self action:@selector(requestRestore) forControlEvents:UIControlEventTouchUpInside];
         [self addSubview:_parkedShield];
-        _restoreMark=[[UIImageView alloc] initWithImage:[UIImage systemImageNamed:@"pip.exit"]];
+        _restoreMark=[[UIImageView alloc] initWithImage:MWParkingControlImage(YES)];
         _restoreMark.tintColor=UIColor.whiteColor; _restoreMark.backgroundColor=[UIColor.blackColor colorWithAlphaComponent:0.35];
         _restoreMark.layer.cornerRadius=4; [_parkedShield addSubview:_restoreMark];
         [self setActive:YES]; [self updateStatus:nil];
+        MWLog(@"window.controls_installed",@{@"bundle":application.bundleIdentifier,@"layout":@"four_corners_center_controls_v1",
+            @"parkButton":@(_parkButton!=nil),@"parkImage":@([_parkButton imageForState:UIControlStateNormal]!=nil),@"applicationTitle":@NO});
     }
     return self;
 }
@@ -127,6 +129,12 @@ static NSArray *MWRectFields(CGRect r) { return @[@(r.origin.x),@(r.origin.y),@(
 }
 - (void)layoutSubviews {
     [super layoutSubviews];
+    if(!_model.maximized && !self.isParked && self.window && self.superview) {
+        MWRect reachable=MWKeepShortTitleReachable(MWFromCGRect(self.frame),MWFromCGRect(_viewport),self.window.safeAreaInsets.top);
+        if(!CGRectEqualToRect(self.frame,MWToCGRect(reachable))) {
+            _model.frame=reachable; self.frame=MWToCGRect(reachable);
+        }
+    }
     _surface.frame=self.bounds;
     CGFloat titleInset=0;
     if(!_model.maximized && !self.isParked)
@@ -137,9 +145,15 @@ static NSArray *MWRectFields(CGRect r) { return @[@(r.origin.x),@(r.origin.y),@(
     _bar.hidden=full || self.isParked;
     CGFloat leading=MAX(0,self.window.safeAreaInsets.left-self.frame.origin.x);
     CGFloat trailing=MAX(0,CGRectGetMaxX(self.frame)-(CGRectGetMaxX(_viewport)-self.window.safeAreaInsets.right));
-    _bar.frame=CGRectMake(leading,titleInset,MAX(1,self.bounds.size.width-leading-trailing),MWTitleHeight);
-    _title.frame=CGRectMake(120,0,MAX(0,_bar.bounds.size.width-124-MWCornerTouchSize),MWTitleHeight);
-    _content.frame=MWToCGRect(MWWindowContentRect(MWFromCGRect(self.bounds),titleInset,full || self.isParked));
+    MWWindowControls controls=MWWindowControlRects(MWFromCGRect(self.bounds),titleInset,leading,trailing);
+    _bar.frame=CGRectMake(controls.topLeft.x,controls.topLeft.y,
+        controls.topRight.x+controls.topRight.width-controls.topLeft.x,controls.topLeft.height);
+    UIButton *buttons[]={_closeButton,_minimize,_maximize,_parkButton};
+    for(NSUInteger i=0;i<4;i++) {
+        CGRect frame=MWToCGRect(controls.buttons[i]); frame.origin.x-=_bar.frame.origin.x; frame.origin.y-=_bar.frame.origin.y;
+        buttons[i].frame=frame;
+    }
+    _content.frame=MWToCGRect(MWWindowContentRect(MWFromCGRect(self.bounds),_bar.frame.origin.y,full || self.isParked));
     _inputRail.frame=MWToCGRect(MWWindowRailRect(MWFromCGRect(self.bounds),full || self.isParked));
     _inputRail.hidden=full || _model.state!=MWWindowVisible;
     CGSize systemSize=_compatibleCanvas ? [self systemCanvasSize] : _proportionalSize;
@@ -153,11 +167,11 @@ static NSArray *MWRectFields(CGRect r) { return @[@(r.origin.x),@(r.origin.y),@(
     _spinner.center=CGPointMake(CGRectGetMidX(_content.bounds),CGRectGetMidY(_content.bounds)-32);
     _message.frame=CGRectMake(16,MAX(12,CGRectGetMidY(_content.bounds)-16),MAX(1,_content.bounds.size.width-32),72);
     _retry.frame=CGRectMake(20,MIN(_content.bounds.size.height-48,CGRectGetMaxY(_message.frame)),MAX(1,_content.bounds.size.width-40),44);
-    _resize.frame=_inputRail.frame;
-    _freeResize.frame=CGRectMake(CGRectGetMaxX(_bar.frame)-MWCornerTouchSize,titleInset,MWCornerTouchSize,MWCornerTouchSize);
-    _resize.hidden=_freeResize.hidden=_model.maximized || _model.state!=MWWindowVisible;
+    _resize.frame=MWToCGRect(controls.bottomRight); _freeBottomLeft.frame=MWToCGRect(controls.bottomLeft);
+    _freeResize.frame=MWToCGRect(controls.topRight); _aspectTopLeft.frame=MWToCGRect(controls.topLeft);
+    _resize.hidden=_freeResize.hidden=_aspectTopLeft.hidden=_freeBottomLeft.hidden=_model.maximized || _model.state!=MWWindowVisible;
     [_surface bringSubviewToFront:_inputRail];
-    [_surface bringSubviewToFront:_resize]; [_surface bringSubviewToFront:_freeResize];
+    for(MWCornerHandle *handle in @[_resize,_freeResize,_aspectTopLeft,_freeBottomLeft]) [_surface bringSubviewToFront:handle];
     _parkedShield.hidden=!self.isParked; _parkedShield.frame=self.bounds;
     _restoreMark.frame=CGRectMake(MAX(0,self.bounds.size.width-24),4,20,20);
     if(!CGSizeEqualToSize(_shadowSize,self.bounds.size) || _shadowMaximized!=_model.maximized) {
@@ -188,8 +202,8 @@ static NSArray *MWRectFields(CGRect r) { return @[@(r.origin.x),@(r.origin.y),@(
     if(self.hidden || self.alpha<=0.01 || !self.userInteractionEnabled || ![self pointInside:point withEvent:event]) return nil;
     // Resolve only the local handles before descending into the remote scene.
     // Their rectangles sit entirely in host chrome; no cross-window substitution.
-    MWCornerHandle *handles[]={_resize,_freeResize};
-    for(NSUInteger i=0;i<2;i++) {
+    MWCornerHandle *handles[]={_resize,_freeResize,_aspectTopLeft,_freeBottomLeft};
+    for(NSUInteger i=0;i<4;i++) {
         MWCornerHandle *handle=handles[i];
         if(handle && !handle.hidden && handle.userInteractionEnabled) {
             UIView *hit=[handle hitTest:[handle convertPoint:point fromView:self] withEvent:event];
@@ -283,7 +297,7 @@ static NSArray *MWRectFields(CGRect r) { return @[@(r.origin.x),@(r.origin.y),@(
     _retry.hidden=_model.state!=MWWindowFailed;
     if(loading) [_spinner startAnimating]; else [_spinner stopAnimating];
     _minimize.enabled=_maximize.enabled=_parkButton.enabled=(_model.state==MWWindowVisible);
-    _resize.hidden=_freeResize.hidden=_model.maximized || _model.state!=MWWindowVisible;
+    _resize.hidden=_freeResize.hidden=_aspectTopLeft.hidden=_freeBottomLeft.hidden=_model.maximized || _model.state!=MWWindowVisible;
     _inputRail.hidden=_model.maximized || _model.state!=MWWindowVisible;
 }
 - (void)setActive:(BOOL)active {
@@ -300,7 +314,7 @@ static NSArray *MWRectFields(CGRect r) { return @[@(r.origin.x),@(r.origin.y),@(
     _surface.layer.borderColor=MWGlassBorderColor(self.traitCollection,_active).CGColor;
 }
 - (BOOL)gestureRecognizer:(UIGestureRecognizer *)recognizer shouldReceiveTouch:(UITouch *)touch {
-    if(recognizer.view==_resize || recognizer.view==_freeResize) return YES;
+    if([recognizer.view isKindOfClass:MWCornerHandle.class]) return YES;
     // A pan beginning over title-bar buttons cancels the button's tap. Narrow
     // windows must still have a usable drag area when controls fill the bar.
     if(recognizer.view==_bar && [recognizer isKindOfClass:UIPanGestureRecognizer.class]) return YES;
@@ -362,7 +376,8 @@ static NSArray *MWRectFields(CGRect r) { return @[@(r.origin.x),@(r.origin.y),@(
 }
 - (void)resize:(UIPanGestureRecognizer *)gesture {
     if(_model.maximized || _model.state!=MWWindowVisible) return;
-    BOOL free=gesture.view==_freeResize;
+    MWCornerHandle *handle=(MWCornerHandle *)gesture.view;
+    BOOL free=handle.freeform;
     if(gesture.state==UIGestureRecognizerStateBegan) {
         [self layoutIfNeeded];
         _gestureModel=_model; _gestureLogicalSize=_proportionalSize;
@@ -374,7 +389,7 @@ static NSArray *MWRectFields(CGRect r) { return @[@(r.origin.x),@(r.origin.y),@(
     BOOL terminal=gesture.state==UIGestureRecognizerStateEnded || gesture.state==UIGestureRecognizerStateCancelled || gesture.state==UIGestureRecognizerStateFailed;
     if(!_resizeActivated) {
         if(gesture.state==UIGestureRecognizerStateCancelled || gesture.state==UIGestureRecognizerStateFailed ||
-           (!free && !MWResizeDragActivated(delta.x,delta.y))) {
+           !MWResizeDragActivated(delta.x,delta.y)) {
             if(terminal) {
                 _resizing=NO;
                 MWTrace(@"window.resize_ignored",@{@"bundle":_application.bundleIdentifier,@"reason":@"below_drag_threshold_or_cancelled"});
@@ -385,7 +400,7 @@ static NSArray *MWRectFields(CGRect r) { return @[@(r.origin.x),@(r.origin.y),@(
         [self detachFromSnap];
         [self setNeedsLayout]; [self layoutIfNeeded];
         _gestureFrame=self.frame; [self focus];
-        _freeResize.dragging=free; _resize.dragging=!free;
+        handle.dragging=YES;
         _model.resizeMode=free ? MWResizeFree : MWResizeProportional;
         if(!free) {
             _proportionalSize=[self systemCanvasSize];
@@ -393,18 +408,19 @@ static NSArray *MWRectFields(CGRect r) { return @[@(r.origin.x),@(r.origin.y),@(
             _model.frame=MWBeginProportionalResize(MWFromCGRect(_gestureFrame),MWFromCGRect(_viewport),_model.aspectRatio,self.window.safeAreaInsets.top);
             self.frame=MWToCGRect(_model.frame); _gestureFrame=self.frame;
         }
-        MWLog(@"window.resize_begin",@{@"bundle":_application.bundleIdentifier,@"mode":free ? @"free" : @"proportional"});
+        [gesture setTranslation:CGPointZero inView:self.superview]; delta=CGPointZero;
+        MWLog(@"window.resize_begin",@{@"bundle":_application.bundleIdentifier,@"mode":free ? @"free" : @"proportional",@"corner":@(handle.corner)});
     }
     MWRect usable=MWProportionalViewport(MWFromCGRect(_viewport),self.window.safeAreaInsets.top);
-    _model.frame=free ? MWResizeTopRightRect(MWFromCGRect(_gestureFrame),delta.x,delta.y,MWFromCGRect(_viewport)) :
-        MWResizeAspectRect(MWFromCGRect(_gestureFrame),delta.x,delta.y,usable,_model.aspectRatio);
+    _model.frame=free ? MWResizeFreeCornerRect(MWFromCGRect(_gestureFrame),delta.x,delta.y,MWFromCGRect(_viewport),handle.corner==MWResizeBottomLeft) :
+        MWResizeAspectCornerRect(MWFromCGRect(_gestureFrame),delta.x,delta.y,usable,_model.aspectRatio,handle.corner==MWResizeTopLeft);
     self.frame=MWToCGRect(_model.frame);
     if(gesture.state==UIGestureRecognizerStateEnded || gesture.state==UIGestureRecognizerStateCancelled || gesture.state==UIGestureRecognizerStateFailed) {
         BOOL cancelled=gesture.state!=UIGestureRecognizerStateEnded;
         if(cancelled) { _model=_gestureModel; _proportionalSize=_gestureLogicalSize; self.frame=MWToCGRect(_model.frame); }
-        _resizing=NO; _resizeActivated=NO; _freeResize.dragging=NO; _resize.dragging=NO;
+        _resizing=NO; _resizeActivated=NO; handle.dragging=NO;
         [self commitSceneGeometry]; if(!cancelled) [self geometryChanged];
-        MWLog(@"window.resize_finished",@{@"bundle":_application.bundleIdentifier,@"mode":free ? @"free" : @"system_proportional",@"duration":@(CACurrentMediaTime()-_resizeStartedAt),@"sceneUpdates":@(_resizeSceneUpdates),@"cancelled":@(cancelled)});
+        MWLog(@"window.resize_finished",@{@"bundle":_application.bundleIdentifier,@"mode":free ? @"free" : @"system_proportional",@"corner":@(handle.corner),@"duration":@(CACurrentMediaTime()-_resizeStartedAt),@"sceneUpdates":@(_resizeSceneUpdates),@"cancelled":@(cancelled)});
         if(self.stateHandler) self.stateHandler();
     }
 }
@@ -426,8 +442,10 @@ static NSArray *MWRectFields(CGRect r) { return @[@(r.origin.x),@(r.origin.y),@(
 - (NSString *)touchRegionForView:(UIView *)view {
     if(!view) return @"none";
     if(self.isParked && [view isDescendantOfView:_parkedShield]) return @"parked_restore";
-    if([view isDescendantOfView:_resize]) return @"resize_rail";
-    if([view isDescendantOfView:_freeResize]) return @"free_resize";
+    if([view isDescendantOfView:_resize]) return @"bottom_right_aspect";
+    if([view isDescendantOfView:_freeResize]) return @"top_right_free";
+    if([view isDescendantOfView:_aspectTopLeft]) return @"top_left_aspect";
+    if([view isDescendantOfView:_freeBottomLeft]) return @"bottom_left_free";
     if([view isDescendantOfView:_bar]) return @"title";
     if(_guestView && [view isDescendantOfView:_guestHost]) return @"guest_surface";
     if([view isDescendantOfView:_content]) return @"content_chrome";
@@ -466,8 +484,9 @@ static NSArray *MWRectFields(CGRect r) { return @[@(r.origin.x),@(r.origin.y),@(
         @"parked":@(self.isParked),
         @"attached":@(self.window!=nil),@"hidden":@(self.hidden),@"hostHidden":@(_hostHidden),
         @"deliveredTouchStarts":@(_deliveredTouchStarts),@"geometry":[_guestHost geometrySnapshot],
-        @"contentFrame":MWRectFields(_content.frame),@"railFrame":MWRectFields(_resize.frame),
-        @"railVisible":@(!_resize.hidden),@"railOverlapsContent":@(!_resize.hidden && CGRectIntersectsRect(_resize.frame,_content.frame)),
+        @"contentFrame":MWRectFields(_content.frame),@"railFrame":MWRectFields(_inputRail.frame),
+        @"cornerFrames":@[MWRectFields(_aspectTopLeft.frame),MWRectFields(_freeResize.frame),MWRectFields(_freeBottomLeft.frame),MWRectFields(_resize.frame)],
+        @"railVisible":@(!_resize.hidden),@"railOverlapsContent":@(!_resize.hidden && CGRectIntersectsRect(_inputRail.frame,_content.frame)),
         @"renderedInWindow":MWRectFields([self renderedGuestRectInWindow]),
         @"bottomHitProbes":[self bottomHitProbes],@"probeScope":@"host_window_query_not_remote_delivery",
         @"session":_session ? [_session inputDiagnosticSnapshotWithCapabilities:capabilities] : @{}};
@@ -507,7 +526,7 @@ static NSArray *MWRectFields(CGRect r) { return @[@(r.origin.x),@(r.origin.y),@(
     MWWindowState state=_model.state;
     _model=_gestureModel; _model.state=state; _proportionalSize=_gestureLogicalSize;
     _dragging=NO; _resizing=NO; _resizeActivated=NO; _geometryGeneration++; _geometryUpdatePending=NO;
-    _freeResize.dragging=NO; _resize.dragging=NO;
+    _freeResize.dragging=NO; _resize.dragging=NO; _aspectTopLeft.dragging=NO; _freeBottomLeft.dragging=NO;
     [self updateSnapCandidate:MWSnapNone]; self.frame=MWToCGRect(_model.frame);
     [self commitSceneGeometry];
     MWTrace(@"window.gesture_cancelled",@{@"bundle":_application.bundleIdentifier});

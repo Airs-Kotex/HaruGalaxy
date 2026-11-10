@@ -33,6 +33,8 @@
         _fullscreen=[self action:@"arrow.up.left.and.arrow.down.right" label:@"铺满屏幕" handler:^{if(weakPanel.fullscreenHandler) weakPanel.fullscreenHandler(bundle);}];
         UIButton *close=[self action:@"xmark" label:@"关闭窗口" handler:^{if(weakPanel.closeHandler) weakPanel.closeHandler(bundle);}];
         _park=[self action:@"pip.enter" label:@"挂起到右上角" handler:^{if(weakPanel.parkHandler) weakPanel.parkHandler(bundle);}];
+        _park.titleLabel.font=[UIFont systemFontOfSize:13 weight:UIFontWeightSemibold];
+        _park.accessibilityIdentifier=@"harugalaxy.panel.park";
         close.tintColor=UIColor.systemRedColor;
         _actions=[[UIStackView alloc] initWithArrangedSubviews:@[_minimize,_fullscreen,_park,close]];
         _actions.axis=UILayoutConstraintAxisHorizontal; _actions.distribution=UIStackViewDistributionFillEqually;
@@ -56,7 +58,8 @@
     _minimize.enabled=window.model.state==MWWindowVisible || minimized || window.isParked;
     _fullscreen.enabled=_minimize.enabled;
     _park.enabled=window.model.state==MWWindowVisible || window.isParked;
-    [_park setImage:[UIImage systemImageNamed:window.isParked ? @"pip.exit" : @"pip.enter"] forState:UIControlStateNormal];
+    [_park setImage:nil forState:UIControlStateNormal];
+    [_park setTitle:window.isParked ? @"还原" : @"挂起" forState:UIControlStateNormal];
     _park.accessibilityLabel=window.isParked ? @"还原挂起窗口" : @"挂起到右上角";
     NSString *bundle=_bundle; __weak MWWindowPanel *panel=_panel;
     UIAction *compatible=[UIAction actionWithTitle:@"兼容显示并重新打开" image:[UIImage systemImageNamed:@"rectangle.inset.filled"]
@@ -73,7 +76,10 @@
         identifier:nil handler:^(__kindof UIAction *action) {
             (void)action; if(panel.openOriginalHandler) panel.openOriginalHandler(bundle);
         }];
-    _options.menu=[UIMenu menuWithTitle:@"窗口选项" children:@[compatible,normal,original]];
+    UIAction *park=[UIAction actionWithTitle:window.isParked ? @"还原挂起窗口" : @"挂起到右上角" image:nil identifier:nil
+        handler:^(__kindof UIAction *action){(void)action;if(panel.parkHandler) panel.parkHandler(bundle);}];
+    if(!_park.enabled) park.attributes=UIMenuElementAttributesDisabled;
+    _options.menu=[UIMenu menuWithTitle:@"窗口选项" children:@[park,compatible,normal,original]];
 }
 - (UIButton *)action:(NSString *)symbol label:(NSString *)label handler:(dispatch_block_t)handler {
     UIButton *button=[UIButton buttonWithType:UIButtonTypeSystem];
@@ -98,7 +104,7 @@
 
 @implementation MWWindowPanel {
     UILabel *_title, *_hint, *_empty;
-    UIButton *_open, *_settings;
+    UIButton *_open, *_settings, *_parkingSettings;
     UIScrollView *_scroll;
     NSArray<MWPanelRow *> *_rows;
     NSDictionary<NSString *,MWPanelRow *> *_rowsByBundle;
@@ -112,6 +118,11 @@
         _hint=[UILabel new]; _hint.text=@"挂起保留缩略窗 · 更多选项见 …"; _hint.font=[UIFont systemFontOfSize:11]; _hint.textColor=UIColor.secondaryLabelColor; [self.contentView addSubview:_hint];
         _open=[UIButton buttonWithType:UIButtonTypeSystem]; [_open setTitle:@"＋ 打开应用" forState:UIControlStateNormal];
         [_open addTarget:self action:@selector(openApplication) forControlEvents:UIControlEventTouchUpInside]; [self.contentView addSubview:_open];
+        _parkingSettings=[UIButton buttonWithType:UIButtonTypeSystem];
+        [_parkingSettings setTitle:@"挂起设置" forState:UIControlStateNormal];
+        _parkingSettings.accessibilityIdentifier=@"harugalaxy.panel.parkingSettings";
+        [_parkingSettings addTarget:self action:@selector(parkingSettings) forControlEvents:UIControlEventTouchUpInside];
+        [self.contentView addSubview:_parkingSettings];
         _settings=[UIButton buttonWithType:UIButtonTypeSystem]; [_settings setImage:[UIImage systemImageNamed:@"slider.horizontal.3"] forState:UIControlStateNormal];
         _settings.accessibilityLabel=@"设置"; [_settings addTarget:self action:@selector(settings) forControlEvents:UIControlEventTouchUpInside]; [self.contentView addSubview:_settings];
         _scroll=[UIScrollView new]; [self.contentView addSubview:_scroll];
@@ -123,6 +134,7 @@
 }
 - (void)openApplication { if(self.openApplicationHandler) self.openApplicationHandler(); }
 - (void)settings { if(self.settingsHandler) self.settingsHandler(); }
+- (void)parkingSettings { if(self.parkingSettingsHandler) self.parkingSettingsHandler(); }
 - (void)updateWindows:(NSArray<MWWindowView *> *)windows {
     NSMutableArray *snapshot=[NSMutableArray arrayWithCapacity:windows.count];
     for(MWWindowView *window in windows) [snapshot addObject:@[
@@ -154,7 +166,8 @@
     _settings.frame=CGRectMake(width-56,compact ? 0 : 8,44,44);
     _hint.hidden=compact;
     _hint.frame=CGRectMake(16,43,width-32,18);
-    _open.frame=CGRectMake(12,compact ? 42 : 68,width-24,44);
+    _open.frame=CGRectMake(12,compact ? 42 : 68,(width-24)/2,44);
+    _parkingSettings.frame=CGRectMake(CGRectGetMaxX(_open.frame),compact ? 42 : 68,(width-24)/2,44);
     _scroll.frame=CGRectMake(12,compact ? 90 : 118,width-24,MAX(1,self.bounds.size.height-(compact ? 102 : 130)));
     CGFloat y=0;
     for(MWPanelRow *row in _rows) { row.frame=CGRectMake(0,y,_scroll.bounds.size.width,98); y+=108; }

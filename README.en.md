@@ -1,6 +1,6 @@
 # HaruGalaxy · 初春星河
 
-[简体中文](README.md) · [Download 0.3.10](https://github.com/Airs-Kotex/HaruGalaxy/releases/tag/v0.3.10) · [Issues](https://github.com/Airs-Kotex/HaruGalaxy/issues)
+[简体中文](README.md) · [Download 0.3.12](https://github.com/Airs-Kotex/HaruGalaxy/releases/tag/v0.3.12) · [Issues](https://github.com/Airs-Kotex/HaruGalaxy/issues)
 
 A native multi-window workspace for TrollStore. HaruGalaxy hosts installed apps in movable windows with an edge panel, free or original-aspect resizing, half-screen snapping and local diagnostic exports.
 
@@ -9,11 +9,11 @@ The edge entry, title bars and window panel now use translucent glass controls, 
 ## Install
 
 1. Install [TrollStore](https://github.com/opa334/TrollStore) on a supported device.
-2. Download [HaruGalaxy-0.3.10.tipa](https://github.com/Airs-Kotex/HaruGalaxy/releases/download/v0.3.10/HaruGalaxy-0.3.10.tipa).
+2. Download [HaruGalaxy-0.3.12.tipa](https://github.com/Airs-Kotex/HaruGalaxy/releases/download/v0.3.12/HaruGalaxy-0.3.12.tipa).
 3. Open the file in TrollStore and install it over an existing 0.3.1 or later installation.
 4. Open HaruGalaxy and enable the floating workspace in Settings.
 
-Bundle identifier: `io.github.airskotex.harugalaxy`. Versions 0.3.0 and earlier use a different identifier; their preferences and logs do not migrate automatically. Version 0.3.2 was withdrawn. Other releases remain available in [Releases](https://github.com/Airs-Kotex/HaruGalaxy/releases).
+Bundle identifier: `io.github.airskotex.harugalaxy`. Versions0.3.0 and earlier use a different identifier; preferences and logs do not migrate automatically. Versions0.3.2 and0.3.11 were withdrawn. Other releases remain available in [Releases](https://github.com/Airs-Kotex/HaruGalaxy/releases).
 
 ## Controls
 
@@ -26,18 +26,33 @@ Bundle identifier: `io.github.airskotex.harugalaxy`. Versions 0.3.0 and earlier 
 | Settings → “入口保持展开” | Keep the entry expanded |
 | Tap outside the panel | Close it without activating the app underneath |
 | Drag a title bar | Move the window |
-| Top-right arc | Resize width and height freely |
-| Entire bottom strip | Resize using the system's original logical aspect ratio |
+| Top-right or bottom-left half | Resize width and height freely |
+| Top-left or bottom-right half | Resize using the system's original logical aspect ratio |
 | Drag a free window near an edge, dwell, release | Snap to top/bottom in portrait or left/right in landscape |
 | Minimize | Store the window in the edge panel |
 | Maximize / double-tap the title | Fill the screen; restore through the edge panel |
-| ↗ on an app's panel row | End that hosted window and open the ordinary app |
+| Fourth blue top button / panel “挂起” | Park a live thumbnail at the top right |
+| Panel “挂起设置” | Jump to thumbnail size and aspect settings |
+| Tap a parked thumbnail | Restore prior position, dimensions, resize and snap/full-screen state |
+| App row → … → open original app | End that hosted window and open the ordinary app |
 
 Each app has one window, with up to four sessions at a time. Entry position is saved across launches and adapted on rotation. An undocked entry stays expanded. Drag it away from frequently used app controls; the previous inward-pull opening gesture now moves the entry, while a tap opens its panel.
 
-The title bar is 28 points high and the bottom edge is 8 points, for 36 points of combined chrome. The entire bottom edge starts proportional resizing; guest content ends above it. A small central line marks the edge and highlights on contact. The top-right arc handles free resizing. Title-bar buttons can also start a drag: a stationary tap activates the button, movement pans the window.
+The top bar is28 points high and the bottom edge8 points. Four centered top controls are Close, Minimize, Maximize and Park; the app title is removed. Top-left/bottom-right control aspect resizing, while top-right/bottom-left resize freely. The bottom edge is split into two halves, each marked by a small line. Controls stay outside guest content.
+
+All four resize handles require14 points of movement. Entering aspect mode first fits inside the previous window footprint, so a wide half-screen window does not expand to full height. Top-left and bottom-right allow shrinking from opposite directions. A tap leaves the window unchanged.
 
 When guest content reaches a system edge exclusion, the workspace passes the overlapping safe-area insets to the app, converted into its logical coordinates when scaled. Apps must honor these insets in their own layout. The footer remains8 points.
+
+## Parking
+
+Use the fourth blue top button or panel's **“挂起”** text action, then tap the top-right thumbnail to restore. Its icon is drawn by the app rather than relying on an SF Symbols name. **Panel → 挂起设置** jumps directly to size(18%–50%) and aspect settings(original,1:1,4:3,3:4,16:9,9:16). Settings title shows version/build: **0.3.12 (17)**. Multiple thumbnails stack in the safe area; their appearance does not change restored geometry. Parking keeps sessions alive, not process suspension.
+
+## Display compatibility
+
+Choose **App row → … → 兼容显示并重新打开** to reopen with the system's native logical canvas. The outer window can still resize freely; content scales instead of repeatedly changing the app's layout size. Choose ordinary display in the same menu to revert.
+
+The choice is saved per app. Switching recreates that hosted session and may lose form state, while preserving outer layout, snap/full-screen and parked state. The reported iOS15 issues in870 Game Box andTelegram are not device-confirmed fixed; layer registration does not establish correct images or media loading.
 
 ## Search
 
@@ -47,9 +62,9 @@ If iOS rejects the foreground request, the floating workspace returns with a mes
 
 ## Keyboard and switching to the ordinary app
 
-Direct keyboard presentation inside hosted apps remains unresolved. The copy input board was removed; normal-app search is preserved. Version0.3.10 skips partial hosted-keyboard preparation when the paired PID APIs are absent. To diagnose keyboard or bottom-control issues, choose **Settings → “采集键盘诊断（20秒）”**, tap the affected guest control during the next20 seconds, then export the diagnostic bundle.
+Direct keyboard presentation inside hosted apps remains unresolved. The copy input board was removed; normal-app search is preserved. Partial hosted-keyboard preparation is skipped when paired PID APIs are absent. To diagnose keyboard or bottom-control issues, choose **Settings → “采集键盘诊断（20秒）”**, tap the affected guest control during the next20 seconds, then export the diagnostic bundle.
 
-To switch to the ordinary app, use **↗** on that app's panel row. Capability checks run before ending the hosted window. When the newer deactivation method is absent, an older scene-settings update path is used; if neither is available, the window stays open. Successful release is followed by an ordinary launch request, with other windows collected into the panel. The target is not automatically recreated, and forms/cursor positions may differ.
+To switch to the ordinary app, use **… → 结束小窗并打开原应用** on its panel row. Capability checks run before ending the hosted window. When the newer deactivation method is absent, an older scene-settings update path is used; if neither is available, the window stays open. Successful release is followed by an ordinary launch request, with other windows collected into the panel. The target is not automatically recreated, and forms/cursor positions may differ.
 
 On iOS 14–17, the Liquid Glass-inspired appearance uses existing UIKit blur and custom edge layers. It does not provide iOS 26+'s native glass API. Guest content remains clear; Reduce Transparency switches controls to opaque backgrounds.
 
@@ -80,6 +95,8 @@ Open the window panel → Settings → Diagnostics → mark the issue → export
 Logs stay on the device, rotate at approximately 8 MiB, and are exported only by the user. They record scene, window and input stages without recording the screen or typed text. Inspect and redact application identifiers before sharing publicly.
 
 The timed capture samples at most once per second: input requests, focus ownership, method signatures, window visibility/levels, safe insets and bottom hit queries. Queries do not inject touches; delivered touch logs contain region categories, not coordinates or text. Sampling does not change focus or read keycodes or clipboard contents.
+
+App launch also records selected version/scene declarations and bounded client/layer observations over the first12 seconds. No screenshots, app images or chat contents are read.
 
 ```sh
 python3 scripts/inspect_diagnostics.py /path/to/HaruGalaxy-Diagnostics-example.json

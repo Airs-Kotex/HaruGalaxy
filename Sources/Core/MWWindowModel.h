@@ -13,6 +13,7 @@ typedef struct { double x, y, width, height; } MWRect;
 typedef enum { MWWindowLoading, MWWindowVisible, MWWindowMinimized, MWWindowFailed, MWWindowClosed, MWWindowParked } MWWindowState;
 typedef enum { MWEventReady, MWEventFailed, MWEventRetry, MWEventMinimize, MWEventRestore, MWEventClose } MWWindowEvent;
 typedef enum { MWResizeFree, MWResizeProportional } MWResizeMode;
+typedef enum { MWResizeTopLeft, MWResizeTopRight, MWResizeBottomLeft, MWResizeBottomRight } MWResizeCorner;
 typedef enum { MWSnapNone, MWSnapTop, MWSnapBottom, MWSnapLeft, MWSnapRight } MWSnapTarget;
 typedef struct {
     MWWindowState state;
@@ -26,6 +27,7 @@ typedef struct { bool parked; MWWindowModel saved; } MWWindowParking;
 
 MWWindowModel MWWindowCreate(MWRect frame);
 MWRect MWConstrainRect(MWRect rect, MWRect viewport);
+MWRect MWConstrainExistingRect(MWRect rect,MWRect viewport);
 MWRect MWWindowContentRect(MWRect bounds,double extraTopInset,bool maximized);
 MWRect MWWindowRailRect(MWRect bounds,bool maximized);
 bool MWWindowApply(MWWindowModel *model, MWWindowEvent event);
@@ -58,6 +60,11 @@ MWRect MWGuestCanvas(MWRect available,MWRect systemCanvas,bool proportional,bool
 bool MWResizeDragActivated(double dx,double dy);
 MWRect MWProportionalViewport(MWRect viewport,double safeTop);
 MWRect MWBeginProportionalResize(MWRect start,MWRect viewport,double ratio,double safeTop);
+MWRect MWResizeAspectCornerRect(MWRect start,double dx,double dy,MWRect viewport,double ratio,bool topLeft);
+MWRect MWResizeFreeCornerRect(MWRect start,double dx,double dy,MWRect viewport,bool bottomLeft);
+typedef struct { MWRect topLeft,topRight,bottomLeft,bottomRight,buttons[4]; } MWWindowControls;
+MWWindowControls MWWindowControlRects(MWRect bounds,double titleInset,double leadingInset,double trailingInset);
+MWRect MWKeepShortTitleReachable(MWRect frame,MWRect viewport,double safeTop);
 MWWindowModel MWWindowRestoreForLaunch(MWWindowModel saved,MWRect viewport);
 bool MWWindowPark(MWWindowModel *model,MWWindowParking *parking);
 bool MWWindowUnpark(MWWindowModel *model,MWWindowParking *parking,MWRect viewport);

@@ -4,33 +4,37 @@
 #import "../Diagnostics/MWDiagnostics.h"
 
 @implementation MWCornerHandle {
-    BOOL _top;
+    BOOL _top, _left;
     BOOL _contact;
     CAShapeLayer *_arc;
 }
-- (instancetype)initAtTop:(BOOL)top {
+- (instancetype)initWithCorner:(MWResizeCorner)corner {
     if((self=[super initWithFrame:CGRectMake(0,0,MWCornerTouchSize,MWCornerTouchSize)])) {
-        _top=top; self.opaque=NO; self.backgroundColor=UIColor.clearColor;
+        _corner=corner; _top=corner==MWResizeTopLeft || corner==MWResizeTopRight;
+        _left=corner==MWResizeTopLeft || corner==MWResizeBottomLeft;
+        self.opaque=NO; self.backgroundColor=UIColor.clearColor;
         _arc=[CAShapeLayer layer]; _arc.fillColor=UIColor.clearColor.CGColor;
         _arc.lineCap=kCALineCapRound; _arc.lineWidth=2.5; [self.layer addSublayer:_arc];
-        self.tintColor=top ? UIColor.systemOrangeColor : UIColor.systemTealColor;
+        self.tintColor=self.freeform ? UIColor.systemOrangeColor : UIColor.systemTealColor;
         self.isAccessibilityElement=YES; self.accessibilityTraits=UIAccessibilityTraitButton;
-        self.accessibilityLabel=top ? @"右上弧线：自由缩放" : @"底部细边：系统原始比例缩放";
+        self.accessibilityLabel=@[@"左上：系统原始比例缩放",@"右上：自由缩放",@"左下底边：自由缩放",@"右下底边：系统原始比例缩放"][corner];
         [self updateColor];
     }
     return self;
 }
+- (BOOL)freeform { return _corner==MWResizeTopRight || _corner==MWResizeBottomLeft; }
 - (BOOL)pointInside:(CGPoint)point withEvent:(UIEvent *)event {
     (void)event;
-    if(!_top) return CGRectContainsPoint(self.bounds,point); // Dedicated host-only rail.
-    return MWCornerHit(point.x,point.y,self.bounds.size.width,self.bounds.size.height,_top);
+    return CGRectContainsPoint(self.bounds,point); // Dedicated host-only header/footer.
 }
 - (void)layoutSubviews {
     [super layoutSubviews];
     UIBezierPath *path;
     if(_top) {
-        path=[UIBezierPath bezierPathWithArcCenter:CGPointMake(self.bounds.size.width-11,11)
-            radius:7 startAngle:-M_PI_2 endAngle:0 clockwise:YES];
+        CGFloat radius=MIN(6,MIN(self.bounds.size.width,self.bounds.size.height)/4);
+        CGFloat x=self.bounds.size.width/2;
+        path=[UIBezierPath bezierPathWithArcCenter:CGPointMake(x,self.bounds.size.height/2)
+            radius:radius startAngle:_left ? M_PI : -M_PI_2 endAngle:_left ? M_PI*1.5 : 0 clockwise:YES];
     } else {
         path=[UIBezierPath bezierPath];
         CGFloat middle=CGRectGetMidX(self.bounds),half=MIN(12,self.bounds.size.width/4);
@@ -42,7 +46,7 @@
 - (void)setDragging:(BOOL)dragging { _dragging=dragging; _arc.lineWidth=dragging ? 3.5 : 2.5; [self updateColor]; }
 - (BOOL)beginTrackingWithTouch:(UITouch *)touch withEvent:(UIEvent *)event {
     (void)touch; (void)event; _contact=YES; [self updateColor];
-    MWTrace(@"window.resize_contact",@{@"mode":_top ? @"free" : @"proportional"});
+    MWTrace(@"window.resize_contact",@{@"mode":self.freeform ? @"free" : @"proportional",@"corner":@(_corner)});
     return YES;
 }
 - (void)endTrackingWithTouch:(UITouch *)touch withEvent:(UIEvent *)event {

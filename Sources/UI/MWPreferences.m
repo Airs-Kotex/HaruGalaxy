@@ -87,12 +87,12 @@ NSString *const MWPreferencesDidChangeNotification=@"MWPreferencesDidChange";
         if(![record[key] isKindOfClass:NSNumber.class] || !isfinite([record[key] doubleValue])) return fallback;
     MWRect rect={v.origin.x+[record[@"x"] doubleValue]*v.size.width,v.origin.y+[record[@"y"] doubleValue]*v.size.height,
         [record[@"w"] doubleValue]*v.size.width,[record[@"h"] doubleValue]*v.size.height};
-    MWRect result=MWConstrainRect(rect,(MWRect){v.origin.x,v.origin.y,v.size.width,v.size.height});
+    MWRect result=MWConstrainExistingRect(rect,(MWRect){v.origin.x,v.origin.y,v.size.width,v.size.height});
     return CGRectMake(result.x,result.y,result.width,result.height);
 }
 - (void)saveFrame:(CGRect)r forBundle:(NSString *)bundle viewport:(CGRect)v {
     if(v.size.width<=0 || v.size.height<=0 || !bundle.length) return;
-    MWRect rect=MWConstrainRect((MWRect){r.origin.x,r.origin.y,r.size.width,r.size.height},(MWRect){v.origin.x,v.origin.y,v.size.width,v.size.height});
+    MWRect rect=MWConstrainExistingRect((MWRect){r.origin.x,r.origin.y,r.size.width,r.size.height},(MWRect){v.origin.x,v.origin.y,v.size.width,v.size.height});
     NSMutableDictionary *frames=[[NSUserDefaults.standardUserDefaults dictionaryForKey:@"windowFrames"] mutableCopy] ?: [NSMutableDictionary dictionary];
     if(frames.count>=50 && !frames[bundle]) [frames removeAllObjects];
     frames[bundle]=@{@"x":@((rect.x-v.origin.x)/v.size.width),@"y":@((rect.y-v.origin.y)/v.size.height),@"w":@(rect.width/v.size.width),@"h":@(rect.height/v.size.height)};

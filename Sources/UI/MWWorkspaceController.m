@@ -53,7 +53,7 @@
     _heading=[self label:@"初春星河" size:32 weight:UIFontWeightBold color:UIColor.labelColor];
     _subtitle=[self label:@"HARUGALAXY / 多窗口工作台" size:12 weight:UIFontWeightSemibold color:UIColor.secondaryLabelColor];
     _emptyTitle=[self label:@"让应用，各得其所。" size:24 weight:UIFontWeightSemibold color:UIColor.labelColor];
-    _emptyHint=[self label:@"右上自由缩放 · 右下原始比例\n轻点边缘入口管理窗口" size:15 weight:UIFontWeightRegular color:UIColor.secondaryLabelColor];
+    _emptyHint=[self label:@"左下 / 右上自由 · 左上 / 右下等比\n轻点边缘入口管理窗口" size:15 weight:UIFontWeightRegular color:UIColor.secondaryLabelColor];
     _emptyTitle.textAlignment=_emptyHint.textAlignment=NSTextAlignmentCenter; _emptyHint.numberOfLines=0;
     _add=[self button:@"plus" title:@"打开应用" action:@selector(openPicker)];
     if(@available(iOS 15.0,*)) {
@@ -81,6 +81,7 @@
     _panel=[MWWindowPanel new]; _panel.hidden=YES; [self.view addSubview:_panel];
     _panel.openApplicationHandler=^{[weakSelf closePanel]; [weakSelf openPicker];};
     _panel.settingsHandler=^{[weakSelf closePanel]; [weakSelf openSettings];};
+    _panel.parkingSettingsHandler=^{[weakSelf closePanel]; [weakSelf openSettingsAtParking:YES];};
     _panel.openOriginalHandler=^(NSString *bundle){[weakSelf openOriginalBundle:bundle];};
     _panel.compatibleCanvasHandler=^(NSString *bundle,BOOL enabled){[weakSelf reopenBundle:bundle compatibleCanvas:enabled];};
     _panel.parkHandler=^(NSString *bundle){[weakSelf closePanel]; [weakSelf toggleParkBundle:bundle];};
@@ -364,7 +365,7 @@
     CGRect initialViewport=_viewport;
     initialViewport.origin.y+=self.view.safeAreaInsets.top;
     initialViewport.size.height=MAX(1,initialViewport.size.height-self.view.safeAreaInsets.top);
-    MWRect placed=MWConstrainRect((MWRect){frame.origin.x,frame.origin.y,frame.size.width,frame.size.height},
+    MWRect placed=MWConstrainExistingRect((MWRect){frame.origin.x,frame.origin.y,frame.size.width,frame.size.height},
         (MWRect){initialViewport.origin.x,initialViewport.origin.y,initialViewport.size.width,initialViewport.size.height});
     frame=savedModel ? CGRectMake(savedModel->frame.x,savedModel->frame.y,savedModel->frame.width,savedModel->frame.height) :
         CGRectMake(placed.x,placed.y,placed.width,placed.height);
@@ -449,10 +450,14 @@
     for(MWWindowView *window in _windows.allValues) [window setHostVisible:visible && window.superview==self.view];
 }
 - (void)openSettings {
+    [self openSettingsAtParking:NO];
+}
+- (void)openSettingsAtParking:(BOOL)parking {
     [self closePanel];
     if(self.presentedViewController || _nativeOpeningTarget) return;
     [MWKeyboardFocus.shared focusHostWindow:self.view.window reason:@"settings"];
     MWSettingsController *settings=[MWSettingsController new];
+    settings.showParkingSettings=parking;
     __weak typeof(self) weakSelf=self;
     settings.floatingHandler=^(BOOL enabled) {
         NSError *error=nil;

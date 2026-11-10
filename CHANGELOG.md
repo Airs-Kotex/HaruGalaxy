@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.3.12 — Four-corner resizing and explicit parking controls
+
+### Fixed
+
+- Reproduced0.3.11's half-screen-to-aspect expansion: retaining the wide frame inflated its height. Fit aspect conversion inside the previous footprint, reset initial drag translation, and preserve small sizes on reflow/save/restore.
+- Allow proportional resizing from either top-left or bottom-right, including shrinking when the opposite edge touches the display boundary.
+
+### Changed
+
+- Top-left/bottom-right use system-proportional scaling; top-right/bottom-left use free scaling. The bottom8-point strip has separate left/right halves.
+- Center Close, Minimize, Maximize and Park in the top bar and remove the app title.
+- All resize controls wait for14 points of movement; touch rectangles remain in host chrome.
+
+### Added
+
+- Custom parking/restore glyphs independent of system symbol availability, explicit panel “挂起/还原” text actions and a “挂起设置” shortcut.
+- Version/build in the settings title and UI-installation diagnostics to identify which controls the running app created.
+
+Version0.3.11 remains withdrawn. Missing controls on that device were not reproduced locally; compiled presence is not device visibility. Existing iOS15 display compatibility options and keyboard limitations remain.
+
 ## 0.3.11 — Withdrawn
 
 Withdrawn at the user’s request after feedback about missing parking controls and unresolved half-screen resizing. The release and its assets were removed; 0.3.10 remains available.

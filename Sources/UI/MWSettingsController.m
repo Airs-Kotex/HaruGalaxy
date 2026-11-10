@@ -9,9 +9,19 @@
 }
 - (instancetype)init { return [super initWithStyle:UITableViewStyleInsetGrouped]; }
 - (void)viewDidLoad {
-    [super viewDidLoad]; self.title=@"工作台设置";
+    [super viewDidLoad];
+    self.title=[NSString stringWithFormat:@"设置 · %@ (%@)",NSBundle.mainBundle.infoDictionary[@"CFBundleShortVersionString"],NSBundle.mainBundle.infoDictionary[@"CFBundleVersion"]];
     self.navigationItem.leftBarButtonItem=[[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemClose target:self action:@selector(dismiss)];
     self.tableView.rowHeight=56;
+    MWLog(@"settings.controls_installed",@{@"parkingSection":@2,@"sections":@5,@"requestedParking":@(self.showParkingSettings),
+        @"version":NSBundle.mainBundle.infoDictionary[@"CFBundleShortVersionString"] ?: @"unknown",@"build":NSBundle.mainBundle.infoDictionary[@"CFBundleVersion"] ?: @"unknown"});
+}
+- (void)viewDidAppear:(BOOL)animated {
+    [super viewDidAppear:animated];
+    if(self.showParkingSettings) {
+        self.showParkingSettings=NO;
+        [self.tableView scrollToRowAtIndexPath:[NSIndexPath indexPathForRow:0 inSection:2] atScrollPosition:UITableViewScrollPositionMiddle animated:NO];
+    }
 }
 - (void)dismiss { [self dismissViewControllerAnimated:YES completion:nil]; }
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView { (void)tableView; return 5; }

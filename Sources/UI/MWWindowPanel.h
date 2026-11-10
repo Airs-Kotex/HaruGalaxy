@@ -4,6 +4,7 @@
 @interface MWWindowPanel : MWGlassSurface
 @property(nonatomic,copy) void (^openApplicationHandler)(void);
 @property(nonatomic,copy) void (^settingsHandler)(void);
+@property(nonatomic,copy) void (^parkingSettingsHandler)(void);
 @property(nonatomic,copy) void (^openOriginalHandler)(NSString *bundle);
 @property(nonatomic,copy) void (^compatibleCanvasHandler)(NSString *bundle,BOOL enabled);
 @property(nonatomic,copy) void (^parkHandler)(NSString *bundle);
