@@ -261,20 +261,62 @@ static void guest_safe_insets(void) {
 static void compatible_guest_canvas(void) {
     MWRect native={0,0,390,844},tiny={0,0,390,164};
     // Device evidence: a saved200pt window launched only164pt of App content.
-    equal_rect(MWGuestCanvas(tiny,native,false,false,false),tiny);
-    equal_rect(MWGuestCanvas(tiny,native,false,false,true),native);
-    equal_rect(MWGuestCanvas(tiny,native,true,false,false),native);
-    equal_rect(MWGuestCanvas(tiny,native,true,true,false),tiny);
-    equal_rect(MWGuestCanvas(tiny,native,false,true,true),native);
+    MWRect unset={0};
+    equal_rect(MWGuestCanvas(tiny,unset,native,false,false),tiny);
+    equal_rect(MWGuestCanvas(tiny,unset,native,false,true),native);
+    equal_rect(MWGuestCanvas(tiny,native,native,false,false),native);
+    equal_rect(MWGuestCanvas(tiny,native,native,true,false),tiny);
+    equal_rect(MWGuestCanvas(tiny,tiny,native,true,true),native);
     MWRect landscape={0,0,844,390};
-    equal_rect(MWGuestCanvas(tiny,landscape,false,false,true),landscape);
+    equal_rect(MWGuestCanvas(tiny,tiny,landscape,false,true),landscape);
     for(int w=220;w<=390;w+=17) for(int h=164;h<=844;h+=29) {
-        MWRect fixed=MWGuestCanvas((MWRect){0,0,w,h},native,false,false,true);
+        MWRect fixed=MWGuestCanvas((MWRect){0,0,w,h},tiny,native,false,true);
         equal_rect(fixed,native);
         MWContentTransform t=MWFitContent(fixed.width,fixed.height,w,h);
         assert(t.scale>0 && t.x>=-0.00001 && t.y>=-0.00001);
         assert(t.x+fixed.width*t.scale<=w+0.00001 && t.y+fixed.height*t.scale<=h+0.00001);
     }
+}
+static void stable_canvas_resize(void) {
+    const MWRect screens[]={{0,0,1024,768},{0,0,390,844},{0,0,844,390}};
+    // The iPad trace changed340x424/512x712 to1024x768 on the first aspect
+    // drag, then to485x551 during free resize. None is a layout command now.
+    const MWRect startingCanvases[]={{0,0,340,424},{0,0,512,712},{0,0,1024,768}};
+    for(unsigned device=0;device<3;device++) for(unsigned seed=0;seed<3;seed++) {
+        MWRect canvas=startingCanvases[seed],screen=screens[device];
+        MWRect window=MWConstrainExistingRect((MWRect){20,40,340,460},screen);
+        double systemRatio=screen.width/screen.height;
+        for(int corner=0;corner<4;corner++) for(int step=0;step<12;step++) {
+            MWRect next;
+            if(corner==0 || corner==3) {
+                MWRect start=MWBeginProportionalResize(window,screen,systemRatio,0);
+                next=MWResizeAspectCornerRect(start,step*9-54,step*7-42,screen,systemRatio,corner==0);
+            } else next=MWResizeFreeCornerRect(window,step*9-54,step*7-42,screen,corner==2);
+            MWRect available=MWWindowContentRect((MWRect){0,0,next.width,next.height},0,false);
+            MWRect resized=MWGuestCanvas(available,canvas,screen,false,false);
+            equal_rect(resized,canvas); // Continuous drag AND final frame keep it.
+            MWContentTransform fit=MWFitContent(resized.width,resized.height,available.width,available.height);
+            for(unsigned point=0;point<4;point++) {
+                double x=(point&1 ? resized.width : 0)*fit.scale+fit.x;
+                double y=(point&2 ? resized.height : 0)*fit.scale+fit.y;
+                assert(x>=-0.001 && x<=available.width+0.001);
+                assert(y>=-0.001 && y<=available.height+0.001);
+            }
+        }
+        // Maximize may relayout; restore and gesture cancellation use the saved
+        // canvas. Snapping establishes a new canvas before subsequent resizing.
+        equal_rect(MWGuestCanvas(screen,canvas,screen,true,false),screen);
+        equal_rect(MWGuestCanvas(window,canvas,screen,false,false),canvas);
+        MWRect half=MWHalfScreenRect(screen,MWSnapTop);
+        half=MWWindowContentRect(half,0,false); half.x=half.y=0;
+        MWRect snapped=MWGuestCanvas(half,canvas,screen,true,false);
+        equal_rect(snapped,half);
+        equal_rect(MWGuestCanvas((MWRect){0,0,120,84},snapped,screen,false,false),half);
+        // Original canvas remains device-sized even for explicit viewport layouts.
+        equal_rect(MWGuestCanvas(half,canvas,screen,true,true),screen);
+    }
+    equal_rect(MWGuestCanvas((MWRect){8,9,340,424},(MWRect){0,0,NAN,INFINITY},screens[0],false,false),
+        (MWRect){0,0,340,424});
 }
 static void deliberate_resize_and_layout_restore(void) {
     assert(!MWResizeDragActivated(0,0) && !MWResizeDragActivated(5,5) && !MWResizeDragActivated(13,0));
@@ -464,7 +506,7 @@ static void ipad_layouts(void) {
 }
 int main(void) {
     lifecycle(); bounds(); maximize_restore(); proportional_scaling(); free_resize_and_snap(); original_canvas_and_reachable_snap(); free_entry_placement(); isolated_resize_rail(); guest_safe_insets(); compatible_guest_canvas(); deliberate_resize_and_layout_restore(); parked_roundtrip_and_placement(); four_corner_controls_and_resize(); flush_snapped_title();
-    ipad_layouts();
+    ipad_layouts(); stable_canvas_resize();
     puts("PASS: lifecycle, resize, half/full-screen, parking restore, iPhone/iPad viewport rotation and edge handle");
     return 0;
 }

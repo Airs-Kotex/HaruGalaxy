@@ -245,7 +245,7 @@ int main(void) {
         assert(activation.source==MWOrientationSourceSystem);
         // No gravity classification while flat must preserve system direction.
         assert(!MWOrientationObservePhysical(&activation,active,0));
-        assert(!MWOrientationObserveDevice(&activation,active,1,false,false));
+        assert(!MWOrientationObserveDevice(&activation,active,1,false,true));
         assert(activation.orientation==3);
         // Fresh measured gravity remains authoritative, even if numerically
         // identical to the earlier UIDevice cache. The two have distinct state.
@@ -260,6 +260,19 @@ int main(void) {
     assert(MWOrientationObserveDevice(&fallback,fallbackGeneration,3,true,true));
     assert(MWWorkspaceOrientation(&fallback,false,1)==3); // no observer/motion
     assert(MWOrientationObserveDevice(&fallback,fallbackGeneration,4,true,false));
+    // A visible floating workspace is active even when the ordinary App is in
+    // the background. With no recent motion, real notifications must rotate it.
+    assert(MWOrientationObserveDevice(&fallback,fallbackGeneration,3,false,false));
+    assert(MWWorkspaceOrientation(&fallback,true,1)==3);
+    assert(!MWOrientationObserveDevice(&fallback,fallbackGeneration,1,false,true));
+    assert(!MWOrientationObserveDevice(&fallback,fallbackGeneration,0,false,false));
+    assert(!MWOrientationObserveDevice(&fallback,fallbackGeneration,3,false,false));
+    assert(MWOrientationObserveDevice(&fallback,fallbackGeneration,4,false,false));
+    MWOrientationSetActive(&fallback,false);
+    assert(!MWOrientationObserveDevice(&fallback,fallback.generation,1,false,false));
+    uint64_t newGeneration=MWOrientationSetActive(&fallback,true);
+    assert(!MWOrientationObserveDevice(&fallback,fallbackGeneration,1,false,false));
+    assert(MWOrientationObserveDevice(&fallback,newGeneration,3,false,false));
     const int turns[4][4]={{0,2,1,-1},{-2,0,-1,1},{-1,1,0,-2},{1,-1,2,0}};
     for(int host=1;host<=4;host++) for(int target=1;target<=4;target++) {
         assert(MWWorkspaceQuarterTurns(host,target)==turns[host-1][target-1]);

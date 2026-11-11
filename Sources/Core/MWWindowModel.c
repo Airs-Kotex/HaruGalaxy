@@ -19,8 +19,9 @@ MWInsets MWGuestSafeInsets(MWRect r,MWRect s,double w,double h) {
     double right=clamp(r.x+r.width-s.x-s.width,0,r.width-left);
     return (MWInsets){top*h/r.height,left*w/r.width,bottom*h/r.height,right*w/r.width};
 }
-MWRect MWGuestCanvas(MWRect available,MWRect systemCanvas,bool proportional,bool maximized,bool compatible) {
-    MWRect result=safe_viewport(compatible || (proportional && !maximized) ? systemCanvas : available);
+MWRect MWGuestCanvas(MWRect available,MWRect windowCanvas,MWRect systemCanvas,bool viewportLayout,bool compatible) {
+    bool established=isfinite(windowCanvas.width) && isfinite(windowCanvas.height) && windowCanvas.width>=1 && windowCanvas.height>=1;
+    MWRect result=safe_viewport(compatible ? systemCanvas : (viewportLayout || !established ? available : windowCanvas));
     result.x=0; result.y=0; return result;
 }
 

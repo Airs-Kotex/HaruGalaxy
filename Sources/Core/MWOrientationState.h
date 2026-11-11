@@ -22,8 +22,9 @@ bool MWOrientationIsValid(int orientation);
 uint64_t MWOrientationSetActive(MWOrientationState *state,bool active);
 bool MWOrientationObserveSystem(MWOrientationState *state,uint64_t generation,int orientation);
 bool MWOrientationObservePhysical(MWOrientationState *state,uint64_t generation,int orientation);
-// UIDevice's cached value is only a foreground fallback. Initial seeding cannot
-// supersede system input or a fresh gravity observation in this generation.
+// UIDevice's cached seed is foreground-only and cannot supersede current
+// system/gravity input. Fresh notifications also work in a visible overlay
+// while UIApplication is backgrounded; inactive tracking rejects both.
 bool MWOrientationObserveDevice(MWOrientationState *state,uint64_t generation,int orientation,bool foreground,bool seed);
 int MWWorkspaceOrientation(const MWOrientationState *state,bool floating,int hostOrientation);
 int MWWorkspaceQuarterTurns(int hostOrientation,int targetOrientation);

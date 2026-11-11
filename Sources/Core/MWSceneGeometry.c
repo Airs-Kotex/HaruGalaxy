@@ -15,6 +15,22 @@ MWRect MWGuestCanvasForOrientation(MWRect logical,int workspace,int guest) {
     }
     return logical;
 }
+MWRect MWGuestCanvasUpdate(MWGuestCanvasState *state,MWRect initialViewport,MWRect systemCanvas,
+    int workspace,int guest,bool proportional,bool sessionEstablished) {
+    MWRect canvas=state->windowCanvas;
+    bool established=state->orientation>=1 && state->orientation<=4 &&
+        isfinite(canvas.width) && isfinite(canvas.height) && canvas.width>=1 && canvas.height>=1;
+    if(!established) {
+        MWRect available=MWGuestCanvasForOrientation(initialViewport,workspace,guest);
+        canvas=MWGuestCanvas(available,(MWRect){0},systemCanvas,false,proportional);
+    } else if(guest>=1 && guest<=4 && (state->orientation>=3)!=(guest>=3)) {
+        double width=canvas.width; canvas.width=canvas.height; canvas.height=width;
+    }
+    if(sessionEstablished && guest>=1 && guest<=4) {
+        state->windowCanvas=canvas; state->orientation=guest;
+    }
+    return canvas;
+}
 bool MWInvertPresentation(MWAffine t,MWAffine *inverse) {
     if(!inverse || !isfinite(t.a) || !isfinite(t.b) || !isfinite(t.c) || !isfinite(t.d) || !isfinite(t.tx) || !isfinite(t.ty)) return false;
     double determinant=t.a*t.d-t.b*t.c;

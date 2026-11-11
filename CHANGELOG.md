@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.16 — Stable resize canvases and floating appearance (build22)
+
+- Preserve the running app's logical canvas during free and proportional resizing, including the final frame. Fit content without cropping; ordinary snapping/maximizing remain explicit layout changes, while restoring maximization restores the window canvas.
+- Establish the initial canvas only after resolving the hosted app's orientation. Keep canvas dimensions and orientation together across cancellation, retry and maximized restoration; swap axes once for subsequent rotation.
+- Synchronize appearance preferences across the ordinary and floating windows. Observe optional UIKit system-style notifications and ordinary scene trait changes so a locally hosted window can follow system appearance without recreation.
+- Refresh the appearance fallback from a current ordinary scene when the private getter is unavailable. Reject older queued notifications after a newer snapshot, and retain the latest system style when changing from a manual preference back to automatic.
+- Accept fresh device-orientation notifications while the floating workspace is visible and the ordinary app is backgrounded; keep background cached seeds, inactive tracking and stale generations rejected.
+- Add production-Core regressions for canvas initialization/rotation and appearance fallback/event ordering. Offline checks and focused independent review passed.
+- Device acceptance remains pending, including iPad resize/touch behavior, live system theme delivery and iPhone rotation. The supplied diagnostic contains iPad evidence only.
+
 ## 0.3.15 — Hosted orientation selection and system rotation (build21)
 
 ### Fixed

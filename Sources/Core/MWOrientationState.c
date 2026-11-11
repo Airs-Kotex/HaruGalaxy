@@ -32,7 +32,7 @@ bool MWOrientationObservePhysical(MWOrientationState *state,uint64_t generation,
     return MWOrientationAccept(state,orientation,MWOrientationSourcePhysical);
 }
 bool MWOrientationObserveDevice(MWOrientationState *state,uint64_t generation,int orientation,bool foreground,bool seed) {
-    if(!state->active || state->generation!=generation || !foreground || !MWOrientationIsValid(orientation) ||
+    if(!state->active || state->generation!=generation || (seed && !foreground) || !MWOrientationIsValid(orientation) ||
        state->deviceOrientation==orientation) return false;
     state->deviceOrientation=orientation;
     if(seed && (MWOrientationIsValid(state->systemOrientation) || MWOrientationIsValid(state->physicalOrientation))) return false;

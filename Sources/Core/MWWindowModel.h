@@ -56,7 +56,9 @@ typedef struct { double scale, x, y; } MWContentTransform;
 MWContentTransform MWFitContent(double logicalWidth, double logicalHeight, double availableWidth, double availableHeight);
 typedef struct { double top,left,bottom,right; } MWInsets;
 MWInsets MWGuestSafeInsets(MWRect rendered,MWRect safeRect,double logicalWidth,double logicalHeight);
-MWRect MWGuestCanvas(MWRect available,MWRect systemCanvas,bool proportional,bool maximized,bool compatible);
+// Resizing a window changes presentation scale, not the running App's layout.
+// Only explicit viewport layouts (snap/maximize) replace the ordinary canvas.
+MWRect MWGuestCanvas(MWRect available,MWRect windowCanvas,MWRect systemCanvas,bool viewportLayout,bool compatible);
 bool MWResizeDragActivated(double dx,double dy);
 MWRect MWProportionalViewport(MWRect viewport,double safeTop);
 MWRect MWBeginProportionalResize(MWRect start,MWRect viewport,double ratio,double safeTop);

@@ -130,8 +130,8 @@
     if(self.isViewLoaded) { [self closePanel]; [self updateChrome]; [self.view setNeedsLayout]; }
 }
 - (void)applyPreferences {
-    self.overrideUserInterfaceStyle=MWPreferences.shared.appearance;
-    self.view.window.overrideUserInterfaceStyle=MWPreferences.shared.appearance;
+    // Both owning windows are synchronized by the coordinator. Keep this
+    // movable controller inheriting its current window, including presented UI.
     [_bubble applyPreferences];
     for(MWWindowView *window in _windows.allValues) [window applyExecutionPolicy];
     [self updateChrome];
@@ -587,6 +587,8 @@
     }
     MWLog(@"keyboard.diagnostic_sample",@{@"context":notification.userInfo ?: @{},@"floating":@(_floating),@"hostHidden":@(_hostHidden),
         @"orientationSource":[_deviceOrientation diagnosticSnapshot],
+        @"appearance":@{@"preference":@(MWPreferences.shared.appearance),@"workspace":@(self.traitCollection.userInterfaceStyle),
+            @"window":@(self.view.window.traitCollection.userInterfaceStyle),@"scene":@(self.view.window.windowScene.traitCollection.userInterfaceStyle)},
         @"panelVisible":@(!_panel.hidden),@"modalVisible":@(self.presentedViewController!=nil),
         @"focus":[MWKeyboardFocus.shared diagnosticSnapshotWithCapabilities:capabilities],@"guests":guests,@"windows":windows});
 }

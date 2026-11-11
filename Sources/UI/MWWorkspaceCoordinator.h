@@ -9,6 +9,7 @@
 - (void)attachFloatingWindow:(UIWindow *)window;
 - (void)detachWindow:(UIWindow *)window;
 - (void)setWindow:(UIWindow *)window visible:(BOOL)visible;
+- (void)sceneAppearanceChanged:(UIWindowScene *)scene;
 - (void)presentApplicationSearchWithQuery:(NSString *)query selection:(void (^)(MWApplication *application))selection;
 @end
 

@@ -51,8 +51,9 @@ static BOOL MWOrientationMethod(Class cls,SEL selector,char result,const char *a
 }
 - (void)changed:(NSNotification *)notification {
     if(!_state.active) return;
-    // A recent gravity reading takes precedence over a stale UIKit enum
-    // while the app's normal scene is backgrounded.
+    // A recent gravity reading takes precedence over UIKit's enum. Otherwise a
+    // real notification is usable while the visible overlay keeps us active,
+    // even when UIApplication reports that its ordinary scene is backgrounded.
     if(_lastMotion>0 && CACurrentMediaTime()-_lastMotion<1) return;
     UIDeviceOrientation device=UIDevice.currentDevice.orientation;
     // No physical orientation has been observed yet: let the host supply the
@@ -159,6 +160,7 @@ static BOOL MWOrientationMethod(Class cls,SEL selector,char result,const char *a
     NSString *source=_state.source==MWOrientationSourceSystem ? @"system" :
         (_state.source==MWOrientationSourcePhysical ? @"physical" : (_state.source==MWOrientationSourceDevice ? @"device_notification" : @"none"));
     return @{@"orientation":@(_state.orientation),@"motionRequested":@(_state.active),@"motionActive":@(_motion.deviceMotionActive),
+        @"applicationState":@(UIApplication.sharedApplication.applicationState),@"trackingActive":@(_state.active),
         @"samples":@(_motionSamples),@"secondsSinceSample":_lastMotion>0 ? @(CACurrentMediaTime()-_lastMotion) : @"unavailable",
         @"systemObserver":@(_systemObserver!=nil),@"systemUpdates":@(_systemUpdates),@"systemRejected":@(_systemRejected),
         @"systemOrientation":@(_state.systemOrientation),@"physicalOrientation":@(_state.physicalOrientation),

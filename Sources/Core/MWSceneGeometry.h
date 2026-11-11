@@ -8,6 +8,14 @@ MWRect MWSceneFrameForInterface(MWRect logical,int orientation);
 // A guest constrained to different axes from the workspace needs its own
 // oriented canvas; the outer window still keeps the user's chosen geometry.
 MWRect MWGuestCanvasForOrientation(MWRect logical,int workspace,int guest);
+typedef struct {
+    MWRect windowCanvas;
+    int orientation;
+} MWGuestCanvasState;
+// Layout before a session exists is only a preview. Establish the saved canvas
+// after resolving the guest's direction; then rotate that canvas on axis changes.
+MWRect MWGuestCanvasUpdate(MWGuestCanvasState *state,MWRect initialViewport,MWRect systemCanvas,
+    int workspace,int guest,bool proportional,bool sessionEstablished);
 bool MWInvertPresentation(MWAffine forward,MWAffine *inverse);
 bool MWNormalizePresentation(MWAffine forward,double width,double height,double logicalWidth,double logicalHeight,
     MWRect *nativeBounds,MWAffine *parentTransform);

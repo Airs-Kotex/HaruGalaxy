@@ -1,12 +1,12 @@
 # HaruGalaxy · 初春星河
 
-[简体中文](README.md) · [Download 0.3.15](https://github.com/Airs-Kotex/HaruGalaxy/releases/tag/v0.3.15) · [Issues](https://github.com/Airs-Kotex/HaruGalaxy/issues)
+[简体中文](README.md) · [Download 0.3.16](https://github.com/Airs-Kotex/HaruGalaxy/releases/tag/v0.3.16) · [Issues](https://github.com/Airs-Kotex/HaruGalaxy/issues)
 
 A native multi-window workspace for TrollStore. HaruGalaxy hosts installed apps in movable windows with an edge panel, free or original-aspect resizing, half-screen snapping and local diagnostic exports.
 
 The edge entry, title bars and window panel now use translucent glass controls, with dark/light appearance, Reduce Transparency and contrast adaptations.
 
-The 0.3.15 assets are **build21**, correcting hosted-app orientation selection, adding a system orientation source, and preventing client orientation echoes from keeping ordinary apps in portrait. Install over 0.3.14; Settings should show **0.3.15 (21)**. Rotation, touch and fullscreen transitions still require device validation; see the [implementation and limitations](docs/implementation-status-0.3.15.md).
+The 0.3.16 assets are **build22**, preserving app canvases during resizing, correcting initial orientation-dependent geometry, synchronizing floating appearance, and restoring fresh device-orientation notifications for a visible background workspace. Install over 0.3.15; Settings should show **0.3.16 (22)**. Layout, touch, live appearance changes and iPhone rotation still require device validation; see the [implementation and limitations](docs/implementation-status-0.3.16.md).
 
 ## Illustrated guides
 
@@ -19,7 +19,7 @@ These are **operation illustrations, not simulator or physical-device screenshot
 ## Install
 
 1. Install [TrollStore](https://github.com/opa334/TrollStore) on a supported device.
-2. Download [HaruGalaxy-0.3.15.tipa](https://github.com/Airs-Kotex/HaruGalaxy/releases/download/v0.3.15/HaruGalaxy-0.3.15.tipa).
+2. Download [HaruGalaxy-0.3.16.tipa](https://github.com/Airs-Kotex/HaruGalaxy/releases/download/v0.3.16/HaruGalaxy-0.3.16.tipa).
 3. Open the file in TrollStore and install it over an existing 0.3.1 or later installation.
 4. Open HaruGalaxy and enable the floating workspace in Settings.
 
@@ -53,13 +53,15 @@ The top bar is28 points high and the bottom edge8 points. Four centered top cont
 
 All four resize handles require14 points of movement. Entering aspect mode first fits inside the previous window footprint, so a wide half-screen window does not expand to full height. Top-left and bottom-right allow shrinking from opposite directions. A tap leaves the window unchanged.
 
+All four handles preserve the running app's logical canvas and fit its complete content inside the window, with margins when the aspect ratios differ. Free handles change the outer width and height independently; proportional handles retain the system aspect for the outer content area. Switching handles does not force a new app layout. In ordinary mode, snapping and maximizing explicitly adopt the target viewport; restoring maximization restores the previous window canvas. Original-canvas mode keeps the device canvas throughout.
+
 Snapped windows place their header at the top of the complete half-screen rectangle without a separate safe-top spacer. Ordinary-window header protection returns after leaving the snap. Physical cutouts and system gestures still apply.
 
 When guest content reaches a system edge exclusion, the workspace passes the overlapping safe-area insets to the app, converted into its logical coordinates when scaled. Apps must honor these insets in their own layout. The footer remains8 points.
 
 ## Parking
 
-Use the fourth blue top button or panel's **“挂起”** text action, then tap the top-right thumbnail to restore. Its icon is drawn by the app rather than relying on an SF Symbols name. **Panel → 挂起设置** jumps directly to size(18%–50%) and aspect settings(original,1:1,4:3,3:4,16:9,9:16). Settings title shows version/build: **0.3.15 (21)**. Multiple thumbnails stack in the safe area; their appearance does not change restored geometry. Parking keeps sessions alive, not process suspension.
+Use the fourth blue top button or panel's **“挂起”** text action, then tap the top-right thumbnail to restore. Its icon is drawn by the app rather than relying on an SF Symbols name. **Panel → 挂起设置** jumps directly to size(18%–50%) and aspect settings(original,1:1,4:3,3:4,16:9,9:16). Settings title shows version/build: **0.3.16 (22)**. Multiple thumbnails stack in the safe area; their appearance does not change restored geometry. Parking keeps sessions alive, not process suspension.
 
 ![Illustrated parking workflow and thumbnail size/aspect settings](docs/images/03-parking-guide.png)
 

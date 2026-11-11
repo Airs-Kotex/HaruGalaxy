@@ -102,12 +102,14 @@
     [MWFloatingHost.shared refreshAfterBackgroundTransition];
 }
 - (void)sceneWillEnterForeground:(UIScene *)scene {
-    (void)scene;
+    [MWWorkspaceCoordinator.shared sceneAppearanceChanged:(UIWindowScene *)scene];
     MWLog(@"host_scene.foreground",@{@"session":_sceneIdentifier ?: @"none",@"floating":@(_floating)});
     if(!_floating) { self.window.hidden=NO; [MWWorkspaceCoordinator.shared setWindow:self.window visible:YES]; }
 }
 - (void)windowScene:(UIWindowScene *)windowScene didUpdateCoordinateSpace:(id<UICoordinateSpace>)previous interfaceOrientation:(UIInterfaceOrientation)orientation traitCollection:(UITraitCollection *)traits {
-    (void)previous; (void)orientation; (void)traits;
+    (void)previous; (void)orientation;
+    if(windowScene.traitCollection.userInterfaceStyle!=traits.userInterfaceStyle)
+        [MWWorkspaceCoordinator.shared sceneAppearanceChanged:windowScene];
     MWLog(@"host_scene.geometry",@{@"session":_sceneIdentifier ?: @"none",@"orientation":@(windowScene.interfaceOrientation),@"width":@(windowScene.coordinateSpace.bounds.size.width),@"height":@(windowScene.coordinateSpace.bounds.size.height)});
     [self.window.rootViewController.viewIfLoaded setNeedsLayout];
 }
