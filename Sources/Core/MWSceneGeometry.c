@@ -31,6 +31,13 @@ MWRect MWGuestCanvasUpdate(MWGuestCanvasState *state,MWRect initialViewport,MWRe
     }
     return canvas;
 }
+void MWGuestCanvasCommitResize(MWGuestCanvasState *state,MWRect finalViewport,MWRect systemCanvas,
+    int workspace,int guest,bool proportional,bool compatible) {
+    if(guest<1 || guest>4) return;
+    MWRect available=MWGuestCanvasForOrientation(finalViewport,workspace,guest);
+    state->windowCanvas=MWGuestCanvas(available,(MWRect){0},systemCanvas,false,proportional || compatible);
+    state->orientation=guest;
+}
 bool MWInvertPresentation(MWAffine t,MWAffine *inverse) {
     if(!inverse || !isfinite(t.a) || !isfinite(t.b) || !isfinite(t.c) || !isfinite(t.d) || !isfinite(t.tx) || !isfinite(t.ty)) return false;
     double determinant=t.a*t.d-t.b*t.c;

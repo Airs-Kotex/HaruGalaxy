@@ -197,7 +197,7 @@ static NSArray *MWRectFields(CGRect r) { return @[@(r.origin.x),@(r.origin.y),@(
     if(!CGSizeEqualToSize(_lastSize,_logicalSize) || _lastOrientation!=orientation ||
        !UIEdgeInsetsEqualToEdgeInsets(_lastSafeInsets,[self guestSafeInsets])) {
         // During a resize UIKit scales our presentation container immediately.
-        // Commit any safe-area change once at the end, with the same canvas.
+        // Adopt the requested mode's canvas only after a successful release.
         if(!_resizing) { if(_dragging) [self scheduleSceneGeometry]; else [self submitSceneGeometry]; }
     }
 }
@@ -465,6 +465,17 @@ static NSArray *MWRectFields(CGRect r) { return @[@(r.origin.x),@(r.origin.y),@(
     if(gesture.state==UIGestureRecognizerStateEnded || gesture.state==UIGestureRecognizerStateCancelled || gesture.state==UIGestureRecognizerStateFailed) {
         BOOL cancelled=gesture.state!=UIGestureRecognizerStateEnded;
         if(cancelled) { _model=_gestureModel; _canvasState=_gestureCanvasState; self.frame=MWToCGRect(_model.frame); }
+        else {
+            // Final chrome/safe-area placement determines the actual viewport.
+            // Keep scene submissions suppressed while measuring it; then make
+            // one layout transition for free vs system-proportional mode.
+            [self setNeedsLayout]; [self layoutIfNeeded];
+            CGSize system=[self systemCanvasSize];
+            MWGuestCanvasCommitResize(&_canvasState,MWFromCGRect(_content.bounds),
+                (MWRect){0,0,system.width,system.height},
+                (int)(_workspaceOrientation ?: self.window.windowScene.interfaceOrientation),
+                (int)[self guestOrientation],!free,_compatibleCanvas);
+        }
         _resizing=NO; handle.dragging=NO;
         [self commitSceneGeometry]; if(!cancelled) [self geometryChanged];
         _resizeActivated=NO;

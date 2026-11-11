@@ -279,8 +279,8 @@ static void compatible_guest_canvas(void) {
 }
 static void stable_canvas_resize(void) {
     const MWRect screens[]={{0,0,1024,768},{0,0,390,844},{0,0,844,390}};
-    // The iPad trace changed340x424/512x712 to1024x768 on the first aspect
-    // drag, then to485x551 during free resize. None is a layout command now.
+    // Drag previews preserve the current canvas; successful release adopts the
+    // requested mode through MWGuestCanvasCommitResize (scene geometry tests).
     const MWRect startingCanvases[]={{0,0,340,424},{0,0,512,712},{0,0,1024,768}};
     for(unsigned device=0;device<3;device++) for(unsigned seed=0;seed<3;seed++) {
         MWRect canvas=startingCanvases[seed],screen=screens[device];
@@ -294,7 +294,7 @@ static void stable_canvas_resize(void) {
             } else next=MWResizeFreeCornerRect(window,step*9-54,step*7-42,screen,corner==2);
             MWRect available=MWWindowContentRect((MWRect){0,0,next.width,next.height},0,false);
             MWRect resized=MWGuestCanvas(available,canvas,screen,false,false);
-            equal_rect(resized,canvas); // Continuous drag AND final frame keep it.
+            equal_rect(resized,canvas); // This models preview, before committing a mode.
             MWContentTransform fit=MWFitContent(resized.width,resized.height,available.width,available.height);
             for(unsigned point=0;point<4;point++) {
                 double x=(point&1 ? resized.width : 0)*fit.scale+fit.x;

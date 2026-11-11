@@ -16,6 +16,11 @@ typedef struct {
 // after resolving the guest's direction; then rotate that canvas on axis changes.
 MWRect MWGuestCanvasUpdate(MWGuestCanvasState *state,MWRect initialViewport,MWRect systemCanvas,
     int workspace,int guest,bool proportional,bool sessionEstablished);
+// An activated resize adopts its requested layout only on successful release.
+// Free uses the final viewport; proportional/original canvas use system size.
+// During preview and cancellation keep the saved state unchanged.
+void MWGuestCanvasCommitResize(MWGuestCanvasState *state,MWRect finalViewport,MWRect systemCanvas,
+    int workspace,int guest,bool proportional,bool compatible);
 bool MWInvertPresentation(MWAffine forward,MWAffine *inverse);
 bool MWNormalizePresentation(MWAffine forward,double width,double height,double logicalWidth,double logicalHeight,
     MWRect *nativeBounds,MWAffine *parentTransform);

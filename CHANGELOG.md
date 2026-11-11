@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.17 — Bidirectional resize mode switching (build23)
+
+- Apply the selected canvas on successful resize release: ordinary free mode uses the final content viewport, while proportional mode restores the system canvas even after repeated free/proportional switches.
+- Preserve a scaled preview during dragging, then submit the final layout once. Cancelled and sub-threshold drags retain the previous mode/canvas; original-canvas mode remains device-sized.
+- Add regressions for repeated aspect → free → aspect sequences, constrained orientations, original-canvas mode and restore behavior. Actual UIKit gestures, rendering and touch still require device validation.
+
 ## 0.3.16 — Stable resize canvases and floating appearance (build22)
 
 - Preserve the running app's logical canvas during free and proportional resizing, including the final frame. Fit content without cropping; ordinary snapping/maximizing remain explicit layout changes, while restoring maximization restores the window canvas.

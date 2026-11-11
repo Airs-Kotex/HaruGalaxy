@@ -28,7 +28,8 @@ static void session_canvas_startup(void) {
             double h=proportional ? system.height : heights[shape][workspace>=3][guest>=3];
             size_is(actual,w,h); size_is(state.windowCanvas,w,h);
             assert(state.orientation==guest);
-            // Subsequent resize frames and a different handle keep the canvas.
+            // Subsequent preview frames keep the canvas; mode adoption occurs
+            // only through the explicit successful-resize commit below.
             MWRect resized={0,0,120,84};
             size_is(MWGuestCanvasUpdate(&state,resized,system,workspace,guest,!proportional,true),w,h);
             // A failed session's temporary workspace preview cannot rotate the
@@ -66,8 +67,69 @@ static void session_canvas_startup(void) {
     assert(unknown.orientation==0); size_is(unknown.windowCanvas,0,0);
     size_is(MWGuestCanvasUpdate(&unknown,contents[0],system,3,1,false,true),340,424);
 }
+static void repeated_resize_modes(void) {
+    MWGuestCanvasState state={0};
+    MWRect system={0,0,1024,768},initial={0,0,340,424};
+    size_is(MWGuestCanvasUpdate(&state,initial,system,3,3,false,true),340,424);
+    // User sequence: aspect -> free -> aspect, repeated in one live session.
+    // Assert the displayed canvas, not just the outer-frame aspect ratio.
+    for(int round=0;round<5;round++) {
+        MWGuestCanvasCommitResize(&state,(MWRect){0,0,600,450},system,3,3,true,false);
+        size_is(MWGuestCanvasUpdate(&state,(MWRect){0,0,600,450},system,3,3,true,true),1024,768);
+        MWContentTransform fit=MWFitContent(state.windowCanvas.width,state.windowCanvas.height,600,450);
+        near(fit.x,0); near(fit.y,0); near(fit.scale,600.0/1024);
+        MWRect freeViewport={0,0,700-round*30,350+round*20};
+        // No app-layout changes during the free drag, regardless of preview size.
+        for(int step=0;step<10;step++)
+            size_is(MWGuestCanvasUpdate(&state,(MWRect){0,0,500+step*13,300+step*7},system,3,3,false,true),1024,768);
+        MWGuestCanvasCommitResize(&state,freeViewport,system,3,3,false,false);
+        size_is(state.windowCanvas,freeViewport.width,freeViewport.height);
+        fit=MWFitContent(state.windowCanvas.width,state.windowCanvas.height,freeViewport.width,freeViewport.height);
+        near(fit.scale,1); near(fit.x,0); near(fit.y,0);
+        MWGuestCanvasCommitResize(&state,(MWRect){0,0,400,300},system,3,3,true,false);
+        size_is(state.windowCanvas,1024,768);
+        size_is(MWGuestCanvasUpdate(&state,(MWRect){0,0,400,300},system,3,3,true,true),1024,768);
+    }
+    // Phone/tablet, four workspace/guest directions and original-canvas mode.
+    const MWRect raw[]={{0,0,340,424},{0,0,424,340}};
+    const double widths[2][2][2]={{{340,424},{340,340}},{{424,424},{340,424}}};
+    const double heights[2][2][2]={{{424,340},{424,424}},{{340,340},{424,340}}};
+    for(int tablet=0;tablet<=1;tablet++) for(int workspace=1;workspace<=4;workspace++)
+        for(int guest=1;guest<=4;guest++) for(int compatible=0;compatible<=1;compatible++) {
+            system=MWSystemCanvas(tablet ? 768 : 390,tablet ? 1024 : 844,guest>=3);
+            state=(MWGuestCanvasState){0};
+            MWGuestCanvasCommitResize(&state,raw[0],system,workspace,guest,true,compatible);
+            for(unsigned shape=0;shape<2;shape++) {
+                MWGuestCanvasState saved=state;
+                (void)MWGuestCanvasUpdate(&state,raw[shape],system,workspace,guest,false,true);
+                size_is(state.windowCanvas,saved.windowCanvas.width,saved.windowCanvas.height);
+                // Cancel/low-threshold paths never call CommitResize; restoring
+                // the paired state also preserves the last selected axes.
+                assert(state.orientation==saved.orientation);
+                MWGuestCanvasCommitResize(&state,raw[shape],system,workspace,guest,false,compatible);
+                double w=compatible ? system.width : widths[shape][workspace>=3][guest>=3];
+                double h=compatible ? system.height : heights[shape][workspace>=3][guest>=3];
+                size_is(state.windowCanvas,w,h); assert(state.orientation==guest);
+                // Maximize is an explicit viewport override, then restore uses
+                // the most recent successfully committed free-mode canvas.
+                (void)MWGuestCanvas(raw[shape],state.windowCanvas,system,true,compatible);
+                size_is(MWGuestCanvas(raw[shape],state.windowCanvas,system,false,compatible),w,h);
+                MWGuestCanvasCommitResize(&state,raw[shape],system,workspace,guest,true,compatible);
+                size_is(state.windowCanvas,system.width,system.height);
+                int rotated=guest>=3 ? 1 : 3;
+                MWRect rotatedSystem=MWSystemCanvas(tablet ? 768 : 390,tablet ? 1024 : 844,rotated>=3);
+                size_is(MWGuestCanvasUpdate(&state,raw[shape],rotatedSystem,workspace,rotated,true,true),system.height,system.width);
+                MWGuestCanvasCommitResize(&state,raw[shape],system,workspace,guest,true,compatible);
+            }
+        }
+    // Invalid guest direction must not destroy the last valid committed state.
+    MWGuestCanvasState saved=state;
+    MWGuestCanvasCommitResize(&state,raw[0],system,1,0,false,false);
+    size_is(state.windowCanvas,saved.windowCanvas.width,saved.windowCanvas.height);
+    assert(state.orientation==saved.orientation);
+}
 int main(void) {
-    session_canvas_startup();
+    session_canvas_startup(); repeated_resize_modes();
     for(int orientation=1;orientation<=4;orientation++) {
         MWRect logical={0,0,1024,768};
         MWRect native=MWSceneFrameForInterface(logical,orientation);
@@ -121,5 +183,5 @@ int main(void) {
     assert(MWOrientationFromGravity(0,0,-1)==0);
     assert(MWOrientationFromGravity(.7,.7,0)==0);
     assert(MWOrientationFromGravity(NAN,0,0)==0);
-    puts("PASS: provisional/resolved canvas startup, retry/maximize/rotation, native scene axes, presenter transforms and gravity");
+    puts("PASS: canvas startup, repeated aspect/free mode commits, retry/maximize/rotation, presenter transforms and gravity");
 }
