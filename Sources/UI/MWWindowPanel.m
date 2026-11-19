@@ -82,7 +82,16 @@
     UIAction *park=[UIAction actionWithTitle:window.isParked ? @"还原挂起窗口" : @"挂起到右上角" image:nil identifier:nil
         handler:^(__kindof UIAction *action){(void)action;if(panel.parkHandler) panel.parkHandler(bundle);}];
     if(!_park.enabled) park.attributes=UIMenuElementAttributesDisabled;
-    _options.menu=[UIMenu menuWithTitle:@"窗口选项" children:@[park,compatible,normal,original]];
+    NSMutableArray *items=[@[park,compatible,normal,original] mutableCopy];
+    if (window.isInterviewAssistant) {
+        __weak MWWindowView *guest=window;
+        UIAction *video=[UIAction actionWithTitle:@"留出视频区" image:[UIImage systemImageNamed:@"rectangle.split.2x1"]
+            identifier:nil handler:^(__kindof UIAction *action){ (void)action; [guest toggleVideoSpace]; }];
+        video.state=window.videoSpaceRequested ? UIMenuElementStateOn : UIMenuElementStateOff;
+        if (!window.canReserveVideoSpace && !window.videoSpaceRequested) video.attributes=UIMenuElementAttributesDisabled;
+        [items insertObject:video atIndex:0];
+    }
+    _options.menu=[UIMenu menuWithTitle:@"窗口选项" children:items];
 }
 - (UIButton *)action:(NSString *)symbol label:(NSString *)label handler:(dispatch_block_t)handler {
     UIButton *button=[UIButton buttonWithType:UIButtonTypeSystem];

@@ -17,6 +17,10 @@
 @property(nonatomic,copy) void (^snapPreviewHandler)(CGRect frame, BOOL visible);
 @property(nonatomic,getter=isActive) BOOL active;
 @property(nonatomic,readonly) BOOL compatibleCanvas;
+@property(nonatomic,readonly) BOOL isInterviewAssistant;
+@property(nonatomic,readonly) BOOL videoSpaceRequested;
+@property(nonatomic,readonly) BOOL canReserveVideoSpace;
+- (void)toggleVideoSpace;
 @property(nonatomic,readonly,getter=isParked) BOOL parked;
 @property(nonatomic,readonly) CGFloat parkedContentRatio;
 @property(nonatomic,readonly) MWWindowModel restorableModel;

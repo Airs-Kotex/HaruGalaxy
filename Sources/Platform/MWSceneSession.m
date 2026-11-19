@@ -3,6 +3,8 @@
 // identity, cleanup and failure handling. Explicit entry resets the selected
 // process before hosting; ordinary teardown does not terminate other apps.
 #import "MWSceneSession.h"
+#import "MWAssistantPresenterBackdrop.h"
+#import "../Core/MWAssistantVideoArea.h"
 #import "MWPrivate.h"
 #include <signal.h>
 #include <errno.h>
@@ -213,6 +215,11 @@ static MWGuestOrientationObservation MWSceneOrientationObservation(id scene) {
         if(!_scene || !_presenter) {
             [self fail:MWError(16,@"此应用未提供可显示的场景，可能不支持小窗。")]; return;
         }
+        // The presenter creates an internal background even when its public
+        // UIView is clear. Set the hosting context before it publishes layers.
+        if (MWIsInterviewAssistant(self.bundleIdentifier.UTF8String)) {
+            MWLog(@"display.presenter_background",MWApplyAssistantPresenterBackdrop(_presenter,self.bundleIdentifier));
+        }
         [_presenter activate];
         if(!_presenter.presentationView) { [self fail:MWError(16,@"应用未提供可显示的小窗视图。")]; return; }
         if(!_visible) [_presenter deactivate];
@@ -408,6 +415,7 @@ static MWGuestOrientationObservation MWSceneOrientationObservation(id scene) {
         @"retainedClientOrientationMaskConfirmed":@(_guestOrientationState.maskConfirmed),
         @"render":[self renderDiagnosticSnapshot],
         @"inputLayers":MWSceneLayerSnapshot(_scene,_presenter),
+        @"assistantPresenterBackdrop":MWIsInterviewAssistant(self.bundleIdentifier.UTF8String) ? MWAssistantPresenterBackdropSnapshot(_presenter) : @{@"status":@"not-assistant"},
         @"inputEnvironment":_inputEnvironment ? [_inputEnvironment diagnosticSnapshot] : @{@"registered":@NO}} mutableCopy];
     if(capabilities || (!_diagnosticCapabilitiesRecorded && _scene)) {
         _diagnosticCapabilitiesRecorded=(_scene!=nil);

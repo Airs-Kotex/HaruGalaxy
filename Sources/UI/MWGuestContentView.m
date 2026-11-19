@@ -51,6 +51,15 @@
     }
     [self setNeedsLayout];
 }
+// InterviewOpus compatibility. Only the assistant calls this after attachment.
+- (void)allowAssistantBackdrop {
+    for (UIView *container in @[self, _logicalContainer, _presentationContainer]) {
+        container.backgroundColor=UIColor.clearColor;
+        container.opaque=NO;
+    }
+    _guestView.backgroundColor=UIColor.clearColor;
+    _guestView.opaque=NO;
+}
 - (void)setLogicalSize:(CGSize)logicalSize {
     if(!isfinite(logicalSize.width) || !isfinite(logicalSize.height) || logicalSize.width<1 || logicalSize.height<1) return;
     if(CGSizeEqualToSize(_logicalSize,logicalSize)) return;

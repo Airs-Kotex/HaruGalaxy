@@ -8,6 +8,7 @@
 #import "MWWindowControlImages.h"
 #import "../Diagnostics/MWDiagnostics.h"
 #import "../Core/MWGuestPolicy.h"
+#import "../Core/MWAssistantVideoArea.h"
 
 static MWRect MWFromCGRect(CGRect r) { return (MWRect){r.origin.x,r.origin.y,r.size.width,r.size.height}; }
 static CGRect MWToCGRect(MWRect r) { return CGRectMake(r.x,r.y,r.width,r.height); }
@@ -64,12 +65,14 @@ static NSArray *MWRectFields(CGRect r) { return @[@(r.origin.x),@(r.origin.y),@(
     UIEdgeInsets _workspaceSafeInsets;
     NSString *_userCloseStatus;
     BOOL _userClosePending;
+    BOOL _isInterviewAssistant, _videoSpaceRequested;
 }
 @synthesize model=_model;
 
 - (instancetype)initWithApplication:(MWApplication *)application frame:(CGRect)frame {
     if((self=[super initWithFrame:frame])) {
         _application=application; _model=MWWindowCreate(MWFromCGRect(frame));
+        _isInterviewAssistant=MWIsInterviewAssistant(application.bundleIdentifier.UTF8String);
         _logicalSize=UIScreen.mainScreen.bounds.size;
         _model.aspectRatio=_logicalSize.width/MAX(1,_logicalSize.height);
         self.backgroundColor=UIColor.clearColor;
@@ -81,6 +84,12 @@ static NSArray *MWRectFields(CGRect r) { return @[@(r.origin.x),@(r.origin.y),@(
         [self addSubview:_surface];
         _content=[UIView new]; _content.backgroundColor=UIColor.secondarySystemBackgroundColor; _content.clipsToBounds=YES; [_surface addSubview:_content];
         _guestHost=[MWGuestContentView new]; [_content addSubview:_guestHost];
+        if (_isInterviewAssistant) {
+            self.opaque=NO;
+            _surface.opaque=NO;
+            [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(assistantAccessibilityChanged:)
+                name:UIAccessibilityReduceTransparencyStatusDidChangeNotification object:nil];
+        }
         _bar=[[MWGlassSurface alloc] initWithCornerRadius:0];
         [_surface addSubview:_bar];
         _inputRail=[[MWGlassSurface alloc] initWithCornerRadius:0]; [_surface addSubview:_inputRail];
@@ -161,19 +170,28 @@ static NSArray *MWRectFields(CGRect r) { return @[@(r.origin.x),@(r.origin.y),@(
         CGRect frame=MWToCGRect(controls.buttons[i]); frame.origin.x-=_bar.frame.origin.x; frame.origin.y-=_bar.frame.origin.y;
         buttons[i].frame=frame;
     }
-    _content.frame=MWToCGRect(MWWindowContentRect(MWFromCGRect(self.bounds),_bar.frame.origin.y,full || self.isParked));
+    CGRect wholeContent=[self unreservedContentFrame];
+    CGRect contentFrame=wholeContent;
+    if (_videoSpaceRequested && [self allowsAssistantBackdrop]) {
+        contentFrame=MWToCGRect(MWAssistantContentRect(MWFromCGRect(wholeContent)));
+    }
+    _content.frame=contentFrame;
     _inputRail.frame=MWToCGRect(MWWindowRailRect(MWFromCGRect(self.bounds),full || self.isParked));
     _inputRail.hidden=full || _model.state!=MWWindowVisible;
     CGSize systemSize=[self systemCanvasSize];
     int workspace=(int)(_workspaceOrientation ?: self.window.windowScene.interfaceOrientation),guest=(int)[self guestOrientation];
-    MWRect available=MWGuestCanvasForOrientation(MWFromCGRect(_content.bounds),
+    MWRect unreservedBounds={0,0,wholeContent.size.width,wholeContent.size.height};
+    MWRect available=MWGuestCanvasForOrientation(unreservedBounds,
         workspace,guest);
     MWResizeMode mode=_model.maximized ? _model.restoreResizeMode : _model.resizeMode;
-    MWRect initial=_model.maximized ? MWWindowContentRect((MWRect){0,0,_model.restoreFrame.width,_model.restoreFrame.height},0,false) : MWFromCGRect(_content.bounds);
+    MWRect initial=_model.maximized ? MWWindowContentRect((MWRect){0,0,_model.restoreFrame.width,_model.restoreFrame.height},0,false) : unreservedBounds;
     MWRect system={0,0,systemSize.width,systemSize.height};
     MWRect saved=MWGuestCanvasUpdate(&_canvasState,initial,system,workspace,guest,mode==MWResizeProportional,_session!=nil);
     MWRect canvas=MWGuestCanvas(available,saved,system,_model.maximized || _model.snapTarget!=MWSnapNone,_compatibleCanvas);
     if(_session && !_model.maximized && !self.isParked) _canvasState.windowCanvas=canvas;
+    if (!CGRectEqualToRect(contentFrame, wholeContent) && !_compatibleCanvas) {
+        canvas=MWGuestCanvasForOrientation(MWFromCGRect(_content.bounds),workspace,guest);
+    }
     _logicalSize=CGSizeMake(canvas.width,canvas.height);
     if(self.isParked) _logicalSize=_parkedLogicalSize;
     _guestHost.frame=_content.bounds;
@@ -302,6 +320,7 @@ static NSArray *MWRectFields(CGRect r) { return @[@(r.origin.x),@(r.origin.y),@(
         UIView *content=view.session.contentView;
         [view->_guestView removeFromSuperview]; view->_guestView=content;
         view->_guestHost.guestView=content;
+        if (view.isInterviewAssistant) [view->_guestHost allowAssistantBackdrop];
         [view setNeedsLayout]; [view layoutIfNeeded];
         [view logContentGeometry:@"attached"];
         [view updateStatus:nil];
@@ -326,6 +345,7 @@ static NSArray *MWRectFields(CGRect r) { return @[@(r.origin.x),@(r.origin.y),@(
     [self updateStatus:nil]; [self start];
 }
 - (void)updateStatus:(NSString *)error {
+    [self updateAssistantBackdrop];
     if(_userCloseStatus) {
         _message.text=_userCloseStatus; _message.hidden=NO; _retry.hidden=YES;
         [_spinner stopAnimating];
@@ -352,7 +372,38 @@ static NSArray *MWRectFields(CGRect r) { return @[@(r.origin.x),@(r.origin.y),@(
     _surface.layer.borderColor=MWGlassBorderColor(self.traitCollection,active).CGColor;
     _bar.emphasized=active;
     _inputRail.emphasized=active;
-    self.layer.shadowOpacity=active ? 0.19 : 0.1;
+    self.layer.shadowOpacity=[self allowsAssistantBackdrop] ? 0 : (active ? 0.19 : 0.1);
+}
+- (CGRect)unreservedContentFrame {
+    return MWToCGRect(MWWindowContentRect(MWFromCGRect(self.bounds),_bar.frame.origin.y,_model.maximized || self.isParked));
+}
+- (BOOL)allowsAssistantBackdrop {
+    return _isInterviewAssistant && _model.state==MWWindowVisible && !_userCloseStatus &&
+        !UIAccessibilityIsReduceTransparencyEnabled();
+}
+- (void)updateAssistantBackdrop {
+    if (!_isInterviewAssistant) return;
+    BOOL clear=[self allowsAssistantBackdrop];
+    _content.opaque=!clear;
+    _content.backgroundColor=clear ? UIColor.clearColor : UIColor.secondarySystemBackgroundColor;
+    // An explicit rounded shadow path fills even empty pixels inside the card.
+    self.layer.shadowOpacity=clear ? 0 : (_active ? .19 : .1);
+}
+- (BOOL)canReserveVideoSpace {
+    CGRect original=[self unreservedContentFrame];
+    return [self allowsAssistantBackdrop] && !CGRectEqualToRect(original,MWToCGRect(MWAssistantContentRect(MWFromCGRect(original))));
+}
+- (void)toggleVideoSpace {
+    if (!_isInterviewAssistant || (!_videoSpaceRequested && !self.canReserveVideoSpace)) return;
+    _videoSpaceRequested=!_videoSpaceRequested;
+    [self commitSceneGeometry];
+    if (self.stateHandler) self.stateHandler();
+}
+- (void)assistantAccessibilityChanged:(NSNotification *)notification {
+    (void)notification;
+    [self updateAssistantBackdrop];
+    [self setNeedsLayout];
+    if (self.stateHandler) self.stateHandler();
 }
 - (void)traitCollectionDidChange:(UITraitCollection *)previous {
     [super traitCollectionDidChange:previous];
@@ -471,7 +522,7 @@ static NSArray *MWRectFields(CGRect r) { return @[@(r.origin.x),@(r.origin.y),@(
             // one layout transition for free vs system-proportional mode.
             [self setNeedsLayout]; [self layoutIfNeeded];
             CGSize system=[self systemCanvasSize];
-            MWGuestCanvasCommitResize(&_canvasState,MWFromCGRect(_content.bounds),
+            MWGuestCanvasCommitResize(&_canvasState,MWFromCGRect([self unreservedContentFrame]),
                 (MWRect){0,0,system.width,system.height},
                 (int)(_workspaceOrientation ?: self.window.windowScene.interfaceOrientation),
                 (int)[self guestOrientation],!free,_compatibleCanvas);

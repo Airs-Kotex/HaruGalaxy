@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.18 (build 28)
+
+- Preserve the transparent background requested by InterviewOpus when its window sits over video. Other apps keep their normal presentation backgrounds.
+- The assistant window menu can reserve a separate video area while keeping the entire assistant viewport usable. Small windows keep their full content area.
+- This uses the same display changes reported working on iOS 16.2 with compatibility build 27. Build 28 is a separate package; the diagnostic readback alone cannot confirm visible video.
+
 ## 0.3.17 — Bidirectional resize mode switching (build23)
 
 - Apply the selected canvas on successful resize release: ordinary free mode uses the final content viewport, while proportional mode restores the system canvas even after repeated free/proportional switches.

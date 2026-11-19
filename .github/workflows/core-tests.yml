@@ -18,6 +18,14 @@ jobs:
         with:
           persist-credentials: false
       - name: Test geometry, lifecycle, logging and diagnostics
+        env:
+          HARU_TEST_OUTPUT: ${{ runner.temp }}/haru-tests
+          PYTHONDONTWRITEBYTECODE: '1'
         run: make test
       - name: Validate Python tooling syntax
+        env:
+          PYTHONPYCACHEPREFIX: ${{ runner.temp }}/haru-bytecode
         run: python3 -m compileall -q scripts Tests
+      - name: Clean test artifacts
+        if: ${{ always() }}
+        run: rm -rf -- "${RUNNER_TEMP:?}/haru-tests" "${RUNNER_TEMP:?}/haru-bytecode"
